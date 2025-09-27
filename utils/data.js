@@ -1,0 +1,230 @@
+const fs = require('fs').promises;
+const path = require('path');
+
+const DATA_FILE = path.join(__dirname, '..', 'blackjack_data.json');
+let userData = {};
+
+async function loadUserData() {
+    try {
+        const data = await fs.readFile(DATA_FILE, 'utf8');
+        userData = JSON.parse(data);
+        console.log('User data loaded successfully');
+    } catch (error) {
+        console.log('No existing data file found, creating new one');
+        userData = {};
+        await saveUserData();
+    }
+}
+
+async function saveUserData() {
+    try {
+        await fs.writeFile(DATA_FILE, JSON.stringify(userData, null, 2));
+        console.log('User data saved successfully');
+    } catch (error) {
+        console.error('Error saving user data:', error);
+    }
+}
+
+async function getUserMoney(userId) {
+    if (!userData[userId]) {
+        userData[userId] = {
+            money: 500,
+            lastDaily: 0,
+            statistics: {
+                gamesPlayed: 0,
+                gamesWon: 0,
+                totalWagered: 0,
+                totalWinnings: 0,
+                biggestWin: 0,
+                biggestLoss: 0,
+                blackjacks: 0,
+                handsPlayed: 0,
+                slotsSpins: 0,
+                slotsWins: 0,
+                threeCardPokerGames: 0,
+                threeCardPokerWins: 0
+            },
+            gameHistory: [],
+            giftsReceived: 0,
+            giftsSent: 0
+        };
+    } else {
+        // Ensure all fields exist and are numbers to prevent toString() errors
+        userData[userId].money = userData[userId].money ?? 500;
+        userData[userId].lastDaily = userData[userId].lastDaily ?? 0;
+        userData[userId].statistics = userData[userId].statistics ?? {};
+        
+        const stats = userData[userId].statistics;
+        stats.gamesPlayed = stats.gamesPlayed ?? 0;
+        stats.gamesWon = stats.gamesWon ?? 0;
+        stats.totalWagered = stats.totalWagered ?? 0;
+        stats.totalWinnings = stats.totalWinnings ?? 0;
+        stats.biggestWin = stats.biggestWin ?? 0;
+        stats.biggestLoss = stats.biggestLoss ?? 0;
+        stats.blackjacks = stats.blackjacks ?? 0;
+        stats.handsPlayed = stats.handsPlayed ?? 0;
+        stats.slotsSpins = stats.slotsSpins ?? 0;
+        stats.slotsWins = stats.slotsWins ?? 0;
+        stats.threeCardPokerGames = stats.threeCardPokerGames ?? 0;
+        stats.threeCardPokerWins = stats.threeCardPokerWins ?? 0;
+        
+        userData[userId].gameHistory = userData[userId].gameHistory ?? [];
+        userData[userId].giftsReceived = userData[userId].giftsReceived ?? 0;
+        userData[userId].giftsSent = userData[userId].giftsSent ?? 0;
+    }
+    
+    await saveUserData();
+    return userData[userId].money;
+}
+
+async function setUserMoney(userId, amount) {
+    await getUserMoney(userId); // Ensure user exists
+    userData[userId].money = Math.max(0, Math.floor(amount)); // Ensure non-negative integer
+    await saveUserData();
+}
+
+async function recordGameResult(userId, gameType, bet, winnings, result, details = {}) {
+    if (!userData[userId]) await getUserMoney(userId);
+
+    const gameRecord = {
+        timestamp: Date.now(),
+        gameType,
+        bet: Math.floor(bet),
+        winnings: Math.floor(winnings),
+        result,
+        details,
+        id: Date.now() + Math.random()
+    };
+
+    userData[userId].gameHistory.unshift(gameRecord);
+    
+    // Keep only last 50 games
+    if (userData[userId].gameHistory.length > 50) {
+        userData[userId].gameHistory = userData[userId].gameHistory.slice(0, 50);
+    }
+
+    // Update statistics
+    const stats = userData[userId].statistics;
+    stats.gamesPlayed = (stats.gamesPlayed || 0) + 1;
+    stats.totalWagered = (stats.totalWagered || 0) + Math.floor(bet);
+    stats.totalWinnings = (stats.totalWinnings || 0) + Math.floor(winnings) + Math.floor(bet);
+
+    if (result === 'win' || result === 'blackjack') {
+        stats.gamesWon = (stats.gamesWon || 0) + 1;
+        if (winnings > (stats.biggestWin || 0)) {
+            stats.biggestWin = Math.floor(winnings);
+        }
+    }
+
+    if (winnings < 0 && Math.abs(winnings) > (stats.biggestLoss || 0)) {
+        stats.biggestLoss = Math.floor(Math.abs(winnings));
+    }
+
+    if (result === 'blackjack') {
+        stats.blackjacks = (stats.blackjacks || 0) + 1;
+    }
+    
+    if (details.handsPlayed) {
+        stats.handsPlayed = (stats.handsPlayed || 0) + details.handsPlayed;
+    }
+    
+    if (gameType === 'slots') {
+        stats.slotsSpins = (stats.slotsSpins || 0) + 1;
+        if (winnings > 0) {
+            stats.slotsWins = (stats.slotsWins || 0) + 1;
+        }
+    }
+    
+    if (gameType === 'three_card_poker') {
+        stats.threeCardPokerGames = (stats.threeCardPokerGames || 0) + 1;
+        if (winnings > 0) {
+            stats.threeCardPokerWins = (stats.threeCardPokerWins || 0) + 1;
+        }
+    }
+
+    await saveUserData();
+}
+
+async function canClaimDaily(userId) {
+    await getUserMoney(userId);
+    const now = Date.now();
+    const lastDaily = userData[userId].lastDaily || 0;
+    const timeSinceLastDaily = now - lastDaily;
+    const oneDayInMs = 24 * 60 * 60 * 1000;
+    return timeSinceLastDaily >= oneDayInMs;
+}
+
+async function setLastDaily(userId) {
+    if (!userData[userId]) userData[userId] = { money: 500, lastDaily: 0 };
+    userData[userId].lastDaily = Date.now();
+    await saveUserData();
+}
+
+function getTimeUntilNextDaily(userId) {
+    if (!userData[userId]) return 0;
+    const now = Date.now();
+    const lastDaily = userData[userId].lastDaily || 0;
+    const oneDayInMs = 24 * 60 * 60 * 1000;
+    const timeUntilNext = oneDayInMs - (now - lastDaily);
+    return Math.max(0, timeUntilNext);
+}
+
+function getAllUserData() {
+    return userData;
+}
+
+function getUserData(userId) {
+    return userData[userId] || null;
+}
+
+async function updateUserGifts(senderId, receiverId, amount) {
+    await getUserMoney(senderId);
+    await getUserMoney(receiverId);
+    
+    userData[senderId].giftsSent = (userData[senderId].giftsSent || 0) + 1;
+    userData[receiverId].giftsReceived = (userData[receiverId].giftsReceived || 0) + 1;
+    
+    await saveUserData();
+}
+
+// Utility function to fix any corrupted data
+function cleanUserData() {
+    for (const userId in userData) {
+        const user = userData[userId];
+        
+        // Ensure all numeric fields are actually numbers
+        user.money = Number(user.money) || 500;
+        user.lastDaily = Number(user.lastDaily) || 0;
+        user.giftsReceived = Number(user.giftsReceived) || 0;
+        user.giftsSent = Number(user.giftsSent) || 0;
+        
+        if (user.statistics) {
+            const stats = user.statistics;
+            Object.keys(stats).forEach(key => {
+                stats[key] = Number(stats[key]) || 0;
+            });
+        }
+        
+        // Ensure gameHistory is an array
+        if (!Array.isArray(user.gameHistory)) {
+            user.gameHistory = [];
+        }
+    }
+    
+    saveUserData();
+}
+
+module.exports = {
+    loadUserData,
+    saveUserData,
+    getUserMoney,
+    setUserMoney,
+    recordGameResult,
+    canClaimDaily,
+    setLastDaily,
+    getTimeUntilNextDaily,
+    getAllUserData,
+    getUserData,
+    updateUserGifts,
+    cleanUserData
+};
