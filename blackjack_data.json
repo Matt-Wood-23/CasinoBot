@@ -1,0 +1,1747 @@
+{
+  "279317204292337664": {
+    "money": 4865,
+    "lastDaily": 0,
+    "statistics": {
+      "gamesPlayed": 105,
+      "gamesWon": 25,
+      "totalWagered": 76550,
+      "totalWinnings": 77241,
+      "biggestWin": 500,
+      "biggestLoss": 100,
+      "blackjacks": 1,
+      "handsPlayed": 51,
+      "slotsSpins": 54,
+      "slotsWins": 2,
+      "threeCardPokerGames": 2,
+      "threeCardPokerWins": 1
+    },
+    "gameHistory": [
+      {
+        "timestamp": 1758930867851,
+        "gameType": "blackjack",
+        "bet": 10,
+        "winnings": 0,
+        "result": "push",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758930867851.2622
+      },
+      {
+        "timestamp": 1758921447322,
+        "gameType": "blackjack",
+        "bet": 10,
+        "winnings": -10,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758921447322.5137
+      },
+      {
+        "timestamp": 1758921409084,
+        "gameType": "blackjack",
+        "bet": 10,
+        "winnings": -10,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758921409084.7297
+      },
+      {
+        "timestamp": 1758921210421,
+        "gameType": "blackjack",
+        "bet": 10,
+        "winnings": 0,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758921210421.2688
+      },
+      {
+        "timestamp": 1758921011934,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 100,
+        "result": "win",
+        "details": {},
+        "id": 1758921011934.7202
+      },
+      {
+        "timestamp": 1758921010109,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758921010109.4697
+      },
+      {
+        "timestamp": 1758921007356,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758921007356.782
+      },
+      {
+        "timestamp": 1758916673010,
+        "gameType": "blackjack",
+        "bet": 10,
+        "winnings": -10,
+        "result": "push",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758916673010.7534
+      },
+      {
+        "timestamp": 1758916651959,
+        "gameType": "blackjack",
+        "bet": 10,
+        "winnings": -20,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758916651959.6038
+      },
+      {
+        "timestamp": 1758916592848,
+        "gameType": "blackjack",
+        "bet": 10,
+        "winnings": 0,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758916592848.1
+      },
+      {
+        "timestamp": 1758916442202,
+        "gameType": "blackjack",
+        "bet": 10,
+        "winnings": -10,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758916442202.7905
+      },
+      {
+        "timestamp": 1758916420049,
+        "gameType": "blackjack",
+        "bet": 30,
+        "winnings": 30,
+        "result": "win",
+        "details": {
+          "handsPlayed": 2
+        },
+        "id": 1758916420049.4468
+      },
+      {
+        "timestamp": 1758915695239,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758915695239.8333
+      },
+      {
+        "timestamp": 1758915657698,
+        "gameType": "blackjack",
+        "bet": 10,
+        "winnings": 10,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758915657698.7102
+      },
+      {
+        "timestamp": 1758915414211,
+        "gameType": "blackjack",
+        "bet": 10,
+        "winnings": 10,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758915414211.1726
+      },
+      {
+        "timestamp": 1758915396564,
+        "gameType": "blackjack",
+        "bet": 10,
+        "winnings": 10,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758915396564.8352
+      },
+      {
+        "timestamp": 1758915388310,
+        "gameType": "blackjack",
+        "bet": 10,
+        "winnings": -10,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758915388310.8367
+      },
+      {
+        "timestamp": 1758915154549,
+        "gameType": "blackjack",
+        "bet": 10,
+        "winnings": 10,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758915154549.7021
+      },
+      {
+        "timestamp": 1758862955347,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758862955347.6445
+      },
+      {
+        "timestamp": 1758862954496,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 100,
+        "result": "win",
+        "details": {},
+        "id": 1758862954496.2803
+      },
+      {
+        "timestamp": 1758862953630,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758862953630.9612
+      },
+      {
+        "timestamp": 1758862952732,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758862952732.2534
+      },
+      {
+        "timestamp": 1758862951922,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758862951922.125
+      },
+      {
+        "timestamp": 1758862951094,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758862951094.199
+      },
+      {
+        "timestamp": 1758862950124,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758862950124.2532
+      },
+      {
+        "timestamp": 1758862949197,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758862949197.7068
+      },
+      {
+        "timestamp": 1758862947805,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758862947805.4963
+      },
+      {
+        "timestamp": 1758862946896,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758862946896.5286
+      },
+      {
+        "timestamp": 1758862945663,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758862945663.0083
+      },
+      {
+        "timestamp": 1758862943932,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758862943932.827
+      },
+      {
+        "timestamp": 1758862941876,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758862941876.005
+      },
+      {
+        "timestamp": 1758862939921,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758862939921.2258
+      },
+      {
+        "timestamp": 1758862937791,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758862937791.4414
+      },
+      {
+        "timestamp": 1758862935401,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758862935401.0095
+      },
+      {
+        "timestamp": 1758862804036,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758862804036.5989
+      },
+      {
+        "timestamp": 1758862742896,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758862742897.654
+      },
+      {
+        "timestamp": 1758862473884,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758862473884.6885
+      },
+      {
+        "timestamp": 1758862396359,
+        "gameType": "three_card_poker",
+        "bet": 10,
+        "winnings": -10,
+        "result": "lose",
+        "details": {},
+        "id": 1758862396359.002
+      },
+      {
+        "timestamp": 1758862377338,
+        "gameType": "three_card_poker",
+        "bet": 20,
+        "winnings": 10,
+        "result": "win",
+        "details": {},
+        "id": 1758862377338.1956
+      },
+      {
+        "timestamp": 1758862207843,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758862207843.4958
+      },
+      {
+        "timestamp": 1758862187937,
+        "gameType": "blackjack",
+        "bet": 10,
+        "winnings": 10,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758862187937.408
+      },
+      {
+        "timestamp": 1758862177034,
+        "gameType": "blackjack",
+        "bet": 10,
+        "winnings": -10,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758862177034.4814
+      },
+      {
+        "timestamp": 1758859606694,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758859606694.3152
+      },
+      {
+        "timestamp": 1758859605170,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758859605170.0293
+      },
+      {
+        "timestamp": 1758859603681,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758859603681.487
+      },
+      {
+        "timestamp": 1758859601237,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758859601237.449
+      },
+      {
+        "timestamp": 1758859595105,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758859595105.7314
+      },
+      {
+        "timestamp": 1758859529506,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758859529506.8557
+      },
+      {
+        "timestamp": 1758859409893,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758859409893.6333
+      },
+      {
+        "timestamp": 1758859061647,
+        "gameType": "slots",
+        "bet": "10",
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758859061647.9136
+      }
+    ],
+    "giftsReceived": 0,
+    "giftsSent": 2
+  },
+  "349333372574760974": {
+    "money": 1120
+  },
+  "152565611594121216": {
+    "money": 5830,
+    "lastDaily": 1758833452851,
+    "statistics": {
+      "gamesPlayed": 151,
+      "gamesWon": 74,
+      "totalWagered": 634001,
+      "totalWinnings": 719600,
+      "biggestWin": 2000,
+      "biggestLoss": 2000,
+      "blackjacks": 12,
+      "handsPlayed": 155,
+      "slotsSpins": 0,
+      "slotsWins": 0,
+      "threeCardPokerGames": 0,
+      "threeCardPokerWins": 0
+    },
+    "gameHistory": [
+      {
+        "timestamp": 1758916468205,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": -500,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758916468205.919
+      },
+      {
+        "timestamp": 1758915409808,
+        "gameType": "blackjack",
+        "bet": 200,
+        "winnings": -200,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 2
+        },
+        "id": 1758915409808.4727
+      },
+      {
+        "timestamp": 1758856895218,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": -500,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758856895218.663
+      },
+      {
+        "timestamp": 1758856784266,
+        "gameType": "slots",
+        "bet": "10",
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758856784266.2847
+      },
+      {
+        "timestamp": 1758856783184,
+        "gameType": "slots",
+        "bet": "10",
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758856783184.702
+      },
+      {
+        "timestamp": 1758856782172,
+        "gameType": "slots",
+        "bet": "10",
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758856782172.4727
+      },
+      {
+        "timestamp": 1758856780473,
+        "gameType": "slots",
+        "bet": "10",
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758856780473.4387
+      },
+      {
+        "timestamp": 1758856778174,
+        "gameType": "slots",
+        "bet": "10",
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758856778174.844
+      },
+      {
+        "timestamp": 1758856777540,
+        "gameType": "slots",
+        "bet": "10",
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758856777540.9656
+      },
+      {
+        "timestamp": 1758856776831,
+        "gameType": "slots",
+        "bet": "10",
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758856776831.1643
+      },
+      {
+        "timestamp": 1758856776122,
+        "gameType": "slots",
+        "bet": "10",
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758856776122.2664
+      },
+      {
+        "timestamp": 1758856775105,
+        "gameType": "slots",
+        "bet": "10",
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758856775105.3108
+      },
+      {
+        "timestamp": 1758856773949,
+        "gameType": "slots",
+        "bet": "10",
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758856773949.326
+      },
+      {
+        "timestamp": 1758856772321,
+        "gameType": "slots",
+        "bet": "10",
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758856772321.1216
+      },
+      {
+        "timestamp": 1758856752790,
+        "gameType": "slots",
+        "bet": 10,
+        "winnings": 30,
+        "result": "win",
+        "details": {},
+        "id": 1758856752790.6282
+      },
+      {
+        "timestamp": 1758855535414,
+        "gameType": "blackjack",
+        "bet": 100,
+        "winnings": -100,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758855535415.6768
+      },
+      {
+        "timestamp": 1758855503024,
+        "gameType": "blackjack",
+        "bet": 10,
+        "winnings": 10,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758855503024.9685
+      },
+      {
+        "timestamp": 1758854303803,
+        "gameType": "blackjack",
+        "bet": 10,
+        "winnings": 15,
+        "result": "blackjack",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758854303803.5928
+      },
+      {
+        "timestamp": 1758850831708,
+        "gameType": "blackjack",
+        "bet": 1000,
+        "winnings": 1500,
+        "result": "blackjack",
+        "details": {
+          "handsPlayed": 2
+        },
+        "id": 1758850831708.6897
+      },
+      {
+        "timestamp": 1758850796882,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": -500,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850796882.545
+      },
+      {
+        "timestamp": 1758850795866,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": -500,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850795866.9976
+      },
+      {
+        "timestamp": 1758850783345,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": -500,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850783345.9548
+      },
+      {
+        "timestamp": 1758850767222,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": 500,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850767222.5552
+      },
+      {
+        "timestamp": 1758850714843,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": -500,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850714843.9763
+      },
+      {
+        "timestamp": 1758850689128,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": 500,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850689128.2742
+      },
+      {
+        "timestamp": 1758850684644,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": 500,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850684644.1038
+      },
+      {
+        "timestamp": 1758850599374,
+        "gameType": "blackjack",
+        "bet": 2000,
+        "winnings": 2000,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850599374.4016
+      },
+      {
+        "timestamp": 1758850592170,
+        "gameType": "blackjack",
+        "bet": 1000,
+        "winnings": -1000,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850592170.7957
+      },
+      {
+        "timestamp": 1758850554690,
+        "gameType": "blackjack",
+        "bet": 1000,
+        "winnings": -1000,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850554690.8555
+      },
+      {
+        "timestamp": 1758850540764,
+        "gameType": "blackjack",
+        "bet": 1000,
+        "winnings": 1000,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850540764.92
+      },
+      {
+        "timestamp": 1758850531156,
+        "gameType": "blackjack",
+        "bet": 2000,
+        "winnings": -2000,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850531156.1116
+      },
+      {
+        "timestamp": 1758850523715,
+        "gameType": "blackjack",
+        "bet": 1000,
+        "winnings": -1000,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850523715.9343
+      },
+      {
+        "timestamp": 1758850516265,
+        "gameType": "blackjack",
+        "bet": 1000,
+        "winnings": 1000,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850516265.2734
+      },
+      {
+        "timestamp": 1758850504891,
+        "gameType": "blackjack",
+        "bet": 1000,
+        "winnings": 1000,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850504891.1218
+      },
+      {
+        "timestamp": 1758850495787,
+        "gameType": "blackjack",
+        "bet": 1000,
+        "winnings": -1000,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850495787.4487
+      },
+      {
+        "timestamp": 1758850447400,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": 0,
+        "result": "push",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850447400.8003
+      },
+      {
+        "timestamp": 1758850433348,
+        "gameType": "blackjack",
+        "bet": 1000,
+        "winnings": -1000,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850433348.2295
+      },
+      {
+        "timestamp": 1758850428061,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": 500,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850428061.3674
+      },
+      {
+        "timestamp": 1758850416677,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": -500,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850416677.1665
+      },
+      {
+        "timestamp": 1758850398664,
+        "gameType": "blackjack",
+        "bet": 1000,
+        "winnings": 1000,
+        "result": "win",
+        "details": {
+          "handsPlayed": 2
+        },
+        "id": 1758850398664.1196
+      },
+      {
+        "timestamp": 1758850386279,
+        "gameType": "blackjack",
+        "bet": 1000,
+        "winnings": 0,
+        "result": "push",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850386279.207
+      },
+      {
+        "timestamp": 1758850377081,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": -500,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850377081.5366
+      },
+      {
+        "timestamp": 1758850365787,
+        "gameType": "blackjack",
+        "bet": 1000,
+        "winnings": 1250,
+        "result": "blackjack",
+        "details": {
+          "handsPlayed": 2
+        },
+        "id": 1758850365787.7969
+      },
+      {
+        "timestamp": 1758850355294,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": -500,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850355294.502
+      },
+      {
+        "timestamp": 1758850349713,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": -500,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850349713.4626
+      },
+      {
+        "timestamp": 1758850343815,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": -500,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850343815.274
+      },
+      {
+        "timestamp": 1758850329976,
+        "gameType": "blackjack",
+        "bet": 1000,
+        "winnings": -1000,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 2
+        },
+        "id": 1758850329976.0142
+      },
+      {
+        "timestamp": 1758850318664,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": -500,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850318664.686
+      },
+      {
+        "timestamp": 1758850309405,
+        "gameType": "blackjack",
+        "bet": 1000,
+        "winnings": 1000,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850309405.7498
+      },
+      {
+        "timestamp": 1758850302460,
+        "gameType": "blackjack",
+        "bet": 1000,
+        "winnings": 1000,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758850302460.3826
+      }
+    ],
+    "giftsReceived": 1,
+    "giftsSent": 0
+  },
+  "353746884923490305": {
+    "money": 6250,
+    "lastDaily": 1758761508061,
+    "statistics": {
+      "gamesPlayed": 11,
+      "gamesWon": 8,
+      "totalWagered": 3300,
+      "totalWinnings": 6300,
+      "biggestWin": 750,
+      "biggestLoss": 150,
+      "blackjacks": 2,
+      "handsPlayed": 11
+    },
+    "gameHistory": [
+      {
+        "timestamp": 1758849809216,
+        "gameType": "blackjack",
+        "bet": 150,
+        "winnings": 150,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758849809216.5496
+      },
+      {
+        "timestamp": 1758849763021,
+        "gameType": "blackjack",
+        "bet": 150,
+        "winnings": -150,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758849763021.456
+      },
+      {
+        "timestamp": 1758849714110,
+        "gameType": "blackjack",
+        "bet": 150,
+        "winnings": 150,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758849714110.2578
+      },
+      {
+        "timestamp": 1758849359997,
+        "gameType": "blackjack",
+        "bet": 150,
+        "winnings": -150,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758849359997.0435
+      },
+      {
+        "timestamp": 1758848716337,
+        "gameType": "blackjack",
+        "bet": 100,
+        "winnings": -100,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758848716337.0388
+      },
+      {
+        "timestamp": 1758848676199,
+        "gameType": "blackjack",
+        "bet": 100,
+        "winnings": 100,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758848676199.7388
+      },
+      {
+        "timestamp": 1758848066634,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": 500,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758848066634.8384
+      },
+      {
+        "timestamp": 1758848057171,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": 750,
+        "result": "blackjack",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758848057171.5076
+      },
+      {
+        "timestamp": 1758848052761,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": 750,
+        "result": "blackjack",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758848052761.7207
+      },
+      {
+        "timestamp": 1758848035804,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": 500,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758848035804.6252
+      },
+      {
+        "timestamp": 1758848033091,
+        "gameType": "blackjack",
+        "bet": 500,
+        "winnings": 500,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758848033091.411
+      }
+    ],
+    "giftsReceived": 0,
+    "giftsSent": 0
+  },
+  "345243209594699777": {
+    "money": 3100,
+    "lastDaily": 1758850664303,
+    "statistics": {
+      "gamesPlayed": 86,
+      "gamesWon": 38,
+      "totalWagered": 11750,
+      "totalWinnings": 10710,
+      "biggestWin": 2500,
+      "biggestLoss": 400,
+      "blackjacks": 0,
+      "handsPlayed": 27,
+      "slotsSpins": 16,
+      "slotsWins": 1,
+      "threeCardPokerGames": 44,
+      "threeCardPokerWins": 27
+    },
+    "gameHistory": [
+      {
+        "timestamp": 1758930992704,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": 300,
+        "result": "win",
+        "details": {},
+        "id": 1758930992704.96
+      },
+      {
+        "timestamp": 1758930981362,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": -200,
+        "result": "lose",
+        "details": {},
+        "id": 1758930981362.8438
+      },
+      {
+        "timestamp": 1758930970609,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": 100,
+        "result": "win",
+        "details": {},
+        "id": 1758930970609.746
+      },
+      {
+        "timestamp": 1758930963795,
+        "gameType": "three_card_poker",
+        "bet": 100,
+        "winnings": -100,
+        "result": "lose",
+        "details": {},
+        "id": 1758930963795.4153
+      },
+      {
+        "timestamp": 1758930951205,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": 200,
+        "result": "win",
+        "details": {},
+        "id": 1758930951205.6846
+      },
+      {
+        "timestamp": 1758930934366,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": 100,
+        "result": "win",
+        "details": {},
+        "id": 1758930934366.4346
+      },
+      {
+        "timestamp": 1758922435406,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": 200,
+        "result": "win",
+        "details": {},
+        "id": 1758922435406.5454
+      },
+      {
+        "timestamp": 1758922428711,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": 100,
+        "result": "win",
+        "details": {},
+        "id": 1758922428711.246
+      },
+      {
+        "timestamp": 1758922422984,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": -200,
+        "result": "lose",
+        "details": {},
+        "id": 1758922422984.644
+      },
+      {
+        "timestamp": 1758922414698,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": 100,
+        "result": "win",
+        "details": {},
+        "id": 1758922414698.135
+      },
+      {
+        "timestamp": 1758922406458,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": 0,
+        "result": "win",
+        "details": {},
+        "id": 1758922406458.9512
+      },
+      {
+        "timestamp": 1758922399950,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": -200,
+        "result": "lose",
+        "details": {},
+        "id": 1758922399950.714
+      },
+      {
+        "timestamp": 1758922394268,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": -200,
+        "result": "lose",
+        "details": {},
+        "id": 1758922394268.078
+      },
+      {
+        "timestamp": 1758922385999,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": -200,
+        "result": "lose",
+        "details": {},
+        "id": 1758922385999.6133
+      },
+      {
+        "timestamp": 1758922375420,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": -200,
+        "result": "lose",
+        "details": {},
+        "id": 1758922375420.2727
+      },
+      {
+        "timestamp": 1758922369526,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": 100,
+        "result": "win",
+        "details": {},
+        "id": 1758922369526.8657
+      },
+      {
+        "timestamp": 1758922363577,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": 100,
+        "result": "win",
+        "details": {},
+        "id": 1758922363577.3745
+      },
+      {
+        "timestamp": 1758922357479,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": 100,
+        "result": "win",
+        "details": {},
+        "id": 1758922357479.5676
+      },
+      {
+        "timestamp": 1758922349563,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": 100,
+        "result": "win",
+        "details": {},
+        "id": 1758922349563.8064
+      },
+      {
+        "timestamp": 1758922340338,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": 200,
+        "result": "win",
+        "details": {},
+        "id": 1758922340338.7175
+      },
+      {
+        "timestamp": 1758922330088,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": 200,
+        "result": "win",
+        "details": {},
+        "id": 1758922330088.8062
+      },
+      {
+        "timestamp": 1758922321900,
+        "gameType": "three_card_poker",
+        "bet": 100,
+        "winnings": -100,
+        "result": "lose",
+        "details": {},
+        "id": 1758922321900.561
+      },
+      {
+        "timestamp": 1758922312290,
+        "gameType": "three_card_poker",
+        "bet": 100,
+        "winnings": -100,
+        "result": "lose",
+        "details": {},
+        "id": 1758922312290.8853
+      },
+      {
+        "timestamp": 1758922300255,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": -200,
+        "result": "lose",
+        "details": {},
+        "id": 1758922300255.7847
+      },
+      {
+        "timestamp": 1758922277855,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": 100,
+        "result": "win",
+        "details": {},
+        "id": 1758922277855.6736
+      },
+      {
+        "timestamp": 1758922264936,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": 100,
+        "result": "win",
+        "details": {},
+        "id": 1758922264936.938
+      },
+      {
+        "timestamp": 1758922250471,
+        "gameType": "three_card_poker",
+        "bet": 100,
+        "winnings": -100,
+        "result": "lose",
+        "details": {},
+        "id": 1758922250471.324
+      },
+      {
+        "timestamp": 1758922228146,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": 200,
+        "result": "win",
+        "details": {},
+        "id": 1758922228146.656
+      },
+      {
+        "timestamp": 1758922214732,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": 100,
+        "result": "win",
+        "details": {},
+        "id": 1758922214732.9707
+      },
+      {
+        "timestamp": 1758922198967,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": -200,
+        "result": "lose",
+        "details": {},
+        "id": 1758922198967.2134
+      },
+      {
+        "timestamp": 1758921591344,
+        "gameType": "three_card_poker",
+        "bet": 200,
+        "winnings": 0,
+        "result": "win",
+        "details": {},
+        "id": 1758921591344.0813
+      },
+      {
+        "timestamp": 1758921475141,
+        "gameType": "blackjack",
+        "bet": 100,
+        "winnings": 100,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758921475141.2834
+      },
+      {
+        "timestamp": 1758921447326,
+        "gameType": "blackjack",
+        "bet": 100,
+        "winnings": 100,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758921447326.2964
+      },
+      {
+        "timestamp": 1758921409088,
+        "gameType": "blackjack",
+        "bet": 100,
+        "winnings": 0,
+        "result": "push",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758921409088.6016
+      },
+      {
+        "timestamp": 1758862722735,
+        "gameType": "three_card_poker",
+        "bet": 20,
+        "winnings": 10,
+        "result": "win",
+        "details": {},
+        "id": 1758862722735.5571
+      },
+      {
+        "timestamp": 1758862715235,
+        "gameType": "three_card_poker",
+        "bet": 20,
+        "winnings": 10,
+        "result": "win",
+        "details": {},
+        "id": 1758862715235.9365
+      },
+      {
+        "timestamp": 1758862706816,
+        "gameType": "three_card_poker",
+        "bet": 20,
+        "winnings": 10,
+        "result": "win",
+        "details": {},
+        "id": 1758862706816.3813
+      },
+      {
+        "timestamp": 1758862698380,
+        "gameType": "three_card_poker",
+        "bet": 20,
+        "winnings": 10,
+        "result": "win",
+        "details": {},
+        "id": 1758862698380.5752
+      },
+      {
+        "timestamp": 1758862691092,
+        "gameType": "three_card_poker",
+        "bet": 20,
+        "winnings": 20,
+        "result": "win",
+        "details": {},
+        "id": 1758862691092.9377
+      },
+      {
+        "timestamp": 1758862680741,
+        "gameType": "three_card_poker",
+        "bet": 20,
+        "winnings": 20,
+        "result": "win",
+        "details": {},
+        "id": 1758862680741.0166
+      },
+      {
+        "timestamp": 1758862668059,
+        "gameType": "three_card_poker",
+        "bet": 20,
+        "winnings": 10,
+        "result": "win",
+        "details": {},
+        "id": 1758862668059.77
+      },
+      {
+        "timestamp": 1758862633226,
+        "gameType": "three_card_poker",
+        "bet": 20,
+        "winnings": 0,
+        "result": "win",
+        "details": {},
+        "id": 1758862633226.5186
+      },
+      {
+        "timestamp": 1758862627065,
+        "gameType": "three_card_poker",
+        "bet": 20,
+        "winnings": -20,
+        "result": "lose",
+        "details": {},
+        "id": 1758862627065.5989
+      },
+      {
+        "timestamp": 1758862613579,
+        "gameType": "three_card_poker",
+        "bet": 10,
+        "winnings": -10,
+        "result": "lose",
+        "details": {},
+        "id": 1758862613579.1086
+      },
+      {
+        "timestamp": 1758862595537,
+        "gameType": "three_card_poker",
+        "bet": 20,
+        "winnings": 20,
+        "result": "win",
+        "details": {},
+        "id": 1758862595537.9937
+      },
+      {
+        "timestamp": 1758862476379,
+        "gameType": "three_card_poker",
+        "bet": 20,
+        "winnings": 20,
+        "result": "win",
+        "details": {},
+        "id": 1758862476379.8342
+      },
+      {
+        "timestamp": 1758862456309,
+        "gameType": "three_card_poker",
+        "bet": 20,
+        "winnings": 10,
+        "result": "win",
+        "details": {},
+        "id": 1758862456309.167
+      },
+      {
+        "timestamp": 1758857957080,
+        "gameType": "slots",
+        "bet": "50",
+        "winnings": 2500,
+        "result": "win",
+        "details": {},
+        "id": 1758857957080.738
+      },
+      {
+        "timestamp": 1758857929018,
+        "gameType": "slots",
+        "bet": "50",
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758857929018.5308
+      },
+      {
+        "timestamp": 1758857928172,
+        "gameType": "slots",
+        "bet": "50",
+        "winnings": 0,
+        "result": "lose",
+        "details": {},
+        "id": 1758857928172.4578
+      }
+    ],
+    "giftsReceived": 1,
+    "giftsSent": 0
+  },
+  "399807600285450242": {
+    "money": 400,
+    "lastDaily": 0
+  },
+  "259783690098442240": {
+    "money": 400,
+    "lastDaily": 0,
+    "statistics": {
+      "gamesPlayed": 3,
+      "gamesWon": 1,
+      "totalWagered": 300,
+      "totalWinnings": 200,
+      "biggestWin": 100,
+      "biggestLoss": 100,
+      "blackjacks": 0,
+      "handsPlayed": 3
+    },
+    "gameHistory": [
+      {
+        "timestamp": 1758849809213,
+        "gameType": "blackjack",
+        "bet": 100,
+        "winnings": 100,
+        "result": "win",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758849809213.9172
+      },
+      {
+        "timestamp": 1758849763018,
+        "gameType": "blackjack",
+        "bet": 100,
+        "winnings": -100,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758849763018.547
+      },
+      {
+        "timestamp": 1758849714108,
+        "gameType": "blackjack",
+        "bet": 100,
+        "winnings": -100,
+        "result": "lose",
+        "details": {
+          "handsPlayed": 1
+        },
+        "id": 1758849714108.566
+      }
+    ],
+    "giftsReceived": 0,
+    "giftsSent": 0
+  },
+  "279317204292337660": {
+    "lastDaily": 0,
+    "statistics": {
+      "gamesPlayed": 0,
+      "gamesWon": 0,
+      "totalWagered": 0,
+      "totalWinnings": 0,
+      "biggestWin": 0,
+      "biggestLoss": 0,
+      "blackjacks": 0,
+      "handsPlayed": 0,
+      "slotsSpins": 0,
+      "slotsWins": 0
+    },
+    "gameHistory": [],
+    "giftsReceived": 0,
+    "giftsSent": 0
+  }
+}
