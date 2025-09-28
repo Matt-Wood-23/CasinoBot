@@ -139,6 +139,10 @@ class ThreeCardPokerGame {
     }
 
     calculateWinnings() {
+        console.log('calculateWinnings called, gamePhase:', this.gamePhase);
+        if (this.cachedWinnings) {
+            return this.cachedWinnings;
+        }
         if (this.gamePhase !== 'showdown') return { total: 0, breakdown: {} };
 
         let totalWinnings = 0;
@@ -200,8 +204,9 @@ class ThreeCardPokerGame {
         breakdown.pairPlus = this.calculatePairPlusWinnings();
         totalWinnings += breakdown.pairPlus;
 
+        this.cachedWinnings = { total: totalWinnings, breakdown };
         this.gamePhase = 'complete';
-        return { total: totalWinnings, breakdown };
+        return this.cachedWinnings;
     }
 
     calculatePairPlusWinnings() {
