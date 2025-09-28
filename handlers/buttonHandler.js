@@ -74,6 +74,9 @@ async function handlePokerButtons(interaction, activeGames, customId, userId, cl
         game.makeDecision('play');
 
         const winnings = game.calculateWinnings();
+        console.log('Winnings total:', winnings.total);
+        console.log('Winnings breakdown:', winnings.breakdown);
+        console.log('Game phase:', game.gamePhase);
         const currentMoney = await getUserMoney(userId);
         await setUserMoney(userId, currentMoney + game.anteBet + game.playBet + winnings.total);
 
@@ -158,13 +161,13 @@ async function handleSlotsSpinAgain(interaction, userId, client) {
     } catch (error) {
         console.error('Error parsing slots bet:', error);
     }
-    
+
     const userMoney = await getUserMoney(userId);
 
     if (userMoney < bet) {
-        return interaction.reply({ 
-            content: `❌ You don't have enough money! You have ${userMoney.toLocaleString()}.`, 
-            ephemeral: true 
+        return interaction.reply({
+            content: `❌ You don't have enough money! You have ${userMoney.toLocaleString()}.`,
+            ephemeral: true
         });
     }
 
@@ -175,7 +178,7 @@ async function handleSlotsSpinAgain(interaction, userId, client) {
 
     const embed = await createGameEmbed(slotsGame, userId, client);
     const buttons = createButtons(slotsGame, userId, client);
-    
+
     await interaction.update({
         embeds: [embed],
         components: buttons ? [buttons] : []
@@ -184,11 +187,11 @@ async function handleSlotsSpinAgain(interaction, userId, client) {
 
 async function handleSideBetButtons(interaction, activeGames, client, dealCardsWithDelay) {
     const { customId, user } = interaction;
-    
+
     if (customId === 'start_dealing') {
-        const game = activeGames.get(user.id);
-        if (!game || !game.sideBetPhase) {
-            return interaction.reply({ content: '❌ No active side bet phase!', ephemeral: true });
+        let game = activeGames.get(user.id) || activeGames.get(interaction.channelId);
+        if (!game) {
+            return interaction.reply({ content: '❌ No active game found!', ephemeral: true });
         }
 
         game.startDealing();
@@ -320,7 +323,7 @@ async function handleTableButtons(interaction, activeGames, client, dealCardsWit
         const currentBet = player.bet / (player.hasSplit ? 2 : 1);
         console.log(`Player ${targetPlayerId} confirming bet: ${currentBet}`);
         game.confirmBet(targetPlayerId, currentBet);
-        
+
         await interaction.reply({ content: `✅ You kept your bet of ${currentBet.toLocaleString()}!`, ephemeral: true });
 
         if (game.allPlayersReady()) {
@@ -509,9 +512,9 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
 
     // Check if it's the user's turn for multiplayer
     if (isMultiPlayer && user.id !== Array.from(game.players.keys())[game.currentPlayerIndex]) {
-        return interaction.reply({ 
-            content: `❌ Its not your turn! Waiting for ${client.users.cache.get(Array.from(game.players.keys())[game.currentPlayerIndex])?.username || 'another player'}.`, 
-            ephemeral: true 
+        return interaction.reply({
+            content: `❌ Its not your turn! Waiting for ${client.users.cache.get(Array.from(game.players.keys())[game.currentPlayerIndex])?.username || 'another player'}.`,
+            ephemeral: true
         });
     }
 
@@ -565,10 +568,10 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
                 const currentMoney = await getUserMoney(user.id);
                 await setUserMoney(user.id, currentMoney + game.getTotalBet(user.id) + winnings);
                 const results = game.getResult(user.id);
-                const result = Array.isArray(results) ? 
-                    (results.includes('blackjack') ? 'blackjack' : 
-                     (results.includes('win') ? 'win' : 
-                      (results.includes('lose') ? 'lose' : 'push'))) : results;
+                const result = Array.isArray(results) ?
+                    (results.includes('blackjack') ? 'blackjack' :
+                        (results.includes('win') ? 'win' :
+                            (results.includes('lose') ? 'lose' : 'push'))) : results;
                 const bet = game.getTotalBet(user.id);
                 await recordGameResult(user.id, 'blackjack', bet, winnings, result, {
                     handsPlayed: game.players.get(user.id).hands.length
@@ -579,10 +582,10 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
                     const currentMoney = await getUserMoney(playerId);
                     await setUserMoney(playerId, currentMoney + game.getTotalBet(playerId) + winnings);
                     const results = game.getResult(playerId);
-                    const result = Array.isArray(results) ? 
-                        (results.includes('blackjack') ? 'blackjack' : 
-                         (results.includes('win') ? 'win' : 
-                          (results.includes('lose') ? 'lose' : 'push'))) : results;
+                    const result = Array.isArray(results) ?
+                        (results.includes('blackjack') ? 'blackjack' :
+                            (results.includes('win') ? 'win' :
+                                (results.includes('lose') ? 'lose' : 'push'))) : results;
                     const bet = game.getTotalBet(playerId);
                     await recordGameResult(playerId, 'blackjack', bet, winnings, result, {
                         handsPlayed: game.players.get(playerId).hands.length

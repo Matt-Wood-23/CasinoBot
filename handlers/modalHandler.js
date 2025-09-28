@@ -20,64 +20,71 @@ async function handleModalSubmit(interaction, activeGames, client, dealCardsWith
 async function handleJoinTableSubmission(interaction, activeGames, client) {
     const game = activeGames.get(interaction.channelId);
     if (!game || !game.isMultiPlayer) {
-        return interaction.reply({ content: '❌ No active table found!', ephemeral: true });
+        return interaction.reply({ content: '❌ No active table found!', ephemeral: true }); 
     }
     if (game.dealingPhase > 0) {
-        return interaction.reply({ content: '❌ Game has already started!', ephemeral: true });
+        return interaction.reply({ content: '❌ Game has already started!', ephemeral: true }); 
     }
     if (game.players.has(interaction.user.id)) {
-        return interaction.reply({ content: '❌ You\'re already in the game!', ephemeral: true });
+        return interaction.reply({ content: '❌ You\'re already in the game!', ephemeral: true }); 
     }
     if (activeGames.has(interaction.user.id)) {
-        return interaction.reply({ content: '❌ You already have an active single-player game!', ephemeral: true });
+        return interaction.reply({ content: '❌ You already have an active single-player game!', ephemeral: true }); 
     }
 
     const betInput = interaction.fields.getTextInputValue('bet_amount');
     const bet = parseInt(betInput);
-    
+
     if (isNaN(bet) || bet < 10 || bet > 500000) {
-        return interaction.reply({ content: '❌ Invalid bet! Must be between 10 and 500,000.', ephemeral: true });
+        return interaction.reply({ content: '❌ Invalid bet! Must be between 10 and 500,000.', ephemeral: true }); 
     }
 
     const userMoney = await getUserMoney(interaction.user.id);
     if (userMoney < bet) {
-        return interaction.reply({ content: `❌ You don't have enough money! You have ${userMoney.toLocaleString()}.`, ephemeral: true });
+        return interaction.reply({ content: `❌ You don't have enough money! You have ${userMoney.toLocaleString()}.`, ephemeral: true }); 
     }
 
     await setUserMoney(interaction.user.id, userMoney - bet);
     if (!game.addPlayer(interaction.user.id, bet)) {
-        return interaction.reply({ content: '❌ Table is full or game has started!', ephemeral: true });
+        return interaction.reply({ content: '❌ Table is full or game has started!', ephemeral: true }); 
     }
 
-    await interaction.reply({ content: `✅ You joined the table with a bet of ${bet.toLocaleString()}!`, ephemeral: true });
+    await interaction.reply({ content: `✅ You joined the table with a bet of ${bet.toLocaleString()}!`, ephemeral: true }); 
 
     try {
         const embed = await createGameEmbed(game, interaction.user.id, client);
         const countdown = Math.max(0, 30 - Math.floor((Date.now() - game.interactionStartTime) / 1000));
         embed.setDescription(`🃏 Blackjack table started! Click to join (${countdown} seconds remaining).`);
-        
+
         const buttons = createJoinTableButton();
         await interaction.message.edit({ embeds: [embed], components: [buttons] });
     } catch (error) {
         console.error('Error updating game message:', error);
         await interaction.followUp({
             content: '⚠️ Failed to update the game message. Your bet was placed, but the table may not reflect it.',
-            ephemeral: true
+            ephemeral: true 
         });
     }
 }
 
 async function handleAdjustedBetSubmission(interaction, activeGames, client, dealCardsWithDelay) {
+    // Get the bet input from the modal
     const betInput = interaction.fields.getTextInputValue('bet_amount');
-    const bet = parseInt(betInput);
+    
+    // Clean and parse the input
+    const cleanedInput = betInput.toString().trim().replace(/,/g, '');
 
+    const bet = parseInt(cleanedInput, 10);
+
+    // Validation should now work correctly
     if (isNaN(bet) || bet < 10 || bet > 500000) {
         return interaction.reply({
-            content: '❌ Invalid bet! Please enter a number between 10 and 500,000.',
+            content: `❌ Invalid bet! You entered: "${betInput}". Please enter a number between 10 and 500,000.`,
             ephemeral: true
         });
     }
 
+    // Get the game from activeGames
     const game = activeGames.get(interaction.channelId);
     if (!game || !game.isMultiPlayer || !game.bettingPhase) {
         return interaction.reply({
@@ -96,10 +103,10 @@ async function handleAdjustedBetSubmission(interaction, activeGames, client, dea
     const player = game.players.get(interaction.user.id);
     const oldBet = player.bet / (player.hasSplit ? 2 : 1);
     const userMoney = await getUserMoney(interaction.user.id);
-    
+
     if (userMoney + oldBet < bet) {
         return interaction.reply({
-            content: `❌ You don't have enough money! You have ${(userMoney + oldBet).toLocaleString()}.`,
+            content: `❌ You don't have enough money! You have ${userMoney + oldBet}.`,
             ephemeral: true
         });
     }
@@ -107,20 +114,44 @@ async function handleAdjustedBetSubmission(interaction, activeGames, client, dea
     // Refund the old bet and confirm the new one
     await setUserMoney(interaction.user.id, userMoney + oldBet);
     game.confirmBet(interaction.user.id, bet);
-    
+
     await interaction.reply({
-        content: `✅ You adjusted your bet to ${bet.toLocaleString()}!`,
+        content: `✅ You adjusted your bet to ${bet}!`,
         ephemeral: true
     });
 
+    // Check if all players are ready and start new round
     if (game.allPlayersReady()) {
-        const { startNewRoundFromBetting } = require('./buttonHandler');
+        // Use the startNewRoundFromBetting function that you already have
         await startNewRoundFromBetting(game, interaction, activeGames, client, dealCardsWithDelay);
     } else {
-        const { updateBettingDisplay } = require('./buttonHandler');
-        await updateBettingDisplay(game, interaction, client);
+        // Not all players ready yet - just update the display
+        const embed = await createGameEmbed(game, interaction.user.id, client);
+        const buttons = createButtons(game, interaction.user.id, client);
+        let components = [];
+        if (buttons) {
+            if (Array.isArray(buttons)) {
+                components = buttons;
+            } else {
+                components = [buttons];
+            }
+        }
+
+        try {
+            await interaction.message.edit({
+                embeds: [embed],
+                components: components
+            });
+        } catch (error) {
+            console.error('Error updating game message after bet adjustment:', error);
+            await interaction.followUp({
+                content: '⚠️ Failed to update the game message. Your bet was adjusted, but the table may not reflect it.',
+                ephemeral: true
+            });
+        }
     }
 }
+
 
 async function handlePerfectPairsBetSubmission(interaction, activeGames, client) {
     const betInput = interaction.fields.getTextInputValue('sidebet_amount');
