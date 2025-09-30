@@ -4,6 +4,11 @@ const path = require('path');
 const DATA_FILE = path.join(__dirname, '..', 'blackjack_data.json');
 let userData = {};
 
+// Debounced save system to prevent file write conflicts
+let saveTimeout = null;
+let isSaving = false;
+let pendingSave = false;
+
 async function loadUserData() {
     try {
         const data = await fs.readFile(DATA_FILE, 'utf8');
@@ -17,11 +22,61 @@ async function loadUserData() {
 }
 
 async function saveUserData() {
+    // Clear any pending timeout
+    if (saveTimeout) {
+        clearTimeout(saveTimeout);
+        saveTimeout = null;
+    }
+
+    // If already saving, mark that we need another save
+    if (isSaving) {
+        pendingSave = true;
+        return;
+    }
+
+    // Debounce: wait 1 second before saving
+    saveTimeout = setTimeout(async () => {
+        isSaving = true;
+        pendingSave = false;
+
+        try {
+            await fs.writeFile(DATA_FILE, JSON.stringify(userData, null, 2));
+            console.log('User data saved successfully');
+        } catch (error) {
+            console.error('Error saving user data:', error);
+            // Retry once on error
+            try {
+                await fs.writeFile(DATA_FILE, JSON.stringify(userData, null, 2));
+                console.log('User data saved successfully (retry)');
+            } catch (retryError) {
+                console.error('Error saving user data on retry:', retryError);
+            }
+        } finally {
+            isSaving = false;
+            // If another save was requested while we were saving, do it now
+            if (pendingSave) {
+                saveUserData();
+            }
+        }
+    }, 1000);
+}
+
+// Force immediate save (for shutdown)
+async function forceSaveUserData() {
+    if (saveTimeout) {
+        clearTimeout(saveTimeout);
+        saveTimeout = null;
+    }
+
+    while (isSaving) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
     try {
         await fs.writeFile(DATA_FILE, JSON.stringify(userData, null, 2));
-        console.log('User data saved successfully');
+        console.log('User data force saved successfully');
     } catch (error) {
-        console.error('Error saving user data:', error);
+        console.error('Error force saving user data:', error);
     }
 }
 
@@ -46,14 +101,18 @@ async function getUserMoney(userId) {
             },
             gameHistory: [],
             giftsReceived: 0,
-            giftsSent: 0
+            giftsSent: 0,
+            totalGiftsReceived: 0,
+            totalGiftsSent: 0
         };
+        // Only save when creating new user
+        saveUserData();
     } else {
         // Ensure all fields exist and are numbers to prevent toString() errors
         userData[userId].money = userData[userId].money ?? 500;
         userData[userId].lastDaily = userData[userId].lastDaily ?? 0;
         userData[userId].statistics = userData[userId].statistics ?? {};
-        
+
         const stats = userData[userId].statistics;
         stats.gamesPlayed = stats.gamesPlayed ?? 0;
         stats.gamesWon = stats.gamesWon ?? 0;
@@ -67,20 +126,21 @@ async function getUserMoney(userId) {
         stats.slotsWins = stats.slotsWins ?? 0;
         stats.threeCardPokerGames = stats.threeCardPokerGames ?? 0;
         stats.threeCardPokerWins = stats.threeCardPokerWins ?? 0;
-        
+
         userData[userId].gameHistory = userData[userId].gameHistory ?? [];
         userData[userId].giftsReceived = userData[userId].giftsReceived ?? 0;
         userData[userId].giftsSent = userData[userId].giftsSent ?? 0;
+        userData[userId].totalGiftsReceived = userData[userId].totalGiftsReceived ?? 0;
+        userData[userId].totalGiftsSent = userData[userId].totalGiftsSent ?? 0;
     }
-    
-    await saveUserData();
+
     return userData[userId].money;
 }
 
 async function setUserMoney(userId, amount) {
     await getUserMoney(userId); // Ensure user exists
     userData[userId].money = Math.max(0, Math.floor(amount)); // Ensure non-negative integer
-    await saveUserData();
+    saveUserData(); // Non-blocking save
 }
 
 async function recordGameResult(userId, gameType, bet, winnings, result, details = {}) {
@@ -142,7 +202,7 @@ async function recordGameResult(userId, gameType, bet, winnings, result, details
         }
     }
 
-    await saveUserData();
+    saveUserData(); // Non-blocking save
 }
 
 async function canClaimDaily(userId) {
@@ -157,7 +217,7 @@ async function canClaimDaily(userId) {
 async function setLastDaily(userId) {
     if (!userData[userId]) userData[userId] = { money: 500, lastDaily: 0 };
     userData[userId].lastDaily = Date.now();
-    await saveUserData();
+    saveUserData(); // Non-blocking save
 }
 
 function getTimeUntilNextDaily(userId) {
@@ -180,11 +240,13 @@ function getUserData(userId) {
 async function updateUserGifts(senderId, receiverId, amount) {
     await getUserMoney(senderId);
     await getUserMoney(receiverId);
-    
+
     userData[senderId].giftsSent = (userData[senderId].giftsSent || 0) + 1;
     userData[receiverId].giftsReceived = (userData[receiverId].giftsReceived || 0) + 1;
-    
-    await saveUserData();
+    userData[senderId].totalGiftsSent = (userData[senderId].totalGiftsSent || 0) + amount;
+    userData[receiverId].totalGiftsReceived = (userData[receiverId].totalGiftsReceived || 0) + amount;
+
+    saveUserData(); // Non-blocking save
 }
 
 // Utility function to fix any corrupted data
@@ -197,6 +259,8 @@ function cleanUserData() {
         user.lastDaily = Number(user.lastDaily) || 0;
         user.giftsReceived = Number(user.giftsReceived) || 0;
         user.giftsSent = Number(user.giftsSent) || 0;
+        user.totalGiftsReceived = Number(user.totalGiftsReceived) || 0;
+        user.totalGiftsSent = Number(user.totalGiftsSent) || 0;
         
         if (user.statistics) {
             const stats = user.statistics;
@@ -217,6 +281,7 @@ function cleanUserData() {
 module.exports = {
     loadUserData,
     saveUserData,
+    forceSaveUserData,
     getUserMoney,
     setUserMoney,
     recordGameResult,

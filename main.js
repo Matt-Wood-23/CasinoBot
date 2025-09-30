@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Import utilities
-const { loadUserData } = require('./utils/data');
+const { loadUserData, forceSaveUserData } = require('./utils/data');
 const { createGameEmbed } = require('./utils/embeds');
 const { createButtons } = require('./utils/buttons');
 
@@ -12,6 +12,7 @@ const { createButtons } = require('./utils/buttons');
 const BlackjackGame = require('./gameLogic/blackjackGame');
 const SlotsGame = require('./gameLogic/slotsGame');
 const ThreeCardPokerGame = require('./gameLogic/threeCardPokerGame');
+const RouletteGame = require('./gameLogic/rouletteGame');
 
 // Import configuration
 const { token, ALLOWED_CHANNEL_IDS, ADMIN_USER_ID } = require('./config');
@@ -27,6 +28,10 @@ const client = new Client({
 
 // Game storage
 let activeGames = new Map();
+
+// Roulette betting sessions storage
+// Format: Map<messageId, { userId, bets: {}, currentChip: 10, totalBet: 0 }>
+let rouletteSessions = new Map();
 
 // Command collection
 client.commands = new Collection();
@@ -219,12 +224,12 @@ client.on('interactionCreate', async interaction => {
         else if (interaction.isButton()) {
             // Import button handlers
             const { handleButtonInteraction } = require('./handlers/buttonHandler');
-            await handleButtonInteraction(interaction, activeGames, client, dealCardsWithDelay);
+            await handleButtonInteraction(interaction, activeGames, client, dealCardsWithDelay, rouletteSessions);
         }
         else if (interaction.isModalSubmit()) {
             // Import modal handlers
             const { handleModalSubmit } = require('./handlers/modalHandler');
-            await handleModalSubmit(interaction, activeGames, client, dealCardsWithDelay);
+            await handleModalSubmit(interaction, activeGames, client, dealCardsWithDelay, rouletteSessions);
         }
         
     } catch (error) {
@@ -254,6 +259,23 @@ client.on('error', error => {
 process.on('unhandledRejection', error => {
     console.error('Unhandled promise rejection:', error);
 });
+
+// Graceful shutdown handling
+async function gracefulShutdown(signal) {
+    console.log(`\n${signal} received. Saving all data before shutdown...`);
+
+    try {
+        await forceSaveUserData();
+        console.log('Data saved successfully. Shutting down...');
+        process.exit(0);
+    } catch (error) {
+        console.error('Error during shutdown:', error);
+        process.exit(1);
+    }
+}
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 // Start the bot
 client.login(token);

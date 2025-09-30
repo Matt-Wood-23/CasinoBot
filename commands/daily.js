@@ -21,20 +21,12 @@ module.exports = {
                     ephemeral: true
                 });
             }
-            
-            // Check if user has too much money
-            if (userMoney >= 50) {
-                return await interaction.reply({
-                    content: '❌ You can only claim daily bonus when you have less than $50!',
-                    ephemeral: true
-                });
-            }
-            
+
             // Give daily bonus
-            await setUserMoney(interaction.user.id, 500);
+            await setUserMoney(interaction.user.id, userMoney + 500);
             await setLastDaily(interaction.user.id);
             
-            await interaction.reply('🎁 Daily bonus claimed! You now have **$500**');
+            await interaction.reply(`🎁 Daily bonus claimed! You now have ${userMoney + 500}`);
         } catch (error) {
             console.error('Error in daily command:', error);
             await interaction.reply({

@@ -16,6 +16,21 @@ function createButtons(game, userId, client, options = {}) {
     if (game.constructor.name === 'BlackjackGame') {
         return createBlackjackButtons(game, userId, client, options);
     }
+
+    // Handle Roulette buttons
+    if (game.constructor.name === 'RouletteGame') {
+        if (game.gameComplete) {
+            const row = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('roulette_play_again')
+                        .setLabel('🎰 Play Again')
+                        .setStyle(ButtonStyle.Primary)
+                );
+            return row;
+        }
+        return null; // No buttons during game play
+    }
     
     return null;
 }
@@ -78,15 +93,8 @@ function createBlackjackButtons(game, userId, client, options = {}) {
         return createGameOverButtons(game, userId);
     }
     
-    // Main game buttons with side bet options
-    const mainButtons = createMainGameButtons(game, userId, client);
-    const sideBetButtons = createSideBetButtons(game, userId);
-    
-    if (sideBetButtons) {
-        return [mainButtons, sideBetButtons]; // Return array of button rows
-    }
-    
-    return mainButtons;
+    // Main game buttons
+    return createMainGameButtons(game, userId, client);
 }
 
 function createBettingPhaseButtons(game, userId, client, options = {}) {
@@ -238,23 +246,28 @@ function createMainGameButtons(game, userId, client) {
         }
     }
 
+    const currentHand = player.hands[player.currentHandIndex];
+    const userData = getUserData(targetPlayerId);
+    const userMoney = userData ? userData.money : 500;
+    const currentScore = game.getHandScore(targetPlayerId, player.currentHandIndex);
+
+    // Disable hit if score is 21 or busted
+    const canHit = currentScore < 21;
+
     const row = new ActionRowBuilder()
         .addComponents(
             new ButtonBuilder()
                 .setCustomId('hit')
                 .setLabel(game.isMultiPlayer ? `Hit (${username})` : 'Hit')
                 .setStyle(ButtonStyle.Primary)
-                .setEmoji('🃏'),
+                .setEmoji('🃏')
+                .setDisabled(!canHit),
             new ButtonBuilder()
                 .setCustomId('stand')
                 .setLabel(game.isMultiPlayer ? `Stand (${username})` : 'Stand')
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji('✋')
         );
-
-    const currentHand = player.hands[player.currentHandIndex];
-    const userData = getUserData(targetPlayerId);
-    const userMoney = userData ? userData.money : 500;
 
     // Double button
     if (currentHand.cards.length === 2 && !currentHand.doubled && userMoney >= currentHand.bet) {
@@ -279,48 +292,6 @@ function createMainGameButtons(game, userId, client) {
     }
 
     return row;
-}
-
-function createSideBetButtons(game, userId) {
-    const buttons = [];
-
-    // During side bet phase, show Perfect Pairs option
-    if (game.sideBetPhase) {
-        buttons.push(
-            new ButtonBuilder()
-                .setCustomId('perfect_pairs_bet')
-                .setLabel('Perfect Pairs')
-                .setStyle(ButtonStyle.Secondary)
-                .setEmoji('🎯')
-        );
-
-        // Add a "Start Game" button to skip waiting
-        buttons.push(
-            new ButtonBuilder()
-                .setCustomId('start_dealing')
-                .setLabel('Start Dealing')
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji('▶️')
-        );
-    }
-
-    // Insurance button (only when dealer shows Ace)
-    if (game.checkInsuranceEligible() && !game.gameOver && !game.sideBetPhase) {
-        const sideBets = game.sideBets.get(userId);
-        const hasInsurance = sideBets && sideBets.insurance > 0;
-        
-        if (!hasInsurance) {
-            buttons.push(
-                new ButtonBuilder()
-                    .setCustomId('insurance_bet')
-                    .setLabel('Insurance')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setEmoji('🛡️')
-            );
-        }
-    }
-
-    return buttons.length > 0 ? new ActionRowBuilder().addComponents(buttons) : null;
 }
 
 // Utility function for creating join table button
@@ -355,7 +326,6 @@ module.exports = {
     createBettingPhaseButtons,
     createGameOverButtons,
     createMainGameButtons,
-    createSideBetButtons,
     createJoinTableButton,
     createLoadingButton
 };
