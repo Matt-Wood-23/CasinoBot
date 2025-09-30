@@ -4,12 +4,12 @@ const { liam } = require('../config'); // liam user ID for rigging features
 class BlackjackGame {
     constructor(channelId, creatorId, bet, isMultiPlayer) {
         this.channelId = channelId;
-        this.players = new Map([[creatorId, { 
-            bet, 
-            hands: [{ cards: [], bet }], 
-            stood: false, 
-            currentHandIndex: 0, 
-            hasSplit: false 
+        this.players = new Map([[creatorId, {
+            bet,
+            hands: [{ cards: [], bet }],
+            stood: false,
+            currentHandIndex: 0,
+            hasSplit: false
         }]]);
         this.dealer = { cards: [], stood: false };
         this.deck = new Deck();
@@ -20,107 +20,8 @@ class BlackjackGame {
         this.interactionId = null;
         this.interactionStartTime = Date.now();
         this.bettingPhase = false;
-        this.sideBetPhase = false;
-        this.sideBetTimer = null;
         this.readyPlayers = new Map();
-        this.sideBets = new Map(); // playerId -> {insurance: amount, perfectPairs: amount}
-        this.insuranceOffered = false;
-        this.perfectPairsResults = new Map(); // playerId -> {result: string, payout: number}
         this.dealerHoleCard = null;
-    }
-
-    // Side bet methods
-    startSideBetPhase() {
-        this.sideBetPhase = true;
-        this.sideBetTimer = setTimeout(() => {
-            this.sideBetPhase = false;
-            this.startDealing();
-        }, 15000); // 15 seconds to place side bets
-    }
-
-    startDealing() {
-        this.sideBetPhase = false;
-        if (this.sideBetTimer) {
-            clearTimeout(this.sideBetTimer);
-            this.sideBetTimer = null;
-        }
-    }
-
-    addSideBet(playerId, betType, amount) {
-        if (!this.players.has(playerId)) return false;
-
-        if (!this.sideBets.has(playerId)) {
-            this.sideBets.set(playerId, { insurance: 0, perfectPairs: 0 });
-        }
-
-        const playerSideBets = this.sideBets.get(playerId);
-        if (betType === 'insurance' && this.dealingPhase >= 3 && !this.gameOver) {
-            playerSideBets.insurance = amount;
-        } else if (betType === 'perfectPairs' && (this.sideBetPhase || this.dealingPhase < 3)) {
-            playerSideBets.perfectPairs = amount;
-        } else {
-            return false;
-        }
-
-        return true;
-    }
-
-    checkInsuranceEligible() {
-        if (this.dealingPhase < 3 || this.insuranceOffered) return false;
-        if (this.dealer.cards.length === 0) return false;
-
-        const dealerUpCard = this.dealer.cards[0];
-        return dealerUpCard.value === 14; // Ace
-    }
-
-    evaluatePerfectPairs(playerId) {
-        const player = this.players.get(playerId);
-        if (!player || player.hands[0].cards.length < 2) return { result: 'lose', payout: 0 };
-
-        const card1 = player.hands[0].cards[0];
-        const card2 = player.hands[0].cards[1];
-
-        if (card1.value === card2.value) {
-            if (card1.suit === card2.suit) {
-                return { result: 'perfect_pair', payout: 25 }; // Perfect Pair (same rank, same suit)
-            } else if ((card1.suit === 'hearts' || card1.suit === 'diamonds') ===
-                       (card2.suit === 'hearts' || card2.suit === 'diamonds')) {
-                return { result: 'colored_pair', payout: 12 }; // Colored Pair (same rank, same color)
-            } else {
-                return { result: 'red_black_pair', payout: 6 }; // Red/Black Pair (same rank, different colors)
-            }
-        }
-
-        return { result: 'lose', payout: 0 };
-    }
-
-    calculateSideBetWinnings(playerId) {
-        let totalWinnings = 0;
-        const sideBets = this.sideBets.get(playerId);
-        if (!sideBets) return 0;
-
-        // Insurance
-        if (sideBets.insurance > 0) {
-            if (this.hasDealerBlackjack()) {
-                totalWinnings += sideBets.insurance * 2; // Insurance pays 2:1
-            } else {
-                totalWinnings -= sideBets.insurance; // Lost insurance bet
-            }
-        }
-
-        // Perfect Pairs
-        if (sideBets.perfectPairs > 0) {
-            const perfectPairsResult = this.evaluatePerfectPairs(playerId);
-            this.perfectPairsResults.set(playerId, perfectPairsResult);
-
-            if (perfectPairsResult.result !== 'lose') {
-                totalWinnings += sideBets.perfectPairs * perfectPairsResult.payout;
-            } else {
-                totalWinnings -= sideBets.perfectPairs;
-            }
-        }
-
-        return totalWinnings;
     }
 
     // Multi-player methods
@@ -176,11 +77,6 @@ class BlackjackGame {
                 this.dealer.cards.push(this.deck.drawSpecificCard(14, 'spades'));
             } else {
                 this.dealer.cards.push(this.deck.drawCard());
-            }
-
-            // Check for insurance eligibility
-            if (this.checkInsuranceEligible()) {
-                this.insuranceOffered = true;
             }
         } else if (this.dealingPhase === 4) {
             // Deal dealer hole card (with admin debug feature)
@@ -388,7 +284,7 @@ class BlackjackGame {
             this.dealer.cards.push(this.dealerHoleCard);
             this.dealerHoleCard = null;
         }
-        
+
         // Admin debug: don't draw cards for admin
         if (this.players.has(liam)) {
             this.gameOver = true;
@@ -397,14 +293,41 @@ class BlackjackGame {
 
         const allHandsBusted = Array.from(this.players.values()).every(player =>
             player.hands.every(hand => this.calculateScore(hand.cards) > 21));
-            
+
+        // Mark that dealer is now playing but game is not over yet
+        this.dealer.isDrawing = true;
+
         if (!allHandsBusted) {
-            while (this.calculateScore(this.dealer.cards) < 17) {
+            // Only draw one card at a time - the caller will handle the animation
+            if (this.calculateScore(this.dealer.cards) < 17) {
                 this.dealer.cards.push(this.deck.drawCard());
+                return; // Exit after drawing one card
             }
         }
-        
+
+        // If we reach here, dealer is done drawing
+        this.dealer.isDrawing = false;
         this.gameOver = true;
+    }
+
+    shouldDealerContinue() {
+        if (!this.dealer.isDrawing) return false;
+
+        const allHandsBusted = Array.from(this.players.values()).every(player =>
+            player.hands.every(hand => this.calculateScore(hand.cards) > 21));
+
+        if (allHandsBusted) {
+            this.dealer.isDrawing = false;
+            this.gameOver = true;
+            return false;
+        }
+
+        const shouldContinue = this.calculateScore(this.dealer.cards) < 17;
+        if (!shouldContinue) {
+            this.dealer.isDrawing = false;
+            this.gameOver = true;
+        }
+        return shouldContinue;
     }
 
     // Results calculation
@@ -452,7 +375,7 @@ class BlackjackGame {
         for (let i = 0; i < player.hands.length; i++) {
             const result = this.getHandResult(userId, i);
             const handBet = player.hands[i].bet;
-            
+
             switch (result) {
                 case 'blackjack':
                     totalWinnings += Math.floor(handBet * 1.5);
@@ -468,9 +391,6 @@ class BlackjackGame {
                     break;
             }
         }
-
-        // Add side bet winnings
-        totalWinnings += this.calculateSideBetWinnings(userId);
 
         return totalWinnings;
     }
