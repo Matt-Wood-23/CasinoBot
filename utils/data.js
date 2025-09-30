@@ -83,7 +83,7 @@ async function setUserMoney(userId, amount) {
     await saveUserData();
 }
 
-async function recordGameResult(userId, gameType, bet, winnings, result, details = {}) {
+async function recordGameResult(userId, gameType, bet, winnings, result, details = {},  additionalData = {}) {
     if (!userData[userId]) await getUserMoney(userId);
 
     const gameRecord = {
@@ -115,6 +115,25 @@ async function recordGameResult(userId, gameType, bet, winnings, result, details
             stats.biggestWin = Math.floor(winnings);
         }
     }
+
+    if (gameType === 'roulette') {
+    stats.rouletteSpins = (stats.rouletteSpins || 0) + 1;
+    if (result === 'win') {
+        stats.rouletteWins = (stats.rouletteWins || 0) + 1;
+    }
+    
+    // Track additional roulette stats if provided
+    if (additionalData) {
+        if (additionalData.winningNumber !== undefined) {
+            stats.rouletteNumbers = stats.rouletteNumbers || {};
+            const numKey = additionalData.winningNumber.toString();
+            stats.rouletteNumbers[numKey] = (stats.rouletteNumbers[numKey] || 0) + 1;
+        }
+        if (additionalData.betsPlaced) {
+            stats.rouletteBetsPlaced = (stats.rouletteBetsPlaced || 0) + additionalData.betsPlaced;
+        }
+    }
+}
 
     if (winnings < 0 && Math.abs(winnings) > (stats.biggestLoss || 0)) {
         stats.biggestLoss = Math.floor(Math.abs(winnings));
