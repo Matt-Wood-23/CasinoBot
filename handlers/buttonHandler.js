@@ -1056,6 +1056,28 @@ async function animateDealerDrawing(game, interaction, userId, client) {
             break;
         }
     }
+    // Final update after dealer is done to show game over buttons
+    if (game.gameOver) {
+        const embed = await createGameEmbed(game, userId, client);
+        const buttons = createButtons(game, userId, client);
+        let components = [];
+        if (buttons) {
+            if (Array.isArray(buttons)) {
+                components = buttons;
+            } else {
+                components = [buttons];
+            }
+        }
+
+        try {
+            await interaction.message.edit({
+                embeds: [embed],
+                components: components
+            });
+        } catch (error) {
+            console.error('Error updating game message after dealer finishes:', error);
+        }
+    }
 }
 
 async function handleCrapsButtons(interaction, activeGames, userId, client) {
