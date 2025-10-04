@@ -5,9 +5,6 @@ const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedB
 const SlotsGame = require('../gameLogic/slotsGame');
 const ThreeCardPokerGame = require('../gameLogic/threeCardPokerGame');
 const BlackjackGame = require('../gameLogic/blackjackGame');
-<<<<<<< Updated upstream
-const RouletteGame = require('../gameLogic/rouletteGame')
-=======
 const RouletteGame = require('../gameLogic/rouletteGame');
 const CrapsGame = require('../gameLogic/crapsGame');
 const WarGame = require('../gameLogic/warGame');
@@ -17,7 +14,6 @@ const CrashGame = require('../gameLogic/crashGame');
 const BingoGame = require('../gameLogic/bingoGame');
 const PokerTournament = require('../gameLogic/pokerTournament');
 const HiLoGame = require('../gameLogic/hiLoGame');
->>>>>>> Stashed changes
 const { startNewRoundFromBetting } = require('./modalHandler');
 
 async function handleButtonInteraction(interaction, activeGames, client, dealCardsWithDelay, rouletteSessions) {
@@ -1060,7 +1056,6 @@ async function animateDealerDrawing(game, interaction, userId, client) {
             break;
         }
     }
-
     // Final update after dealer is done to show game over buttons
     if (game.gameOver) {
         const embed = await createGameEmbed(game, userId, client);

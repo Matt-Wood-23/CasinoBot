@@ -276,8 +276,6 @@ process.on('unhandledRejection', error => {
     console.error('Unhandled promise rejection:', error);
 });
 
-<<<<<<< Updated upstream
-=======
 // Graceful shutdown handling
 async function gracefulShutdown(signal) {
     console.log(`\n${signal} received. Saving all data before shutdown...`);
@@ -320,6 +318,5 @@ setInterval(async () => {
     }
 }, 24 * 60 * 60 * 1000); // Every 24 hours
 
->>>>>>> Stashed changes
 // Start the bot
 client.login(token);
