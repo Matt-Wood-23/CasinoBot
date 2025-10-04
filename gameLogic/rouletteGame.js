@@ -58,81 +58,81 @@ class RouletteGame {
             payout: 0
         };
         
-        // Straight up bet (single number)
+        // Straight up bet (single number) - 35:1 payout + original bet = 36x total
         if (betType === this.winningNumber.toString()) {
             result.won = true;
             result.payout = 35;
-            result.winnings = betAmount * 35;
+            result.winnings = betAmount * 36; // 35:1 profit + original bet
         }
-        // Color bets
+        // Color bets - 1:1 payout + original bet = 2x total
         else if (betType === 'red' && this.winningColor === 'red') {
             result.won = true;
             result.payout = 1;
-            result.winnings = betAmount * 1;
+            result.winnings = betAmount * 2; // 1:1 profit + original bet
         }
         else if (betType === 'black' && this.winningColor === 'black') {
             result.won = true;
             result.payout = 1;
-            result.winnings = betAmount * 1;
+            result.winnings = betAmount * 2; // 1:1 profit + original bet
         }
         else if (betType === 'green' && this.winningColor === 'green') {
             result.won = true;
-            result.payout = 17; // Both 0 and 00 hit green
-            result.winnings = betAmount * 17;
+            result.payout = 17;
+            result.winnings = betAmount * 18; // 17:1 profit + original bet
         }
-        // Odd/Even bets (0 and 00 lose)
+        // Odd/Even bets (0 and 00 lose) - 1:1 payout + original bet = 2x total
         else if (betType === 'odd' && typeof this.winningNumber === 'number' && this.winningNumber > 0 && this.winningNumber % 2 === 1) {
             result.won = true;
             result.payout = 1;
-            result.winnings = betAmount * 1;
+            result.winnings = betAmount * 2; // 1:1 profit + original bet
         }
         else if (betType === 'even' && typeof this.winningNumber === 'number' && this.winningNumber > 0 && this.winningNumber % 2 === 0) {
             result.won = true;
             result.payout = 1;
-            result.winnings = betAmount * 1;
+            result.winnings = betAmount * 2; // 1:1 profit + original bet
         }
-        // High/Low bets
+        // High/Low bets - 1:1 payout + original bet = 2x total
         else if (betType === 'low' && typeof this.winningNumber === 'number' && this.winningNumber >= 1 && this.winningNumber <= 18) {
             result.won = true;
             result.payout = 1;
-            result.winnings = betAmount * 1;
+            result.winnings = betAmount * 2; // 1:1 profit + original bet
         }
         else if (betType === 'high' && typeof this.winningNumber === 'number' && this.winningNumber >= 19 && this.winningNumber <= 36) {
             result.won = true;
             result.payout = 1;
-            result.winnings = betAmount * 1;
+            result.winnings = betAmount * 2; // 1:1 profit + original bet
         }
-        // Dozen bets
+        // Dozen bets - 2:1 payout + original bet = 3x total
         else if (betType === '1st12' && typeof this.winningNumber === 'number' && this.winningNumber >= 1 && this.winningNumber <= 12) {
             result.won = true;
             result.payout = 2;
-            result.winnings = betAmount * 2;
+            result.winnings = betAmount * 3; // 2:1 profit + original bet
         }
         else if (betType === '2nd12' && typeof this.winningNumber === 'number' && this.winningNumber >= 13 && this.winningNumber <= 24) {
             result.won = true;
             result.payout = 2;
-            result.winnings = betAmount * 2;
+            result.winnings = betAmount * 3; // 2:1 profit + original bet
         }
         else if (betType === '3rd12' && typeof this.winningNumber === 'number' && this.winningNumber >= 25 && this.winningNumber <= 36) {
             result.won = true;
             result.payout = 2;
-            result.winnings = betAmount * 2;
+            result.winnings = betAmount * 3; // 2:1 profit + original bet
         }
-        // Column bets
+        // Column bets - 2:1 payout + original bet = 3x total
         else if (betType === 'col1' && typeof this.winningNumber === 'number' && this.winningNumber > 0 && (this.winningNumber - 1) % 3 === 0) {
             result.won = true;
             result.payout = 2;
-            result.winnings = betAmount * 2;
+            result.winnings = betAmount * 3; // 2:1 profit + original bet
         }
         else if (betType === 'col2' && typeof this.winningNumber === 'number' && this.winningNumber > 0 && (this.winningNumber - 2) % 3 === 0) {
             result.won = true;
             result.payout = 2;
-            result.winnings = betAmount * 2;
+            result.winnings = betAmount * 3; // 2:1 profit + original bet
         }
         else if (betType === 'col3' && typeof this.winningNumber === 'number' && this.winningNumber > 0 && this.winningNumber % 3 === 0) {
             result.won = true;
             result.payout = 2;
-            result.winnings = betAmount * 2;
+            result.winnings = betAmount * 3; // 2:1 profit + original bet
         }
         
         return result;

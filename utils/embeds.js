@@ -1,7 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { getUserData } = require('./data');
 
-async function createGameEmbed(game, userId, client) {
+async function createGameEmbed(game, userId, client, options = {}) {
     let embed;
 
     if (game.constructor.name === 'ThreeCardPokerGame') {
@@ -12,6 +12,22 @@ async function createGameEmbed(game, userId, client) {
         return await createBlackjackEmbed(game, userId, client);
     } else if (game.constructor.name === 'RouletteGame') {
         return await createRouletteEmbed(game, userId);
+    } else if (game.constructor.name === 'CrapsGame') {
+        return await createCrapsEmbed(game, userId);
+    } else if (game.constructor.name === 'WarGame') {
+        return await createWarEmbed(game, userId);
+    } else if (game.constructor.name === 'CoinFlipGame') {
+        return await createCoinFlipEmbed(game, userId);
+    } else if (game.constructor.name === 'HorseRacingGame') {
+        return await createHorseRaceEmbed(game, userId, options);
+    } else if (game.constructor.name === 'CrashGame') {
+        return await createCrashEmbed(game, userId);
+    } else if (game.constructor.name === 'BingoGame') {
+        return await createBingoEmbed(game, userId, client);
+    } else if (game.constructor.name === 'PokerTournament') {
+        return await createTournamentEmbed(game, userId, client);
+    } else if (game.constructor.name === 'HiLoGame') {
+        return await createHiLoEmbed(game, userId);
     }
 
     return new EmbedBuilder()
@@ -819,6 +835,452 @@ async function createHistoryEmbed(user, gamesToShow = 10) {
     }
 
     embed.setDescription(historyText);
+    return embed;
+}
+
+async function createCrapsEmbed(game, userId) {
+    const userData = getUserData(userId);
+    const userMoney = userData ? userData.money : 500;
+
+    const embed = new EmbedBuilder()
+        .setTitle('🎲 Craps')
+        .setColor(game.gameComplete ?
+            (game.totalWinnings > game.getTotalBet() ? '#00FF00' :
+             game.totalWinnings === game.getTotalBet() ? '#FFFF00' : '#FF0000') : '#0099FF');
+
+    let description = '';
+
+    // Show bets
+    description += '**Your Bets:**\n';
+    if (game.passLineBet > 0) description += `Pass Line: ${game.passLineBet.toLocaleString()}\n`;
+    if (game.dontPassBet > 0) description += `Don't Pass: ${game.dontPassBet.toLocaleString()}\n`;
+    if (game.fieldBet > 0) description += `Field: ${game.fieldBet.toLocaleString()}\n`;
+    description += `**Total Bet:** ${game.getTotalBet().toLocaleString()}\n\n`;
+
+    // Show game phase
+    if (game.rollHistory.length === 0) {
+        description += '**Game Phase:** Come-Out Roll\n';
+        description += '🎲 Click "Roll Dice" to begin!\n\n';
+    } else {
+        const lastRoll = game.rollHistory[game.rollHistory.length - 1];
+        description += `**Last Roll:** ${game.getDiceDisplay()} = **${lastRoll.total}**\n`;
+
+        if (game.point) {
+            description += `**Point:** ${game.point}\n`;
+        }
+
+        description += `**Game Phase:** ${game.gamePhase === 'come_out' ? 'Come-Out Roll' : 'Point Phase'}\n\n`;
+    }
+
+    // Show results
+    if (game.results.length > 0) {
+        description += '**Results:**\n';
+        description += game.getResultSummary() + '\n\n';
+    }
+
+    // Show winnings
+    if (game.gameComplete) {
+        const profit = game.totalWinnings - game.getTotalBet();
+        if (profit > 0) {
+            description += `✅ **You won ${profit.toLocaleString()}!**\n`;
+        } else if (profit === 0) {
+            description += `🟡 **Push! Bet returned.**\n`;
+        } else {
+            description += `❌ **You lost ${Math.abs(profit).toLocaleString()}**\n`;
+        }
+        description += `**Total Winnings:** ${game.totalWinnings.toLocaleString()}\n`;
+    } else if (game.canRollAgain()) {
+        description += `🎲 Roll again to try to make your point!\n`;
+    }
+
+    description += `\n💰 **Balance:** ${userMoney.toLocaleString()}`;
+
+    embed.setDescription(description);
+
+    // Add roll history if there are rolls
+    if (game.rollHistory.length > 0) {
+        let historyText = '';
+        const recentRolls = game.rollHistory.slice(-5); // Last 5 rolls
+        for (const roll of recentRolls) {
+            historyText += `${roll.dice[0]} + ${roll.dice[1]} = ${roll.total}`;
+            if (roll.phase === 'point') historyText += ` (Point: ${roll.point})`;
+            historyText += '\n';
+        }
+        embed.addFields({ name: '📜 Roll History', value: historyText.trim(), inline: false });
+    }
+
+    embed.setTimestamp();
+    return embed;
+}
+
+async function createWarEmbed(game, userId) {
+    const userData = getUserData(userId);
+    const userMoney = userData ? userData.money : 500;
+
+    const embed = new EmbedBuilder()
+        .setTitle('⚔️ Casino War')
+        .setColor(
+            game.isComplete() ?
+                (game.getProfit() > 0 ? '#00FF00' : game.getProfit() < 0 ? '#FF0000' : '#FFFF00')
+                : '#0099FF'
+        );
+
+    let description = `**Your Bet:** ${game.bet.toLocaleString()}\n`;
+    if (game.warBet > 0) {
+        description += `**War Bet:** ${game.warBet.toLocaleString()}\n`;
+        description += `**Total Bet:** ${game.getTotalBet().toLocaleString()}\n`;
+    }
+    description += '\n';
+
+    // Show player card
+    description += `**Your Card:** ${game.playerCard.displayName} ${game.playerCard.suit}\n`;
+
+    // Show dealer card
+    description += `**Dealer Card:** ${game.dealerCard.displayName} ${game.dealerCard.suit}\n\n`;
+
+    // Show war cards if in war
+    if (game.gamePhase === 'war' || (game.isComplete() && game.warBet > 0)) {
+        description += `**--- WAR ---**\n`;
+        description += `**Your War Card:** ${game.playerWarCard.displayName} ${game.playerWarCard.suit}\n`;
+        description += `**Dealer War Card:** ${game.dealerWarCard.displayName} ${game.dealerWarCard.suit}\n\n`;
+    }
+
+    // Show result
+    description += game.getResultMessage() + '\n';
+
+    if (game.isComplete()) {
+        const profit = game.getProfit();
+        if (profit > 0) {
+            description += `\n✅ **Profit: +${profit.toLocaleString()}**`;
+        } else if (profit < 0) {
+            description += `\n❌ **Loss: ${profit.toLocaleString()}**`;
+        } else {
+            description += `\n🟡 **Break Even**`;
+        }
+
+        if (game.winnings > 0) {
+            description += `\n💰 **Total Winnings: ${game.winnings.toLocaleString()}**`;
+        }
+    }
+
+    description += `\n\n💵 **Balance:** ${userMoney.toLocaleString()}`;
+
+    embed.setDescription(description);
+    embed.setTimestamp();
+    return embed;
+}
+
+async function createCoinFlipEmbed(game, userId) {
+    const userData = getUserData(userId);
+    const userMoney = userData ? userData.money : 500;
+
+    const embed = new EmbedBuilder()
+        .setTitle('🪙 Coin Flip')
+        .setColor(game.won ? '#00FF00' : '#FF0000');
+
+    let description = `**Your Bet:** ${game.bet.toLocaleString()}\n`;
+    description += `**Your Choice:** ${game.getChoiceEmoji()} ${game.getChoiceDisplay()}\n\n`;
+
+    // Coin flip animation representation
+    description += `**🪙 The coin flips... 🪙**\n\n`;
+    description += `**Result:** ${game.getResultEmoji()} ${game.getResultDisplay()}\n\n`;
+
+    if (game.won) {
+        description += `✅ **You won ${(game.winnings - game.bet).toLocaleString()}!**\n`;
+        description += `💰 **Total Winnings:** ${game.winnings.toLocaleString()}`;
+    } else {
+        description += `❌ **You lost ${game.bet.toLocaleString()}**`;
+    }
+
+    description += `\n\n💵 **Balance:** ${userMoney.toLocaleString()}`;
+
+    embed.setDescription(description);
+    embed.setTimestamp();
+    return embed;
+}
+
+async function createHorseRaceEmbed(game, userId, options = {}) {
+    const userData = getUserData(userId);
+    const userMoney = userData ? userData.money : 500;
+
+    const { frame } = options;
+    const betHorse = game.getBetHorse();
+
+    const embed = new EmbedBuilder()
+        .setTitle('🏇 HORSE RACING 🏇')
+        .setColor(game.gameComplete && game.getProfit() > 0 ? '#00FF00' : game.gameComplete && game.getProfit() < 0 ? '#FF0000' : '#FFD700');
+
+    let description = `**Your Bet:** ${game.bet.toLocaleString()}\n`;
+    description += `**Your Horse:** ${betHorse.color} ${betHorse.number}. ${betHorse.name} (${betHorse.odds}:1) ⭐\n\n`;
+
+    // Show race animation or final results
+    if (frame !== undefined) {
+        // Show race frame
+        description += game.getRaceFrame(frame);
+        description += '\n🏁 **RACING...** 🏁';
+    } else if (game.gameComplete) {
+        // Show final results
+        description += game.getFinalResults();
+
+        const winner = game.getWinningHorse();
+        description += `\n**Winner:** ${winner.color} ${winner.number}. ${winner.name}\n\n`;
+
+        if (game.getProfit() > 0) {
+            description += `✅ **You won ${game.getProfit().toLocaleString()}!**\n`;
+            description += `💰 **Total Winnings:** ${game.winnings.toLocaleString()}`;
+        } else {
+            description += `❌ **You lost ${game.bet.toLocaleString()}**`;
+        }
+    }
+
+    description += `\n\n💵 **Balance:** ${userMoney.toLocaleString()}`;
+
+    embed.setDescription(description);
+    embed.setTimestamp();
+    return embed;
+}
+
+async function createCrashEmbed(game, userId) {
+    const userData = getUserData(userId);
+    const userMoney = userData ? userData.money : 500;
+
+    const color = game.gameComplete ? (game.result === 'win' ? '#00FF00' : '#FF0000') : '#FFD700';
+    const embed = new EmbedBuilder()
+        .setTitle('🚀 Crash Game')
+        .setColor(color);
+
+    let description = '';
+
+    // Show current multiplier with visual effect
+    description += `${game.getMultiplierDisplay()}\n\n`;
+
+    // Show progress bar
+    description += `${game.getProgressBar()}\n\n`;
+
+    // Game info
+    description += `💰 **Bet:** ${game.betAmount.toLocaleString()}\n`;
+    description += `🎯 **Target:** ${game.targetMultiplier.toFixed(2)}x\n`;
+
+    if (game.gameComplete) {
+        description += `💥 **Crashed at:** ${game.crashMultiplier.toFixed(2)}x\n\n`;
+        description += `**${game.getResultMessage()}**\n\n`;
+
+        if (game.result === 'win') {
+            const profit = game.totalWinnings - game.betAmount;
+            description += `✅ **Winnings:** ${game.totalWinnings.toLocaleString()} (+${profit.toLocaleString()})\n`;
+        } else {
+            description += `❌ **Lost:** ${game.betAmount.toLocaleString()}\n`;
+        }
+    } else {
+        description += `\n${game.getResultMessage()}\n`;
+    }
+
+    description += `\n💵 **Balance:** ${userMoney.toLocaleString()}`;
+
+    embed.setDescription(description);
+    embed.setTimestamp();
+    return embed;
+}
+
+async function createBingoEmbed(game, userId, client) {
+    const BingoGame = require('../gameLogic/bingoGame');
+    const color = game.gameComplete ? '#00FF00' : (game.gameStarted ? '#0099FF' : '#FFD700');
+    const embed = new EmbedBuilder()
+        .setTitle('🎱 Bingo Game')
+        .setColor(color);
+
+    let description = '';
+
+    if (game.gameStarted) {
+        // Game is in progress or complete
+        description += `🎲 **Numbers Called:** ${game.calledNumbers.length}/75\n\n`;
+
+        if (game.currentNumber) {
+            const letter = BingoGame.getLetterForNumber(game.currentNumber);
+            description += `🔊 **Last Call:** ${letter}-${game.currentNumber}\n\n`;
+        }
+
+        // Show recent calls
+        if (game.calledNumbers.length > 0) {
+            description += `📋 **Recent:** ${game.getRecentCalls(10)}\n\n`;
+        }
+
+        // Show winners if any
+        const winners = [];
+        if (game.winTypes.firstBingo) {
+            try {
+                const user = await client.users.fetch(game.winTypes.firstBingo);
+                const playerData = game.players.get(game.winTypes.firstBingo);
+                winners.push(`🥇 **1st:** ${user.username} (${playerData.bingoType})`);
+            } catch (error) {
+                winners.push(`🥇 **1st:** Player`);
+            }
+        }
+        if (game.winTypes.secondBingo) {
+            try {
+                const user = await client.users.fetch(game.winTypes.secondBingo);
+                const playerData = game.players.get(game.winTypes.secondBingo);
+                winners.push(`🥈 **2nd:** ${user.username} (${playerData.bingoType})`);
+            } catch (error) {
+                winners.push(`🥈 **2nd:** Player`);
+            }
+        }
+        if (game.winTypes.thirdBingo) {
+            try {
+                const user = await client.users.fetch(game.winTypes.thirdBingo);
+                const playerData = game.players.get(game.winTypes.thirdBingo);
+                winners.push(`🥉 **3rd:** ${user.username} (${playerData.bingoType})`);
+            } catch (error) {
+                winners.push(`🥉 **3rd:** Player`);
+            }
+        }
+
+        if (winners.length > 0) {
+            description += `**Winners:**\n${winners.join('\n')}\n\n`;
+        }
+
+        if (game.gameComplete) {
+            description += `🏁 **Game Complete!**\n\n`;
+            const prizes = game.calculatePrizes();
+            description += `**Prizes:**\n`;
+            for (const prize of prizes) {
+                description += `${prize.place === '1st' ? '🥇' : prize.place === '2nd' ? '🥈' : '🥉'} ${prize.prize.toLocaleString()}\n`;
+            }
+        } else {
+            description += `👥 **Players:** ${game.players.size}\n`;
+            description += `💵 **Prize Pool:** ${game.prizePool.toLocaleString()}\n\n`;
+            description += `Click **Call Number** to draw the next ball!`;
+        }
+    }
+
+    embed.setDescription(description);
+    embed.setTimestamp();
+    return embed;
+}
+
+async function createTournamentEmbed(tournament, userId, client) {
+    const color = tournament.tournamentComplete ? '#00FF00' : (tournament.tournamentStarted ? '#0099FF' : '#FFD700');
+    const embed = new EmbedBuilder()
+        .setTitle('♠️ Texas Hold\'em Tournament')
+        .setColor(color);
+
+    let description = '';
+
+    if (tournament.tournamentComplete) {
+        // Show final results
+        description += `🏁 **Tournament Complete!**\n\n`;
+        description += `**Final Standings:**\n`;
+        for (const winner of tournament.winners) {
+            try {
+                const user = await client.users.fetch(winner.userId);
+                const emoji = winner.place === 1 ? '🥇' : winner.place === 2 ? '🥈' : '🥉';
+                description += `${emoji} **${user.username}** - ${winner.prize.toLocaleString()}\n`;
+            } catch (error) {
+                description += `${winner.place}. Player - ${winner.prize.toLocaleString()}\n`;
+            }
+        }
+    } else if (tournament.tournamentStarted) {
+        // Show game in progress
+        description += `🎰 **Hand #${tournament.roundsPlayed}** | **${tournament.phase.toUpperCase()}**\n\n`;
+        description += `💰 **Pot:** ${tournament.pot.toLocaleString()} | **Blinds:** ${tournament.smallBlind}/${tournament.bigBlind}\n\n`;
+
+        // Show community cards
+        if (tournament.communityCards.length > 0) {
+            const communityDisplay = tournament.communityCards.map(card => card.getName()).join(' ');
+            description += `🃏 **Community Cards:** ${communityDisplay}\n\n`;
+        }
+
+        // Show current player
+        const currentPlayer = tournament.getCurrentPlayer();
+        try {
+            const user = await client.users.fetch(currentPlayer);
+            const player = tournament.players.get(currentPlayer);
+            description += `👉 **Current Turn:** ${user.username}\n`;
+            description += `💎 **Chips:** ${player.chips.toLocaleString()} | **Bet:** ${player.bet.toLocaleString()}\n\n`;
+        } catch (error) {
+            description += `👉 **Current Turn:** Player\n\n`;
+        }
+
+        // Show all players and chip counts
+        description += `**Players:**\n`;
+        for (const [playerId, player] of tournament.players) {
+            if (!player.eliminated) {
+                try {
+                    const user = await client.users.fetch(playerId);
+                    const status = player.folded ? '❌' : player.allIn ? '🔴' : '✅';
+                    description += `${status} ${user.username}: ${player.chips.toLocaleString()} chips`;
+                    if (player.bet > 0) description += ` (bet: ${player.bet.toLocaleString()})`;
+                    description += '\n';
+                } catch (error) {
+                    description += `✅ Player: ${player.chips.toLocaleString()} chips\n`;
+                }
+            }
+        }
+
+        // Show user's cards if they're in the tournament
+        if (tournament.players.has(userId)) {
+            const userPlayer = tournament.players.get(userId);
+            if (userPlayer.cards && userPlayer.cards.length > 0) {
+                const cardsDisplay = userPlayer.cards.map(card => card.getName()).join(' ');
+                description += `\n🎴 **Your Cards:** ${cardsDisplay}`;
+            }
+        }
+
+        if (tournament.phase === 'handComplete') {
+            description += `\n\n🎲 **Hand Complete!** Click "Next Hand" to continue.`;
+        }
+    }
+
+    embed.setDescription(description);
+    embed.setTimestamp();
+    return embed;
+}
+
+async function createHiLoEmbed(game, userId) {
+    const userData = getUserData(userId);
+    const userMoney = userData ? userData.money : 500;
+
+    const color = game.gameComplete ? (game.result === 'win' ? '#00FF00' : '#FF0000') : '#FFD700';
+    const embed = new EmbedBuilder()
+        .setTitle('🎴 Hi-Lo')
+        .setColor(color);
+
+    let description = '';
+
+    // Show current card
+    description += `**Current Card:**\n`;
+    description += `🃏 ${game.currentCard.getName()} (${game.getCardValueDisplay(game.currentCard)})\n\n`;
+
+    // Show streak and multiplier
+    description += `${game.getStreakDisplay()}\n`;
+    description += `🔥 **Streak:** ${game.streak}\n`;
+    description += `📊 **Multiplier:** ${game.multiplier.toFixed(2)}x\n`;
+    description += `💰 **Current Winnings:** ${game.currentWinnings.toLocaleString()}\n\n`;
+
+    // Show last result if exists
+    if (game.history.length > 0) {
+        description += `**Last Result:** ${game.getLastResultDisplay()}\n\n`;
+    }
+
+    if (game.gameComplete) {
+        description += `**${game.getResultMessage()}**\n\n`;
+
+        if (game.result === 'win') {
+            const profit = game.currentWinnings - game.initialBet;
+            description += `✅ **Won:** ${game.currentWinnings.toLocaleString()} (+${profit.toLocaleString()})\n`;
+        } else {
+            description += `❌ **Lost:** ${game.initialBet.toLocaleString()}\n`;
+        }
+    } else {
+        description += `❓ Will the next card be **HIGHER** or **LOWER**?\n\n`;
+        description += `🎯 **Initial Bet:** ${game.initialBet.toLocaleString()}\n`;
+        description += `📦 **Cards Remaining:** ${game.deck.cards.length}`;
+    }
+
+    description += `\n\n💵 **Balance:** ${userMoney.toLocaleString()}`;
+
+    embed.setDescription(description);
+    embed.setTimestamp();
     return embed;
 }
 

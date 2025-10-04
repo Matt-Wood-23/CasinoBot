@@ -3,6 +3,11 @@ const { createGameEmbed } = require('../utils/embeds');
 const { createButtons, createJoinTableButton } = require('../utils/buttons');
 const BlackjackGame = require('../gameLogic/blackjackGame');
 const RouletteGame = require('../gameLogic/rouletteGame');
+const CrapsGame = require('../gameLogic/crapsGame');
+const LotteryGame = require('../gameLogic/lotteryGame');
+const CrashGame = require('../gameLogic/crashGame');
+const HiLoGame = require('../gameLogic/hiLoGame');
+const { EmbedBuilder } = require('discord.js');
 
 async function handleModalSubmit(interaction, activeGames, client, dealCardsWithDelay, rouletteSessions) {
     const { customId, user } = interaction;
@@ -15,6 +20,16 @@ async function handleModalSubmit(interaction, activeGames, client, dealCardsWith
         await handleRouletteModal(interaction, activeGames, client);
     } else if (customId === 'roulette_number_bet') {
         await handleRouletteNumberBet(interaction, rouletteSessions);
+    } else if (customId === 'craps_place_bets') {
+        await handleCrapsModal(interaction, activeGames, client);
+    } else if (customId === 'lottery_pick_numbers') {
+        await handleLotteryNumbers(interaction, client);
+    } else if (customId === 'crash_place_bet') {
+        await handleCrashModal(interaction, activeGames, client);
+    } else if (customId === 'tournament_raise_amount') {
+        await handleTournamentRaise(interaction, activeGames, client);
+    } else if (customId === 'hilo_place_bet') {
+        await handleHiLoModal(interaction, activeGames, client);
     }
 }
 
@@ -490,6 +505,376 @@ async function handleRouletteNumberBet(interaction, rouletteSessions) {
         console.error('Error handling roulette number bet:', error);
         await interaction.reply({
             content: '❌ An error occurred. Please try again.',
+            ephemeral: true
+        });
+    }
+}
+
+async function handleCrapsModal(interaction, activeGames, client) {
+    try {
+        const userId = interaction.user.id;
+
+        // Get bet values from modal
+        const passLineInput = interaction.fields.getTextInputValue('pass_line_bet');
+        const dontPassInput = interaction.fields.getTextInputValue('dont_pass_bet');
+        const fieldInput = interaction.fields.getTextInputValue('field_bet');
+
+        const passLineBet = passLineInput ? parseInt(passLineInput) : 0;
+        const dontPassBet = dontPassInput ? parseInt(dontPassInput) : 0;
+        const fieldBet = fieldInput ? parseInt(fieldInput) : 0;
+
+        // Validation
+        if (passLineBet < 0 || dontPassBet < 0 || fieldBet < 0) {
+            return interaction.reply({
+                content: '❌ Bets cannot be negative!',
+                ephemeral: true
+            });
+        }
+
+        if (passLineBet > 0 && dontPassBet > 0) {
+            return interaction.reply({
+                content: '❌ You cannot bet on both Pass Line and Don\'t Pass at the same time!',
+                ephemeral: true
+            });
+        }
+
+        const totalBet = passLineBet + dontPassBet + fieldBet;
+
+        if (totalBet < 10) {
+            return interaction.reply({
+                content: '❌ Total bet must be at least $10!',
+                ephemeral: true
+            });
+        }
+
+        if (totalBet > 10000) {
+            return interaction.reply({
+                content: '❌ Maximum total bet is $10,000!',
+                ephemeral: true
+            });
+        }
+
+        // Check user has enough money
+        const userMoney = await getUserMoney(userId);
+        if (userMoney < totalBet) {
+            return interaction.reply({
+                content: `❌ You don't have enough money! You have ${userMoney.toLocaleString()}, need ${totalBet.toLocaleString()}.`,
+                ephemeral: true
+            });
+        }
+
+        // Deduct money
+        await setUserMoney(userId, userMoney - totalBet);
+
+        // Create game
+        const crapsGame = new CrapsGame(userId, passLineBet, dontPassBet, fieldBet, 0);
+        activeGames.set(`craps_${userId}`, crapsGame);
+
+        // Send game display
+        const embed = await createGameEmbed(crapsGame, userId, client);
+        const buttons = createButtons(crapsGame, userId, client);
+
+        await interaction.reply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+
+    } catch (error) {
+        console.error('Error in craps modal:', error);
+        await interaction.reply({
+            content: '❌ An error occurred while placing your bets. Please try again.',
+            ephemeral: true
+        });
+    }
+}
+
+async function handleLotteryNumbers(interaction, client) {
+    try {
+        const numbersInput = interaction.fields.getTextInputValue('lottery_numbers');
+        const userId = interaction.user.id;
+        const ticketPrice = 100;
+
+        // Parse numbers
+        const numberStrings = numbersInput.trim().split(/\s+/);
+        const numbers = numberStrings.map(n => parseInt(n)).filter(n => !isNaN(n));
+
+        if (numbers.length !== 5) {
+            return interaction.reply({
+                content: `❌ You must pick exactly 5 numbers! You entered ${numbers.length}.`,
+                ephemeral: true
+            });
+        }
+
+        // Check if user has enough money
+        const userMoney = await getUserMoney(userId);
+        if (userMoney < ticketPrice) {
+            return interaction.reply({
+                content: `❌ You don't have enough money! Tickets cost ${ticketPrice.toLocaleString()}. You have ${userMoney.toLocaleString()}.`,
+                ephemeral: true
+            });
+        }
+
+        // Get or create global lottery
+        if (!client.currentLottery) {
+            client.currentLottery = new LotteryGame();
+            // Schedule draw for 10 minutes from now
+            client.currentLottery.drawTime = Date.now() + (10 * 60 * 1000);
+            client.currentLottery.drawScheduled = true;
+
+            // Schedule the draw
+            setTimeout(async () => {
+                await drawLottery(client);
+            }, 10 * 60 * 1000);
+        }
+
+        const lottery = client.currentLottery;
+
+        // Buy ticket
+        const result = lottery.buyTicket(userId, numbers);
+
+        if (!result.success) {
+            return interaction.reply({
+                content: `❌ ${result.reason}`,
+                ephemeral: true
+            });
+        }
+
+        // Deduct money
+        await setUserMoney(userId, userMoney - ticketPrice);
+
+        // Send confirmation
+        const embed = new EmbedBuilder()
+            .setTitle('🎫 Lottery Ticket Purchased! 🎫')
+            .setColor('#00FF00')
+            .setDescription(
+                `**Your Numbers:** ${result.numbers.join(', ')}\n\n` +
+                `**Ticket ID:** \`${result.ticketId}\`\n` +
+                `**Cost:** ${ticketPrice.toLocaleString()}\n\n` +
+                `**Current Prize Pool:** ${lottery.prizePool.toLocaleString()}\n` +
+                `**Estimated Jackpot:** ${lottery.getEstimatedJackpot().toLocaleString()}\n\n` +
+                `⏰ Draw will occur in approximately **${Math.floor((lottery.drawTime - Date.now()) / 60000)} minutes**\n\n` +
+                `Good luck! 🍀`
+            )
+            .setTimestamp();
+
+        await interaction.reply({ embeds: [embed] });
+
+    } catch (error) {
+        console.error('Error in lottery numbers modal:', error);
+        await interaction.reply({
+            content: '❌ An error occurred while purchasing your ticket. Please try again.',
+            ephemeral: true
+        });
+    }
+}
+
+async function drawLottery(client) {
+    const lottery = client.currentLottery;
+    if (!lottery || lottery.gameComplete) return;
+
+    console.log(`Drawing lottery with ${lottery.getTotalTickets()} tickets and prize pool of ${lottery.prizePool}`);
+
+    // Draw winning numbers
+    lottery.draw();
+
+    // Award prizes to winners
+    for (const winner of lottery.winners) {
+        const currentMoney = await getUserMoney(winner.userId);
+        await setUserMoney(winner.userId, currentMoney + winner.prize);
+
+        // Record game result
+        await recordGameResult(winner.userId, 'lottery', 100, winner.prize - 100, 'win', {
+            matches: winner.matches,
+            numbers: winner.numbers,
+            winningNumbers: lottery.winningNumbers
+        });
+
+        // Try to DM the winner
+        try {
+            const user = await client.users.fetch(winner.userId);
+            const embed = new EmbedBuilder()
+                .setTitle('🎰 LOTTERY WINNER! 🎰')
+                .setColor('#FFD700')
+                .setDescription(
+                    `**Congratulations!** You won the lottery!\n\n` +
+                    `**Your Numbers:** ${winner.numbers.join(', ')}\n` +
+                    `**Winning Numbers:** ${lottery.winningNumbers.join(', ')}\n` +
+                    `**Matches:** ${winner.matches}/5\n\n` +
+                    `💰 **Prize:** ${winner.prize.toLocaleString()}`
+                )
+                .setTimestamp();
+
+            await user.send({ embeds: [embed] });
+        } catch (error) {
+            console.log(`Could not DM lottery winner ${winner.userId}`);
+        }
+    }
+
+    // Clear the lottery
+    client.currentLottery = null;
+}
+
+async function handleCrashModal(interaction, activeGames, client) {
+    try {
+        const betInput = interaction.fields.getTextInputValue('bet_amount');
+        const targetInput = interaction.fields.getTextInputValue('target_multiplier');
+        const userId = interaction.user.id;
+
+        // Parse bet amount
+        const betAmount = parseInt(betInput);
+        if (isNaN(betAmount) || betAmount < 10 || betAmount > 10000) {
+            return interaction.reply({
+                content: '❌ Bet amount must be between $10 and $10,000!',
+                ephemeral: true
+            });
+        }
+
+        // Parse target multiplier
+        const targetMultiplier = parseFloat(targetInput);
+        if (isNaN(targetMultiplier) || targetMultiplier < 1.01 || targetMultiplier > 100.00) {
+            return interaction.reply({
+                content: '❌ Target multiplier must be between 1.01x and 100.00x!',
+                ephemeral: true
+            });
+        }
+
+        // Check user has enough money
+        const userMoney = await getUserMoney(userId);
+        if (userMoney < betAmount) {
+            return interaction.reply({
+                content: `❌ You don't have enough money! You have ${userMoney.toLocaleString()}, but need ${betAmount.toLocaleString()}.`,
+                ephemeral: true
+            });
+        }
+
+        // Deduct bet
+        await setUserMoney(userId, userMoney - betAmount);
+
+        // Create game
+        const crashGame = new CrashGame(userId, betAmount, targetMultiplier);
+        activeGames.set(`crash_${userId}`, crashGame);
+
+        // Send initial embed
+        const embed = await createGameEmbed(crashGame, userId, client);
+        const buttons = createButtons(crashGame, userId, client);
+
+        await interaction.reply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+
+    } catch (error) {
+        console.error('Error in crash modal:', error);
+        await interaction.reply({
+            content: '❌ An error occurred while processing your bet. Please try again.',
+            ephemeral: true
+        });
+    }
+}
+
+async function handleTournamentRaise(interaction, activeGames, client) {
+    try {
+        const raiseInput = interaction.fields.getTextInputValue('raise_amount');
+        const userId = interaction.user.id;
+        const channelId = interaction.channelId;
+
+        const tournament = activeGames.get(`tournament_${channelId}`);
+        if (!tournament) {
+            return interaction.reply({
+                content: '❌ No active tournament found!',
+                ephemeral: true
+            });
+        }
+
+        if (tournament.getCurrentPlayer() !== userId) {
+            return interaction.reply({
+                content: '❌ It\'s not your turn!',
+                ephemeral: true
+            });
+        }
+
+        const raiseAmount = parseInt(raiseInput);
+        if (isNaN(raiseAmount) || raiseAmount < 1) {
+            return interaction.reply({
+                content: '❌ Raise amount must be a positive number!',
+                ephemeral: true
+            });
+        }
+
+        const player = tournament.players.get(userId);
+        if (raiseAmount > player.chips) {
+            return interaction.reply({
+                content: `❌ You only have ${player.chips} chips!`,
+                ephemeral: true
+            });
+        }
+
+        tournament.raise(userId, raiseAmount);
+
+        await interaction.deferUpdate();
+        const { createGameEmbed } = require('../utils/embeds');
+        const { createButtons } = require('../utils/buttons');
+
+        const embed = await createGameEmbed(tournament, userId, client);
+        const buttons = createButtons(tournament, userId, client);
+
+        await interaction.message.edit({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+
+    } catch (error) {
+        console.error('Error in tournament raise modal:', error);
+        await interaction.reply({
+            content: '❌ An error occurred while processing your raise. Please try again.',
+            ephemeral: true
+        });
+    }
+}
+
+async function handleHiLoModal(interaction, activeGames, client) {
+    try {
+        const betInput = interaction.fields.getTextInputValue('bet_amount');
+        const userId = interaction.user.id;
+
+        // Parse bet amount
+        const betAmount = parseInt(betInput);
+        if (isNaN(betAmount) || betAmount < 10 || betAmount > 10000) {
+            return interaction.reply({
+                content: '❌ Bet amount must be between $10 and $10,000!',
+                ephemeral: true
+            });
+        }
+
+        // Check user has enough money
+        const userMoney = await getUserMoney(userId);
+        if (userMoney < betAmount) {
+            return interaction.reply({
+                content: `❌ You don't have enough money! You have ${userMoney.toLocaleString()}, but need ${betAmount.toLocaleString()}.`,
+                ephemeral: true
+            });
+        }
+
+        // Deduct bet
+        await setUserMoney(userId, userMoney - betAmount);
+
+        // Create game
+        const hiLoGame = new HiLoGame(userId, betAmount);
+        activeGames.set(`hilo_${userId}`, hiLoGame);
+
+        // Send initial embed
+        const embed = await createGameEmbed(hiLoGame, userId, client);
+        const buttons = createButtons(hiLoGame, userId, client);
+
+        await interaction.reply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+
+    } catch (error) {
+        console.error('Error in hilo modal:', error);
+        await interaction.reply({
+            content: '❌ An error occurred while processing your bet. Please try again.',
             ephemeral: true
         });
     }
