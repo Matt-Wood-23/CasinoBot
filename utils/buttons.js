@@ -6,15 +6,55 @@ function createButtons(game, userId, client, options = {}) {
     if (game.constructor.name === 'ThreeCardPokerGame') {
         return createPokerButtons(game);
     }
-    
+
     // Slots buttons
     if (game.constructor.name === 'SlotsGame') {
         return createSlotsButtons(game);
     }
-    
+
     // Blackjack buttons
     if (game.constructor.name === 'BlackjackGame') {
         return createBlackjackButtons(game, userId, client, options);
+    }
+
+    // Craps buttons
+    if (game.constructor.name === 'CrapsGame') {
+        return createCrapsButtons(game);
+    }
+
+    // War buttons
+    if (game.constructor.name === 'WarGame') {
+        return createWarButtons(game);
+    }
+
+    // Coin flip buttons
+    if (game.constructor.name === 'CoinFlipGame') {
+        return createCoinFlipButtons(game);
+    }
+
+    // Horse racing buttons
+    if (game.constructor.name === 'HorseRacingGame') {
+        return createHorseRaceButtons(game);
+    }
+
+    // Crash buttons
+    if (game.constructor.name === 'CrashGame') {
+        return createCrashButtons(game);
+    }
+
+    // Bingo buttons
+    if (game.constructor.name === 'BingoGame') {
+        return createBingoButtons(game);
+    }
+
+    // Tournament buttons
+    if (game.constructor.name === 'PokerTournament') {
+        return createTournamentButtons(game, userId);
+    }
+
+    // Hi-Lo buttons
+    if (game.constructor.name === 'HiLoGame') {
+        return createHiLoButtons(game);
     }
 
     // Handle Roulette buttons
@@ -31,7 +71,7 @@ function createButtons(game, userId, client, options = {}) {
         }
         return null; // No buttons during game play
     }
-    
+
     return null;
 }
 
@@ -318,6 +358,245 @@ function createLoadingButton(message = 'Loading...') {
         );
 }
 
+function createCrapsButtons(game) {
+    if (game.gameComplete) {
+        return new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('craps_play_again')
+                    .setLabel('Play Again')
+                    .setStyle(ButtonStyle.Primary)
+                    .setEmoji('🔄')
+            );
+    } else {
+        return new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('craps_roll')
+                    .setLabel('Roll Dice')
+                    .setStyle(ButtonStyle.Success)
+                    .setEmoji('🎲')
+            );
+    }
+}
+
+function createWarButtons(game) {
+    if (game.gamePhase === 'tied') {
+        // Player can choose to surrender or go to war
+        return new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('war_surrender')
+                    .setLabel('Surrender (Get Half Back)')
+                    .setStyle(ButtonStyle.Danger)
+                    .setEmoji('🏳️'),
+                new ButtonBuilder()
+                    .setCustomId('war_go_to_war')
+                    .setLabel('Go to War!')
+                    .setStyle(ButtonStyle.Primary)
+                    .setEmoji('⚔️')
+            );
+    } else if (game.isComplete()) {
+        // Game over - show play again button
+        return new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('war_play_again')
+                    .setLabel('Play Again')
+                    .setStyle(ButtonStyle.Primary)
+                    .setEmoji('🔄')
+            );
+    }
+
+    return null;
+}
+
+function createCoinFlipButtons(game) {
+    if (game.gameComplete) {
+        return new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`coinflip_play_again_${game.bet}`)
+                    .setLabel('Flip Again')
+                    .setStyle(ButtonStyle.Primary)
+                    .setEmoji('🔄')
+            );
+    }
+    return null;
+}
+
+function createHorseRaceButtons(game) {
+    if (game.gameComplete) {
+        return new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`race_again_${game.bet}`)
+                    .setLabel('Race Again')
+                    .setStyle(ButtonStyle.Primary)
+                    .setEmoji('🏇')
+            );
+    }
+    return null;
+}
+
+function createCrashButtons(game) {
+    if (!game.gameComplete) {
+        // Show "Continue" button during the game
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('crash_continue')
+                    .setLabel('🚀 Continue')
+                    .setStyle(ButtonStyle.Success)
+            );
+        return row;
+    } else {
+        // Show "Play Again" button when game is complete
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('crash_play_again')
+                    .setLabel('🚀 Play Again')
+                    .setStyle(ButtonStyle.Primary)
+            );
+        return row;
+    }
+}
+
+function createBingoButtons(game) {
+    if (game.gameComplete) {
+        // No buttons when game is complete
+        return null;
+    }
+
+    if (game.gameStarted) {
+        // Show "Call Number" button during game
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('bingo_call')
+                    .setLabel('🎱 Call Number')
+                    .setStyle(ButtonStyle.Success)
+            );
+        return row;
+    }
+
+    // Lobby phase handled by command, not here
+    return null;
+}
+
+function createTournamentButtons(tournament, userId) {
+    if (tournament.tournamentComplete) {
+        // No buttons when tournament is complete
+        return null;
+    }
+
+    if (!tournament.tournamentStarted) {
+        // Lobby phase handled by command
+        return null;
+    }
+
+    if (tournament.phase === 'handComplete') {
+        // Show "Next Hand" button
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('tournament_next_hand')
+                    .setLabel('Next Hand')
+                    .setStyle(ButtonStyle.Success)
+                    .setEmoji('▶️')
+            );
+        return row;
+    }
+
+    // Game in progress - show action buttons
+    const currentPlayer = tournament.getCurrentPlayer();
+    const isCurrentPlayer = currentPlayer === userId;
+    const player = tournament.players.get(userId);
+
+    if (!player || player.eliminated || player.folded) {
+        // Player is out or folded, no buttons
+        return null;
+    }
+
+    const row = new ActionRowBuilder();
+
+    // Fold button (always available)
+    row.addComponents(
+        new ButtonBuilder()
+            .setCustomId('tournament_fold')
+            .setLabel('Fold')
+            .setStyle(ButtonStyle.Danger)
+            .setDisabled(!isCurrentPlayer)
+    );
+
+    // Check/Call button
+    const callAmount = tournament.currentBet - player.bet;
+    if (callAmount === 0) {
+        row.addComponents(
+            new ButtonBuilder()
+                .setCustomId('tournament_check')
+                .setLabel('Check')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(!isCurrentPlayer)
+        );
+    } else {
+        row.addComponents(
+            new ButtonBuilder()
+                .setCustomId('tournament_call')
+                .setLabel(`Call ${callAmount}`)
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(!isCurrentPlayer)
+        );
+    }
+
+    // Raise button
+    row.addComponents(
+        new ButtonBuilder()
+            .setCustomId('tournament_raise')
+            .setLabel('Raise')
+            .setStyle(ButtonStyle.Success)
+            .setDisabled(!isCurrentPlayer || player.chips === 0)
+    );
+
+    return row;
+}
+
+function createHiLoButtons(game) {
+    if (game.gameComplete) {
+        // Show "Play Again" button
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('hilo_play_again')
+                    .setLabel('Play Again')
+                    .setStyle(ButtonStyle.Primary)
+                    .setEmoji('🎴')
+            );
+        return row;
+    }
+
+    // Show Higher, Lower, Cash Out buttons
+    const row = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('hilo_higher')
+                .setLabel('⬆️ Higher')
+                .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+                .setCustomId('hilo_lower')
+                .setLabel('⬇️ Lower')
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId('hilo_cashout')
+                .setLabel(`💰 Cash Out (${game.currentWinnings.toLocaleString()})`)
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(game.streak === 0)
+        );
+
+    return row;
+}
+
 module.exports = {
     createButtons,
     createPokerButtons,
@@ -326,6 +605,14 @@ module.exports = {
     createBettingPhaseButtons,
     createGameOverButtons,
     createMainGameButtons,
+    createCrapsButtons,
+    createWarButtons,
+    createCoinFlipButtons,
+    createHorseRaceButtons,
+    createCrashButtons,
+    createBingoButtons,
+    createTournamentButtons,
+    createHiLoButtons,
     createJoinTableButton,
     createLoadingButton
 };

@@ -5,7 +5,19 @@ const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedB
 const SlotsGame = require('../gameLogic/slotsGame');
 const ThreeCardPokerGame = require('../gameLogic/threeCardPokerGame');
 const BlackjackGame = require('../gameLogic/blackjackGame');
+<<<<<<< Updated upstream
 const RouletteGame = require('../gameLogic/rouletteGame')
+=======
+const RouletteGame = require('../gameLogic/rouletteGame');
+const CrapsGame = require('../gameLogic/crapsGame');
+const WarGame = require('../gameLogic/warGame');
+const CoinFlipGame = require('../gameLogic/coinFlipGame');
+const HorseRacingGame = require('../gameLogic/horseRacingGame');
+const CrashGame = require('../gameLogic/crashGame');
+const BingoGame = require('../gameLogic/bingoGame');
+const PokerTournament = require('../gameLogic/pokerTournament');
+const HiLoGame = require('../gameLogic/hiLoGame');
+>>>>>>> Stashed changes
 const { startNewRoundFromBetting } = require('./modalHandler');
 
 async function handleButtonInteraction(interaction, activeGames, client, dealCardsWithDelay, rouletteSessions) {
@@ -26,6 +38,54 @@ async function handleButtonInteraction(interaction, activeGames, client, dealCar
     // Handle slots buttons
     if (customId === 'spin_again') {
         await handleSlotsSpinAgain(interaction, user.id, client);
+        return;
+    }
+
+    // Handle craps buttons
+    if (customId.startsWith('craps_')) {
+        await handleCrapsButtons(interaction, activeGames, user.id, client);
+        return;
+    }
+
+    // Handle war buttons
+    if (customId.startsWith('war_')) {
+        await handleWarButtons(interaction, activeGames, user.id, client);
+        return;
+    }
+
+    // Handle coin flip buttons
+    if (customId.startsWith('coinflip_')) {
+        await handleCoinFlipButtons(interaction, activeGames, user.id, client);
+        return;
+    }
+
+    // Handle horse racing buttons
+    if (customId.startsWith('race_')) {
+        await handleHorseRaceButtons(interaction, activeGames, user.id, client);
+        return;
+    }
+
+    // Handle crash buttons
+    if (customId.startsWith('crash_')) {
+        await handleCrashButtons(interaction, activeGames, user.id, client);
+        return;
+    }
+
+    // Handle bingo buttons
+    if (customId.startsWith('bingo_')) {
+        await handleBingoButtons(interaction, activeGames, user.id, client);
+        return;
+    }
+
+    // Handle tournament buttons
+    if (customId.startsWith('tournament_')) {
+        await handleTournamentButtons(interaction, activeGames, user.id, client);
+        return;
+    }
+
+    // Handle hi-lo buttons
+    if (customId.startsWith('hilo_')) {
+        await handleHiLoButtons(interaction, activeGames, user.id, client);
         return;
     }
 
@@ -55,6 +115,11 @@ async function handlePokerButtons(interaction, activeGames, customId, userId, cl
     const game = activeGames.get(`poker_${userId}`);
     if (!game) {
         return interaction.reply({ content: '❌ No active poker game found!', ephemeral: true });
+    }
+
+    // Verify this is the correct user's game
+    if (game.userId !== userId) {
+        return interaction.reply({ content: '❌ This is not your game!', ephemeral: true });
     }
 
     if (customId === 'poker_play') {
@@ -151,6 +216,14 @@ async function handlePokerButtons(interaction, activeGames, customId, userId, cl
 async function handleRouletteButtons(interaction, activeGames, userId, client, rouletteSessions) {
     const { ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder } = require('discord.js');
     const messageId = interaction.message.id;
+
+    // Check if the message was created by this user
+    if (interaction.message.interaction && interaction.message.interaction.user.id !== userId) {
+        return interaction.reply({
+            content: '❌ This is not your game!',
+            ephemeral: true
+        });
+    }
 
     // Handle chip selection
     if (interaction.customId.startsWith('roulette_chip_')) {
@@ -488,10 +561,20 @@ async function updateBettingInterface(interaction, session) {
 }
 
 async function handleSlotsSpinAgain(interaction, userId, client) {
+    // Check if the message was created by this user (interaction.user must match original command user)
+    if (interaction.message.interaction && interaction.message.interaction.user.id !== userId) {
+        return interaction.reply({
+            content: '❌ This is not your game!',
+            ephemeral: true
+        });
+    }
+
     let bet = 10; // Default fallback bet
 
     try {
-        const description = interaction.message.embeds[0].description;
+        const embed = interaction.message.embeds[0];
+        const description = embed.description;
+
         const betMatch = description.match(/Bet: (\d+)/);
         if (betMatch && betMatch[1]) {
             bet = Number(betMatch[1]);
@@ -1002,4 +1085,1039 @@ async function animateDealerDrawing(game, interaction, userId, client) {
     }
 }
 
-module.exports = { handleButtonInteraction, handleBlackjackButtons, handleTableButtons, updateBettingDisplay, startTurnTimer, handleRouletteButtons, animateDealerDrawing };
+async function handleCrapsButtons(interaction, activeGames, userId, client) {
+    const game = activeGames.get(`craps_${userId}`);
+    if (!game) {
+        return interaction.reply({ content: '❌ No active craps game found!', ephemeral: true });
+    }
+
+    // Verify this is the correct user's game
+    if (game.userId !== userId) {
+        return interaction.reply({ content: '❌ This is not your game!', ephemeral: true });
+    }
+
+    if (interaction.customId === 'craps_roll') {
+        // Roll the dice
+        game.play();
+
+        const winnings = game.totalWinnings;
+        const currentMoney = await getUserMoney(userId);
+        await setUserMoney(userId, currentMoney + winnings);
+
+        const totalBet = game.getTotalBet();
+        const gameResult = winnings > totalBet ? 'win' : (winnings === totalBet ? 'push' : 'lose');
+
+        if (game.gameComplete) {
+            await recordGameResult(userId, 'craps', totalBet, winnings - totalBet, gameResult, {
+                point: game.point,
+                rolls: game.rollHistory.length
+            });
+        }
+
+        await interaction.deferUpdate();
+        const embed = await createGameEmbed(game, userId, client);
+        const buttons = createButtons(game, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+    } else if (interaction.customId === 'craps_play_again') {
+        const totalBet = game.getTotalBet();
+        const userMoney = await getUserMoney(userId);
+
+        if (userMoney < totalBet) {
+            return interaction.reply({
+                content: `❌ You don't have enough money for the same bets! You have ${userMoney.toLocaleString()}, need ${totalBet.toLocaleString()}.`,
+                ephemeral: true
+            });
+        }
+
+        // Deduct money and create new game
+        await setUserMoney(userId, userMoney - totalBet);
+        const newGame = new CrapsGame(userId, game.passLineBet, game.dontPassBet, game.fieldBet, game.comeBet);
+        activeGames.set(`craps_${userId}`, newGame);
+
+        await interaction.deferUpdate();
+        const embed = await createGameEmbed(newGame, userId, client);
+        const buttons = createButtons(newGame, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+    }
+}
+
+async function handleWarButtons(interaction, activeGames, userId, client) {
+    const game = activeGames.get(`war_${userId}`);
+    if (!game) {
+        return interaction.reply({ content: '❌ No active war game found!', ephemeral: true });
+    }
+
+    // Verify this is the correct user's game
+    if (game.userId !== userId) {
+        return interaction.reply({ content: '❌ This is not your game!', ephemeral: true });
+    }
+
+    if (interaction.customId === 'war_surrender') {
+        // Surrender - get half bet back
+        game.surrender();
+
+        const currentMoney = await getUserMoney(userId);
+        await setUserMoney(userId, currentMoney + game.winnings);
+
+        await recordGameResult(userId, 'war', game.bet, game.getProfit(), 'surrender');
+
+        await interaction.deferUpdate();
+        const embed = await createGameEmbed(game, userId, client);
+        const buttons = createButtons(game, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+    } else if (interaction.customId === 'war_go_to_war') {
+        // Check if user has enough for war bet
+        const currentMoney = await getUserMoney(userId);
+        if (currentMoney < game.bet) {
+            return interaction.reply({
+                content: `❌ You don't have enough money to go to war! You need ${game.bet.toLocaleString()}, you have ${currentMoney.toLocaleString()}.`,
+                ephemeral: true
+            });
+        }
+
+        // Deduct war bet
+        await setUserMoney(userId, currentMoney - game.bet);
+
+        // Go to war
+        game.goToWar();
+
+        // Award winnings if any
+        if (game.winnings > 0) {
+            const newMoney = await getUserMoney(userId);
+            await setUserMoney(userId, newMoney + game.winnings);
+        }
+
+        const gameResult = game.result.includes('win') ? 'win' : 'lose';
+        await recordGameResult(userId, 'war', game.getTotalBet(), game.getProfit(), gameResult);
+
+        await interaction.deferUpdate();
+        const embed = await createGameEmbed(game, userId, client);
+        const buttons = createButtons(game, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+    } else if (interaction.customId === 'war_play_again') {
+        const bet = game.bet;
+        const userMoney = await getUserMoney(userId);
+
+        if (userMoney < bet) {
+            return interaction.reply({
+                content: `❌ You don't have enough money for another game! You have ${userMoney.toLocaleString()}, need ${bet.toLocaleString()}.`,
+                ephemeral: true
+            });
+        }
+
+        // Deduct bet and create new game
+        await setUserMoney(userId, userMoney - bet);
+        const newGame = new WarGame(userId, bet);
+        activeGames.set(`war_${userId}`, newGame);
+
+        await interaction.deferUpdate();
+        const embed = await createGameEmbed(newGame, userId, client);
+        const buttons = createButtons(newGame, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+    }
+}
+
+async function handleCoinFlipButtons(interaction, activeGames, userId, client) {
+    // Check if this is the user's game
+    if (interaction.message.interaction && interaction.message.interaction.user.id !== userId) {
+        return interaction.reply({
+            content: '❌ This is not your game!',
+            ephemeral: true
+        });
+    }
+
+    // Handle play again
+    if (interaction.customId.startsWith('coinflip_play_again_')) {
+        const game = activeGames.get(`coinflip_${userId}`);
+        if (!game) {
+            return interaction.reply({ content: '❌ No previous coin flip found!', ephemeral: true });
+        }
+
+        const bet = game.bet;
+        const userMoney = await getUserMoney(userId);
+
+        if (userMoney < bet) {
+            return interaction.reply({
+                content: `❌ You don't have enough money for another flip! You have ${userMoney.toLocaleString()}, need ${bet.toLocaleString()}.`,
+                ephemeral: true
+            });
+        }
+
+        // Deduct bet and create new game with same choice
+        await setUserMoney(userId, userMoney - bet);
+        const newGame = new CoinFlipGame(userId, bet, game.choice);
+
+        // Award winnings
+        if (newGame.winnings > 0) {
+            const currentMoney = await getUserMoney(userId);
+            await setUserMoney(userId, currentMoney + newGame.winnings);
+        }
+
+        // Record result
+        const gameResult = newGame.won ? 'win' : 'lose';
+        await recordGameResult(userId, 'coinflip', bet, newGame.winnings - bet, gameResult, {
+            choice: newGame.choice,
+            result: newGame.result
+        });
+
+        // Update stored game
+        activeGames.set(`coinflip_${userId}`, newGame);
+
+        await interaction.deferUpdate();
+        const embed = await createGameEmbed(newGame, userId, client);
+        const buttons = createButtons(newGame, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+        return;
+    }
+
+    // Parse button - format: coinflip_{choice}_{bet}
+    const parts = interaction.customId.split('_');
+    const choice = parts[1]; // 'heads' or 'tails'
+    const bet = parseInt(parts[2]);
+
+    const userMoney = await getUserMoney(userId);
+    if (userMoney < bet) {
+        return interaction.reply({
+            content: `❌ You don't have enough money! You have ${userMoney.toLocaleString()}.`,
+            ephemeral: true
+        });
+    }
+
+    // Deduct bet
+    await setUserMoney(userId, userMoney - bet);
+
+    // Play game
+    const game = new CoinFlipGame(userId, bet, choice);
+
+    // Award winnings
+    if (game.winnings > 0) {
+        const currentMoney = await getUserMoney(userId);
+        await setUserMoney(userId, currentMoney + game.winnings);
+    }
+
+    // Record result
+    const gameResult = game.won ? 'win' : 'lose';
+    await recordGameResult(userId, 'coinflip', bet, game.winnings - bet, gameResult, {
+        choice: game.choice,
+        result: game.result
+    });
+
+    // Store game for play again
+    activeGames.set(`coinflip_${userId}`, game);
+
+    // Create result embed
+    await interaction.deferUpdate();
+    const embed = await createGameEmbed(game, userId, client);
+    const buttons = createButtons(game, userId, client);
+
+    await interaction.editReply({
+        embeds: [embed],
+        components: buttons ? [buttons] : []
+    });
+}
+
+async function handleHorseRaceButtons(interaction, activeGames, userId, client) {
+    // Check if this is the user's game
+    if (interaction.message.interaction && interaction.message.interaction.user.id !== userId) {
+        return interaction.reply({
+            content: '❌ This is not your game!',
+            ephemeral: true
+        });
+    }
+
+    // Handle race again
+    if (interaction.customId.startsWith('race_again_')) {
+        const game = activeGames.get(`race_${userId}`);
+        if (!game) {
+            return interaction.reply({ content: '❌ No previous race found!', ephemeral: true });
+        }
+
+        const bet = game.bet;
+        const horseNumber = game.betOnHorse;
+        const userMoney = await getUserMoney(userId);
+
+        if (userMoney < bet) {
+            return interaction.reply({
+                content: `❌ You don't have enough money for another race! You have ${userMoney.toLocaleString()}, need ${bet.toLocaleString()}.`,
+                ephemeral: true
+            });
+        }
+
+        // Deduct bet and create new game
+        await setUserMoney(userId, userMoney - bet);
+        const newGame = new HorseRacingGame(userId, bet, horseNumber);
+        newGame.race();
+
+        // Award winnings
+        if (newGame.winnings > 0) {
+            const currentMoney = await getUserMoney(userId);
+            await setUserMoney(userId, currentMoney + newGame.winnings);
+        }
+
+        // Record result
+        const gameResult = newGame.getProfit() > 0 ? 'win' : 'lose';
+        await recordGameResult(userId, 'horserace', bet, newGame.getProfit(), gameResult, {
+            horseNumber: newGame.betOnHorse,
+            winnerNumber: newGame.winner.number,
+            horseName: newGame.getBetHorse().name,
+            winnerName: newGame.winner.name
+        });
+
+        // Update stored game
+        activeGames.set(`race_${userId}`, newGame);
+
+        // Show race animation, then final result
+        await interaction.deferUpdate();
+
+        // Show race frames
+        for (let i = 0; i < newGame.racePositions.length; i++) {
+            const embed = await createGameEmbed(newGame, userId, client, { frame: i });
+            await interaction.editReply({
+                embeds: [embed],
+                components: []
+            });
+            await new Promise(resolve => setTimeout(resolve, 800));
+        }
+
+        // Show final result with buttons
+        const finalEmbed = await createGameEmbed(newGame, userId, client);
+        const buttons = createButtons(newGame, userId, client);
+
+        await interaction.editReply({
+            embeds: [finalEmbed],
+            components: buttons ? [buttons] : []
+        });
+        return;
+    }
+
+    // Parse button - format: race_horse_{number}_{bet}
+    const parts = interaction.customId.split('_');
+    const horseNumber = parseInt(parts[2]);
+    const bet = parseInt(parts[3]);
+
+    const userMoney = await getUserMoney(userId);
+    if (userMoney < bet) {
+        return interaction.reply({
+            content: `❌ You don't have enough money! You have ${userMoney.toLocaleString()}.`,
+            ephemeral: true
+        });
+    }
+
+    // Deduct bet
+    await setUserMoney(userId, userMoney - bet);
+
+    // Create and run race
+    const game = new HorseRacingGame(userId, bet, horseNumber);
+    game.race();
+
+    // Award winnings
+    if (game.winnings > 0) {
+        const currentMoney = await getUserMoney(userId);
+        await setUserMoney(userId, currentMoney + game.winnings);
+    }
+
+    // Record result
+    const gameResult = game.getProfit() > 0 ? 'win' : 'lose';
+    await recordGameResult(userId, 'horserace', bet, game.getProfit(), gameResult, {
+        horseNumber: game.betOnHorse,
+        winnerNumber: game.winner.number,
+        horseName: game.getBetHorse().name,
+        winnerName: game.winner.name
+    });
+
+    // Store game for race again
+    activeGames.set(`race_${userId}`, game);
+
+    // Show race animation
+    await interaction.deferUpdate();
+
+    // Show race frames
+    for (let i = 0; i < game.racePositions.length; i++) {
+        const embed = await createGameEmbed(game, userId, client, { frame: i });
+        await interaction.editReply({
+            embeds: [embed],
+            components: []
+        });
+        await new Promise(resolve => setTimeout(resolve, 800));
+    }
+
+    // Show final result with buttons
+    const finalEmbed = await createGameEmbed(game, userId, client);
+    const buttons = createButtons(game, userId, client);
+
+    await interaction.editReply({
+        embeds: [finalEmbed],
+        components: buttons ? [buttons] : []
+    });
+}
+
+async function handleCrashButtons(interaction, activeGames, userId, client) {
+    const game = activeGames.get(`crash_${userId}`);
+    if (!game) {
+        return interaction.reply({ content: '❌ No active crash game found!', ephemeral: true });
+    }
+
+    // Verify this is the correct user's game
+    if (game.userId !== userId) {
+        return interaction.reply({ content: '❌ This is not your game!', ephemeral: true });
+    }
+
+    if (interaction.customId === 'crash_continue') {
+        if (!game.canContinue()) {
+            return interaction.reply({ content: '❌ Game is already complete!', ephemeral: true });
+        }
+
+        // Step the game forward
+        game.step();
+
+        // Update the display
+        await interaction.deferUpdate();
+        const embed = await createGameEmbed(game, userId, client);
+        const buttons = createButtons(game, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+
+        // If game just completed, award winnings and record result
+        if (game.gameComplete) {
+            const currentMoney = await getUserMoney(userId);
+            await setUserMoney(userId, currentMoney + game.totalWinnings);
+
+            const gameResult = game.result === 'win' ? 'win' : 'lose';
+            await recordGameResult(userId, 'crash', game.betAmount, game.totalWinnings - game.betAmount, gameResult, {
+                crashMultiplier: game.crashMultiplier,
+                targetMultiplier: game.targetMultiplier
+            });
+        }
+    } else if (interaction.customId === 'crash_play_again') {
+        const bet = game.betAmount;
+        const target = game.targetMultiplier;
+        const userMoney = await getUserMoney(userId);
+
+        if (userMoney < bet) {
+            return interaction.reply({
+                content: `❌ You don't have enough money for another game! You have ${userMoney.toLocaleString()}, need ${bet.toLocaleString()}.`,
+                ephemeral: true
+            });
+        }
+
+        // Deduct bet and create new game
+        await setUserMoney(userId, userMoney - bet);
+        const newGame = new CrashGame(userId, bet, target);
+        activeGames.set(`crash_${userId}`, newGame);
+
+        await interaction.deferUpdate();
+        const embed = await createGameEmbed(newGame, userId, client);
+        const buttons = createButtons(newGame, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+    }
+}
+
+async function handleBingoButtons(interaction, activeGames, userId, client) {
+    const channelId = interaction.channelId;
+    const game = activeGames.get(`bingo_${channelId}`);
+
+    if (!game) {
+        return interaction.reply({ content: '❌ No active bingo game found in this channel!', ephemeral: true });
+    }
+
+    if (interaction.customId === 'bingo_join') {
+        // Check if user has enough money
+        const userMoney = await getUserMoney(userId);
+        if (userMoney < game.entryFee) {
+            return interaction.reply({
+                content: `❌ You don't have enough money! Entry fee is ${game.entryFee.toLocaleString()}, you have ${userMoney.toLocaleString()}.`,
+                ephemeral: true
+            });
+        }
+
+        // Add player
+        const result = game.addPlayer(userId);
+        if (!result.success) {
+            return interaction.reply({ content: `❌ ${result.message}`, ephemeral: true });
+        }
+
+        // Deduct entry fee
+        await setUserMoney(userId, userMoney - game.entryFee);
+
+        // Send player their card via DM
+        try {
+            const user = await client.users.fetch(userId);
+            const cardDisplay = game.getCardDisplay(userId);
+            const dmEmbed = new EmbedBuilder()
+                .setTitle('🎱 Your Bingo Card')
+                .setDescription(`Here's your bingo card for the game!\n\n${cardDisplay}\n\n[X] = Marked\nXX = Free Space`)
+                .setColor('#FFD700');
+
+            await user.send({ embeds: [dmEmbed] });
+        } catch (error) {
+            console.log(`Could not DM bingo card to ${userId}`);
+        }
+
+        await interaction.reply({
+            content: `✅ You joined the game! Check your DMs for your bingo card.`,
+            ephemeral: true
+        });
+
+        // Update lobby display
+        await updateBingoLobby(game, interaction, client);
+
+    } else if (interaction.customId === 'bingo_leave') {
+        const result = game.removePlayer(userId);
+        if (!result.success) {
+            return interaction.reply({ content: `❌ ${result.message}`, ephemeral: true });
+        }
+
+        // Refund entry fee
+        const userMoney = await getUserMoney(userId);
+        await setUserMoney(userId, userMoney + game.entryFee);
+
+        await interaction.reply({
+            content: `✅ You left the game. ${game.entryFee.toLocaleString()} has been refunded.`,
+            ephemeral: true
+        });
+
+        // Update lobby display
+        await updateBingoLobby(game, interaction, client);
+
+    } else if (interaction.customId === 'bingo_start') {
+        const result = game.startGame();
+        if (!result.success) {
+            return interaction.reply({ content: `❌ ${result.message}`, ephemeral: true });
+        }
+
+        await interaction.deferUpdate();
+
+        // Start the game
+        const embed = await createGameEmbed(game, userId, client);
+        const buttons = createButtons(game, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+
+    } else if (interaction.customId === 'bingo_call') {
+        // Only allow calling if game has started
+        if (!game.gameStarted) {
+            return interaction.reply({ content: '❌ Game has not started yet!', ephemeral: true });
+        }
+
+        const result = game.callNumber();
+        if (!result.success) {
+            return interaction.reply({ content: `❌ ${result.message}`, ephemeral: true });
+        }
+
+        await interaction.deferUpdate();
+
+        // Update all players' cards via DM
+        for (const [playerId] of game.players) {
+            try {
+                const user = await client.users.fetch(playerId);
+                const cardDisplay = game.getCardDisplay(playerId);
+                const playerData = game.players.get(playerId);
+
+                let cardMessage = `**Last Called:** ${BingoGame.getLetterForNumber(game.currentNumber)}-${game.currentNumber}\n\n`;
+                cardMessage += cardDisplay + '\n\n';
+
+                if (playerData.hasBingo) {
+                    cardMessage += `🎉 **BINGO!** You got ${playerData.bingoType}!\n`;
+                }
+
+                const dmEmbed = new EmbedBuilder()
+                    .setTitle('🎱 Your Bingo Card')
+                    .setDescription(cardMessage)
+                    .setColor(playerData.hasBingo ? '#00FF00' : '#FFD700');
+
+                await user.send({ embeds: [dmEmbed] });
+            } catch (error) {
+                console.log(`Could not DM update to ${playerId}`);
+            }
+        }
+
+        // Update main display
+        const embed = await createGameEmbed(game, userId, client);
+        const buttons = createButtons(game, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+
+        // If game is complete, award prizes
+        if (game.gameComplete) {
+            const prizes = game.calculatePrizes();
+            for (const prize of prizes) {
+                const currentMoney = await getUserMoney(prize.userId);
+                await setUserMoney(prize.userId, currentMoney + prize.prize);
+
+                // Record game result
+                await recordGameResult(prize.userId, 'bingo', game.entryFee, prize.prize - game.entryFee, 'win', {
+                    place: prize.place,
+                    prizePool: game.prizePool
+                });
+            }
+
+            // Record losses for non-winners
+            for (const [playerId] of game.players) {
+                const isWinner = prizes.some(p => p.userId === playerId);
+                if (!isWinner) {
+                    await recordGameResult(playerId, 'bingo', game.entryFee, -game.entryFee, 'lose', {
+                        prizePool: game.prizePool
+                    });
+                }
+            }
+        }
+    }
+}
+
+async function updateBingoLobby(game, interaction, client) {
+    const playerList = [];
+    for (const [playerId] of game.players) {
+        try {
+            const user = await client.users.fetch(playerId);
+            playerList.push(user.username);
+        } catch (error) {
+            playerList.push(`User ${playerId}`);
+        }
+    }
+
+    const embed = new EmbedBuilder()
+        .setTitle('🎱 Bingo Hall - Waiting for Players')
+        .setColor('#FFD700')
+        .setDescription(
+            `Welcome to the Bingo Hall!\n\n` +
+            `💰 **Entry Fee:** ${game.entryFee.toLocaleString()}\n` +
+            `👥 **Players:** ${game.players.size}/${game.maxPlayers}\n` +
+            `💵 **Prize Pool:** ${game.prizePool.toLocaleString()}\n\n` +
+            `**Prizes:**\n` +
+            `🥇 1st Bingo: 50% of pool (${Math.floor(game.prizePool * 0.50).toLocaleString()})\n` +
+            `🥈 2nd Bingo: 30% of pool (${Math.floor(game.prizePool * 0.30).toLocaleString()})\n` +
+            `🥉 3rd Bingo: 20% of pool (${Math.floor(game.prizePool * 0.20).toLocaleString()})\n\n` +
+            `**Players:** ${playerList.length > 0 ? playerList.join(', ') : 'None yet'}\n\n` +
+            `Click **Join Game** to enter!`
+        )
+        .setTimestamp();
+
+    const row = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('bingo_join')
+                .setLabel('Join Game')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('🎫'),
+            new ButtonBuilder()
+                .setCustomId('bingo_leave')
+                .setLabel('Leave Game')
+                .setStyle(ButtonStyle.Danger)
+                .setEmoji('🚪'),
+            new ButtonBuilder()
+                .setCustomId('bingo_start')
+                .setLabel('Start Game')
+                .setStyle(ButtonStyle.Primary)
+                .setEmoji('▶️')
+                .setDisabled(game.players.size < 2)
+        );
+
+    await interaction.message.edit({
+        embeds: [embed],
+        components: [row]
+    });
+}
+
+async function handleTournamentButtons(interaction, activeGames, userId, client) {
+    const channelId = interaction.channelId;
+    const tournament = activeGames.get(`tournament_${channelId}`);
+
+    if (!tournament) {
+        return interaction.reply({ content: '❌ No active tournament found in this channel!', ephemeral: true });
+    }
+
+    if (interaction.customId === 'tournament_register') {
+        // Check if user has enough money
+        const userMoney = await getUserMoney(userId);
+        if (userMoney < tournament.buyIn) {
+            return interaction.reply({
+                content: `❌ You don't have enough money! Buy-in is ${tournament.buyIn.toLocaleString()}, you have ${userMoney.toLocaleString()}.`,
+                ephemeral: true
+            });
+        }
+
+        // Register player
+        const result = tournament.addPlayer(userId);
+        if (!result.success) {
+            return interaction.reply({ content: `❌ ${result.message}`, ephemeral: true });
+        }
+
+        // Deduct buy-in
+        await setUserMoney(userId, userMoney - tournament.buyIn);
+
+        await interaction.reply({
+            content: `✅ You registered for the tournament! Starting chips: 1,000`,
+            ephemeral: true
+        });
+
+        // Update lobby display
+        await updateTournamentLobby(tournament, interaction, client);
+
+    } else if (interaction.customId === 'tournament_unregister') {
+        const result = tournament.removePlayer(userId);
+        if (!result.success) {
+            return interaction.reply({ content: `❌ ${result.message}`, ephemeral: true });
+        }
+
+        // Refund buy-in
+        const userMoney = await getUserMoney(userId);
+        await setUserMoney(userId, userMoney + tournament.buyIn);
+
+        await interaction.reply({
+            content: `✅ You unregistered. ${tournament.buyIn.toLocaleString()} has been refunded.`,
+            ephemeral: true
+        });
+
+        // Update lobby display
+        await updateTournamentLobby(tournament, interaction, client);
+
+    } else if (interaction.customId === 'tournament_start') {
+        const result = tournament.startTournament();
+        if (!result.success) {
+            return interaction.reply({ content: `❌ ${result.message}`, ephemeral: true });
+        }
+
+        await interaction.deferUpdate();
+
+        // Start the tournament
+        const embed = await createGameEmbed(tournament, userId, client);
+        const buttons = createButtons(tournament, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+
+    } else if (interaction.customId === 'tournament_fold') {
+        if (tournament.getCurrentPlayer() !== userId) {
+            return interaction.reply({ content: '❌ It\'s not your turn!', ephemeral: true });
+        }
+
+        tournament.fold(userId);
+
+        await interaction.deferUpdate();
+        const embed = await createGameEmbed(tournament, userId, client);
+        const buttons = createButtons(tournament, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+
+    } else if (interaction.customId === 'tournament_check') {
+        if (tournament.getCurrentPlayer() !== userId) {
+            return interaction.reply({ content: '❌ It\'s not your turn!', ephemeral: true });
+        }
+
+        const success = tournament.check(userId);
+        if (!success) {
+            return interaction.reply({ content: '❌ You cannot check! You must call or fold.', ephemeral: true });
+        }
+
+        await interaction.deferUpdate();
+        const embed = await createGameEmbed(tournament, userId, client);
+        const buttons = createButtons(tournament, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+
+    } else if (interaction.customId === 'tournament_call') {
+        if (tournament.getCurrentPlayer() !== userId) {
+            return interaction.reply({ content: '❌ It\'s not your turn!', ephemeral: true });
+        }
+
+        tournament.call(userId);
+
+        await interaction.deferUpdate();
+        const embed = await createGameEmbed(tournament, userId, client);
+        const buttons = createButtons(tournament, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+
+        // Check if hand/tournament is complete
+        if (tournament.phase === 'handComplete') {
+            // Wait 3 seconds then start next hand
+            setTimeout(async () => {
+                tournament.startNewHand();
+                const newEmbed = await createGameEmbed(tournament, userId, client);
+                const newButtons = createButtons(tournament, userId, client);
+
+                await interaction.message.edit({
+                    embeds: [newEmbed],
+                    components: newButtons ? [newButtons] : []
+                });
+            }, 3000);
+        } else if (tournament.tournamentComplete) {
+            // Award prizes
+            const prizes = tournament.winners;
+            for (const prize of prizes) {
+                const currentMoney = await getUserMoney(prize.userId);
+                await setUserMoney(prize.userId, currentMoney + prize.prize);
+
+                await recordGameResult(prize.userId, 'poker_tournament', tournament.buyIn, prize.prize - tournament.buyIn, 'win', {
+                    place: prize.place,
+                    prizePool: tournament.prizePool
+                });
+            }
+
+            // Record losses for non-winners
+            for (const [playerId] of tournament.players) {
+                const isWinner = prizes.some(p => p.userId === playerId);
+                if (!isWinner) {
+                    await recordGameResult(playerId, 'poker_tournament', tournament.buyIn, -tournament.buyIn, 'lose', {
+                        prizePool: tournament.prizePool
+                    });
+                }
+            }
+        }
+
+    } else if (interaction.customId === 'tournament_raise') {
+        if (tournament.getCurrentPlayer() !== userId) {
+            return interaction.reply({ content: '❌ It\'s not your turn!', ephemeral: true });
+        }
+
+        // Show modal for raise amount
+        const modal = new ModalBuilder()
+            .setCustomId('tournament_raise_amount')
+            .setTitle('Raise Amount')
+            .addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('raise_amount')
+                        .setLabel('How much to raise?')
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true)
+                        .setPlaceholder('50')
+                )
+            );
+
+        await interaction.showModal(modal);
+
+    } else if (interaction.customId === 'tournament_next_hand') {
+        if (tournament.phase !== 'handComplete') {
+            return interaction.reply({ content: '❌ Hand is not complete!', ephemeral: true });
+        }
+
+        tournament.startNewHand();
+
+        await interaction.deferUpdate();
+        const embed = await createGameEmbed(tournament, userId, client);
+        const buttons = createButtons(tournament, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+    }
+}
+
+async function updateTournamentLobby(tournament, interaction, client) {
+    const playerList = [];
+    for (const [playerId] of tournament.players) {
+        try {
+            const user = await client.users.fetch(playerId);
+            playerList.push(user.username);
+        } catch (error) {
+            playerList.push(`User ${playerId}`);
+        }
+    }
+
+    const embed = new EmbedBuilder()
+        .setTitle('♠️ Texas Hold\'em Tournament')
+        .setColor('#FFD700')
+        .setDescription(
+            `🎰 **Tournament Starting Soon!**\n\n` +
+            `💰 **Buy-in:** ${tournament.buyIn.toLocaleString()}\n` +
+            `🏆 **Prize Pool:** ${tournament.prizePool.toLocaleString()}\n` +
+            `👥 **Players:** ${tournament.players.size}/${tournament.maxPlayers}\n` +
+            `💎 **Starting Chips:** 1,000\n\n` +
+            `**Prize Distribution:**\n` +
+            `🥇 1st Place: 50% of pool (${Math.floor(tournament.prizePool * 0.50).toLocaleString()})\n` +
+            `🥈 2nd Place: 30% of pool (${Math.floor(tournament.prizePool * 0.30).toLocaleString()})\n` +
+            `🥉 3rd Place: 20% of pool (${Math.floor(tournament.prizePool * 0.20).toLocaleString()})\n\n` +
+            `**Blinds:** Start at 10/20, increase every 5 hands\n\n` +
+            `**Registered Players:** ${playerList.length > 0 ? playerList.join(', ') : 'None yet'}\n\n` +
+            `Click **Register** to join!`
+        )
+        .setTimestamp();
+
+    const row = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('tournament_register')
+                .setLabel('Register')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('🎫'),
+            new ButtonBuilder()
+                .setCustomId('tournament_unregister')
+                .setLabel('Unregister')
+                .setStyle(ButtonStyle.Danger)
+                .setEmoji('🚪'),
+            new ButtonBuilder()
+                .setCustomId('tournament_start')
+                .setLabel('Start Tournament')
+                .setStyle(ButtonStyle.Primary)
+                .setEmoji('▶️')
+                .setDisabled(tournament.players.size < 2)
+        );
+
+    await interaction.message.edit({
+        embeds: [embed],
+        components: [row]
+    });
+}
+
+async function handleHiLoButtons(interaction, activeGames, userId, client) {
+    const game = activeGames.get(`hilo_${userId}`);
+    if (!game) {
+        return interaction.reply({ content: '❌ No active Hi-Lo game found!', ephemeral: true });
+    }
+
+    // Verify this is the correct user's game
+    if (game.userId !== userId) {
+        return interaction.reply({ content: '❌ This is not your game!', ephemeral: true });
+    }
+
+    if (interaction.customId === 'hilo_higher') {
+        const result = game.guess('higher');
+
+        await interaction.deferUpdate();
+        const embed = await createGameEmbed(game, userId, client);
+        const buttons = createButtons(game, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+
+        // If game just completed, award winnings and record result
+        if (game.gameComplete) {
+            const currentMoney = await getUserMoney(userId);
+            await setUserMoney(userId, currentMoney + game.currentWinnings);
+
+            const gameResult = game.result === 'win' ? 'win' : 'lose';
+            await recordGameResult(userId, 'hilo', game.initialBet, game.currentWinnings - game.initialBet, gameResult, {
+                streak: game.streak,
+                multiplier: game.multiplier
+            });
+        }
+
+    } else if (interaction.customId === 'hilo_lower') {
+        const result = game.guess('lower');
+
+        await interaction.deferUpdate();
+        const embed = await createGameEmbed(game, userId, client);
+        const buttons = createButtons(game, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+
+        // If game just completed, award winnings and record result
+        if (game.gameComplete) {
+            const currentMoney = await getUserMoney(userId);
+            await setUserMoney(userId, currentMoney + game.currentWinnings);
+
+            const gameResult = game.result === 'win' ? 'win' : 'lose';
+            await recordGameResult(userId, 'hilo', game.initialBet, game.currentWinnings - game.initialBet, gameResult, {
+                streak: game.streak,
+                multiplier: game.multiplier
+            });
+        }
+
+    } else if (interaction.customId === 'hilo_cashout') {
+        const result = game.cashOut();
+        if (!result.success) {
+            return interaction.reply({ content: `❌ ${result.message}`, ephemeral: true });
+        }
+
+        // Award winnings
+        const currentMoney = await getUserMoney(userId);
+        await setUserMoney(userId, currentMoney + game.currentWinnings);
+
+        // Record game result
+        await recordGameResult(userId, 'hilo', game.initialBet, game.currentWinnings - game.initialBet, 'win', {
+            streak: game.streak,
+            multiplier: game.multiplier
+        });
+
+        await interaction.deferUpdate();
+        const embed = await createGameEmbed(game, userId, client);
+        const buttons = createButtons(game, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+
+    } else if (interaction.customId === 'hilo_play_again') {
+        const bet = game.initialBet;
+        const userMoney = await getUserMoney(userId);
+
+        if (userMoney < bet) {
+            return interaction.reply({
+                content: `❌ You don't have enough money for another game! You have ${userMoney.toLocaleString()}, need ${bet.toLocaleString()}.`,
+                ephemeral: true
+            });
+        }
+
+        // Deduct bet and create new game
+        await setUserMoney(userId, userMoney - bet);
+        const newGame = new HiLoGame(userId, bet);
+        activeGames.set(`hilo_${userId}`, newGame);
+
+        await interaction.deferUpdate();
+        const embed = await createGameEmbed(newGame, userId, client);
+        const buttons = createButtons(newGame, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
+    }
+}
+
+module.exports = { handleButtonInteraction, handleBlackjackButtons, handleTableButtons, updateBettingDisplay, startTurnTimer, handleRouletteButtons, animateDealerDrawing, handleCrapsButtons, handleWarButtons, handleCoinFlipButtons, handleHorseRaceButtons, handleCrashButtons, handleBingoButtons, handleTournamentButtons, handleHiLoButtons };

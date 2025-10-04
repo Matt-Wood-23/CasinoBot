@@ -13,6 +13,8 @@ const BlackjackGame = require('./gameLogic/blackjackGame');
 const SlotsGame = require('./gameLogic/slotsGame');
 const ThreeCardPokerGame = require('./gameLogic/threeCardPokerGame');
 const RouletteGame = require('./gameLogic/rouletteGame');
+const CrapsGame = require('./gameLogic/crapsGame');
+const WarGame = require('./gameLogic/warGame');
 
 // Import configuration
 const { token, ALLOWED_CHANNEL_IDS, ADMIN_USER_ID } = require('./config');
@@ -197,10 +199,24 @@ client.on('interactionCreate', async interaction => {
 
         if (interaction.isCommand()) {
             const command = client.commands.get(interaction.commandName);
-            
+
             if (!command) {
                 console.error(`No command matching ${interaction.commandName} was found.`);
                 return;
+            }
+
+            // Check loan restrictions for game commands
+            const gameCommands = ['blackjack', 'slots', 'poker', 'roulette', 'craps', 'war', 'coinflip', 'horserace'];
+            if (gameCommands.includes(interaction.commandName)) {
+                const { canPlayGames } = require('./utils/loanSystem');
+                const { canPlay, reason } = canPlayGames(interaction.user.id);
+
+                if (!canPlay) {
+                    return interaction.reply({
+                        content: `⛔ ${reason}\n\nUse \`/work\` to earn money or \`/loan repay\` to pay off your debt!`,
+                        ephemeral: true
+                    });
+                }
             }
 
             try {
@@ -260,5 +276,50 @@ process.on('unhandledRejection', error => {
     console.error('Unhandled promise rejection:', error);
 });
 
+<<<<<<< Updated upstream
+=======
+// Graceful shutdown handling
+async function gracefulShutdown(signal) {
+    console.log(`\n${signal} received. Saving all data before shutdown...`);
+
+    try {
+        await forceSaveUserData();
+        console.log('Data saved successfully. Shutting down...');
+        process.exit(0);
+    } catch (error) {
+        console.error('Error during shutdown:', error);
+        process.exit(1);
+    }
+}
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+// Daily loan checker - runs every 24 hours
+setInterval(async () => {
+    const { checkOverdueLoans } = require('./utils/loanSystem');
+    const overdueUsers = checkOverdueLoans();
+
+    if (overdueUsers.length > 0) {
+        console.log(`Checked loans: ${overdueUsers.length} users with overdue loans`);
+
+        // Try to DM users about overdue loans
+        for (const { userId, daysOverdue, totalOwed } of overdueUsers) {
+            try {
+                const user = await client.users.fetch(userId);
+                await user.send({
+                    content: `⚠️ **LOAN OVERDUE NOTICE**\n\nYour loan is **${daysOverdue} days overdue**!\n` +
+                        `Total owed: **${totalOwed.toLocaleString()}**\n` +
+                        `Additional interest is accruing at 5% per day!\n\n` +
+                        `Use \`/work\` to earn money or risk further penalties!`
+                });
+            } catch (error) {
+                console.log(`Could not DM user ${userId} about overdue loan`);
+            }
+        }
+    }
+}, 24 * 60 * 60 * 1000); // Every 24 hours
+
+>>>>>>> Stashed changes
 // Start the bot
 client.login(token);

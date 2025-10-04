@@ -46,7 +46,17 @@ async function getUserMoney(userId) {
             },
             gameHistory: [],
             giftsReceived: 0,
+<<<<<<< Updated upstream
             giftsSent: 0
+=======
+            giftsSent: 0,
+            totalGiftsReceived: 0,
+            totalGiftsSent: 0,
+            activeLoan: null,
+            loanHistory: [],
+            creditScore: 500,
+            lastWork: 0
+>>>>>>> Stashed changes
         };
     } else {
         // Ensure all fields exist and are numbers to prevent toString() errors
@@ -71,6 +81,15 @@ async function getUserMoney(userId) {
         userData[userId].gameHistory = userData[userId].gameHistory ?? [];
         userData[userId].giftsReceived = userData[userId].giftsReceived ?? 0;
         userData[userId].giftsSent = userData[userId].giftsSent ?? 0;
+<<<<<<< Updated upstream
+=======
+        userData[userId].totalGiftsReceived = userData[userId].totalGiftsReceived ?? 0;
+        userData[userId].totalGiftsSent = userData[userId].totalGiftsSent ?? 0;
+        userData[userId].activeLoan = userData[userId].activeLoan ?? null;
+        userData[userId].loanHistory = userData[userId].loanHistory ?? [];
+        userData[userId].creditScore = userData[userId].creditScore ?? 500;
+        userData[userId].lastWork = userData[userId].lastWork ?? 0;
+>>>>>>> Stashed changes
     }
     
     await saveUserData();
@@ -79,8 +98,34 @@ async function getUserMoney(userId) {
 
 async function setUserMoney(userId, amount) {
     await getUserMoney(userId); // Ensure user exists
+<<<<<<< Updated upstream
     userData[userId].money = Math.max(0, Math.floor(amount)); // Ensure non-negative integer
     await saveUserData();
+=======
+
+    const oldMoney = userData[userId].money;
+    const newMoney = Math.max(0, Math.floor(amount));
+
+    // If money increased (winnings), check for loan deduction
+    if (newMoney > oldMoney && userData[userId].activeLoan) {
+        const { deductFromWinnings } = require('./loanSystem');
+        const winnings = newMoney - oldMoney;
+
+        const { deducted, remaining } = deductFromWinnings(userId, winnings);
+
+        if (deducted > 0) {
+            // Set to old money + remaining winnings (after loan deduction)
+            userData[userId].money = Math.max(0, Math.floor(oldMoney + remaining));
+            console.log(`Auto-deducted ${deducted} from ${userId}'s winnings for loan payment`);
+        } else {
+            userData[userId].money = newMoney;
+        }
+    } else {
+        userData[userId].money = newMoney;
+    }
+
+    saveUserData(); // Non-blocking save
+>>>>>>> Stashed changes
 }
 
 async function recordGameResult(userId, gameType, bet, winnings, result, details = {},  additionalData = {}) {
