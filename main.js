@@ -15,6 +15,8 @@ const ThreeCardPokerGame = require('./gameLogic/threeCardPokerGame');
 const RouletteGame = require('./gameLogic/rouletteGame');
 const CrapsGame = require('./gameLogic/crapsGame');
 const WarGame = require('./gameLogic/warGame');
+const CrapsGame = require('./gameLogic/crapsGame');
+const WarGame = require('./gameLogic/warGame');
 
 // Import configuration
 const { token, ALLOWED_CHANNEL_IDS, ADMIN_USER_ID } = require('./config');
@@ -276,8 +278,6 @@ process.on('unhandledRejection', error => {
     console.error('Unhandled promise rejection:', error);
 });
 
-<<<<<<< Updated upstream
-=======
 // Graceful shutdown handling
 async function gracefulShutdown(signal) {
     console.log(`\n${signal} received. Saving all data before shutdown...`);
@@ -320,6 +320,30 @@ setInterval(async () => {
     }
 }, 24 * 60 * 60 * 1000); // Every 24 hours
 
->>>>>>> Stashed changes
+// Daily loan checker - runs every 24 hours
+setInterval(async () => {
+    const { checkOverdueLoans } = require('./utils/loanSystem');
+    const overdueUsers = checkOverdueLoans();
+
+    if (overdueUsers.length > 0) {
+        console.log(`Checked loans: ${overdueUsers.length} users with overdue loans`);
+
+        // Try to DM users about overdue loans
+        for (const { userId, daysOverdue, totalOwed } of overdueUsers) {
+            try {
+                const user = await client.users.fetch(userId);
+                await user.send({
+                    content: `⚠️ **LOAN OVERDUE NOTICE**\n\nYour loan is **${daysOverdue} days overdue**!\n` +
+                        `Total owed: **${totalOwed.toLocaleString()}**\n` +
+                        `Additional interest is accruing at 5% per day!\n\n` +
+                        `Use \`/work\` to earn money or risk further penalties!`
+                });
+            } catch (error) {
+                console.log(`Could not DM user ${userId} about overdue loan`);
+            }
+        }
+    }
+}, 24 * 60 * 60 * 1000); // Every 24 hours
+
 // Start the bot
 client.login(token);
