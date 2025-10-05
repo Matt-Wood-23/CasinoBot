@@ -22,10 +22,6 @@ async function handleModalSubmit(interaction, activeGames, client, dealCardsWith
         await handleRouletteNumberBet(interaction, rouletteSessions);
     } else if (customId === 'craps_place_bets') {
         await handleCrapsModal(interaction, activeGames, client);
-    } else if (customId === 'lottery_pick_numbers') {
-        await handleLotteryNumbers(interaction, client);
-    } else if (customId === 'crash_place_bet') {
-        await handleCrashModal(interaction, activeGames, client);
     } else if (customId === 'tournament_raise_amount') {
         await handleTournamentRaise(interaction, activeGames, client);
     } else if (customId === 'hilo_place_bet') {
@@ -588,86 +584,6 @@ async function handleCrapsModal(interaction, activeGames, client) {
     }
 }
 
-async function handleLotteryNumbers(interaction, client) {
-    try {
-        const numbersInput = interaction.fields.getTextInputValue('lottery_numbers');
-        const userId = interaction.user.id;
-        const ticketPrice = 100;
-
-        // Parse numbers
-        const numberStrings = numbersInput.trim().split(/\s+/);
-        const numbers = numberStrings.map(n => parseInt(n)).filter(n => !isNaN(n));
-
-        if (numbers.length !== 5) {
-            return interaction.reply({
-                content: `❌ You must pick exactly 5 numbers! You entered ${numbers.length}.`,
-                ephemeral: true
-            });
-        }
-
-        // Check if user has enough money
-        const userMoney = await getUserMoney(userId);
-        if (userMoney < ticketPrice) {
-            return interaction.reply({
-                content: `❌ You don't have enough money! Tickets cost ${ticketPrice.toLocaleString()}. You have ${userMoney.toLocaleString()}.`,
-                ephemeral: true
-            });
-        }
-
-        // Get or create global lottery
-        if (!client.currentLottery) {
-            client.currentLottery = new LotteryGame();
-            // Schedule draw for 10 minutes from now
-            client.currentLottery.drawTime = Date.now() + (10 * 60 * 1000);
-            client.currentLottery.drawScheduled = true;
-
-            // Schedule the draw
-            setTimeout(async () => {
-                await drawLottery(client);
-            }, 10 * 60 * 1000);
-        }
-
-        const lottery = client.currentLottery;
-
-        // Buy ticket
-        const result = lottery.buyTicket(userId, numbers);
-
-        if (!result.success) {
-            return interaction.reply({
-                content: `❌ ${result.reason}`,
-                ephemeral: true
-            });
-        }
-
-        // Deduct money
-        await setUserMoney(userId, userMoney - ticketPrice);
-
-        // Send confirmation
-        const embed = new EmbedBuilder()
-            .setTitle('🎫 Lottery Ticket Purchased! 🎫')
-            .setColor('#00FF00')
-            .setDescription(
-                `**Your Numbers:** ${result.numbers.join(', ')}\n\n` +
-                `**Ticket ID:** \`${result.ticketId}\`\n` +
-                `**Cost:** ${ticketPrice.toLocaleString()}\n\n` +
-                `**Current Prize Pool:** ${lottery.prizePool.toLocaleString()}\n` +
-                `**Estimated Jackpot:** ${lottery.getEstimatedJackpot().toLocaleString()}\n\n` +
-                `⏰ Draw will occur in approximately **${Math.floor((lottery.drawTime - Date.now()) / 60000)} minutes**\n\n` +
-                `Good luck! 🍀`
-            )
-            .setTimestamp();
-
-        await interaction.reply({ embeds: [embed] });
-
-    } catch (error) {
-        console.error('Error in lottery numbers modal:', error);
-        await interaction.reply({
-            content: '❌ An error occurred while purchasing your ticket. Please try again.',
-            ephemeral: true
-        });
-    }
-}
-
 async function drawLottery(client) {
     const lottery = client.currentLottery;
     if (!lottery || lottery.gameComplete) return;
@@ -712,64 +628,6 @@ async function drawLottery(client) {
 
     // Clear the lottery
     client.currentLottery = null;
-}
-
-async function handleCrashModal(interaction, activeGames, client) {
-    try {
-        const betInput = interaction.fields.getTextInputValue('bet_amount');
-        const targetInput = interaction.fields.getTextInputValue('target_multiplier');
-        const userId = interaction.user.id;
-
-        // Parse bet amount
-        const betAmount = parseInt(betInput);
-        if (isNaN(betAmount) || betAmount < 10 || betAmount > 10000) {
-            return interaction.reply({
-                content: '❌ Bet amount must be between $10 and $10,000!',
-                ephemeral: true
-            });
-        }
-
-        // Parse target multiplier
-        const targetMultiplier = parseFloat(targetInput);
-        if (isNaN(targetMultiplier) || targetMultiplier < 1.01 || targetMultiplier > 100.00) {
-            return interaction.reply({
-                content: '❌ Target multiplier must be between 1.01x and 100.00x!',
-                ephemeral: true
-            });
-        }
-
-        // Check user has enough money
-        const userMoney = await getUserMoney(userId);
-        if (userMoney < betAmount) {
-            return interaction.reply({
-                content: `❌ You don't have enough money! You have ${userMoney.toLocaleString()}, but need ${betAmount.toLocaleString()}.`,
-                ephemeral: true
-            });
-        }
-
-        // Deduct bet
-        await setUserMoney(userId, userMoney - betAmount);
-
-        // Create game
-        const crashGame = new CrashGame(userId, betAmount, targetMultiplier);
-        activeGames.set(`crash_${userId}`, crashGame);
-
-        // Send initial embed
-        const embed = await createGameEmbed(crashGame, userId, client);
-        const buttons = createButtons(crashGame, userId, client);
-
-        await interaction.reply({
-            embeds: [embed],
-            components: buttons ? [buttons] : []
-        });
-
-    } catch (error) {
-        console.error('Error in crash modal:', error);
-        await interaction.reply({
-            content: '❌ An error occurred while processing your bet. Please try again.',
-            ephemeral: true
-        });
-    }
 }
 
 async function handleTournamentRaise(interaction, activeGames, client) {

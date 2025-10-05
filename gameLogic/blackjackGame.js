@@ -1,5 +1,4 @@
 const Deck = require('./deck');
-const { liam } = require('../config'); // liam user ID for rigging features
 
 class BlackjackGame {
     constructor(channelId, creatorId, bet, isMultiPlayer) {
@@ -22,6 +21,8 @@ class BlackjackGame {
         this.bettingPhase = false;
         this.readyPlayers = new Map();
         this.dealerHoleCard = null;
+        this.isDealing = false; // Flag to prevent concurrent dealing
+        this.gameId = Date.now() + Math.random(); // Unique game ID
     }
 
     // Multi-player methods
@@ -72,19 +73,11 @@ class BlackjackGame {
                 player.hands[0].cards.push(this.deck.drawCard());
             }
         } else if (this.dealingPhase === 3) {
-            // Deal dealer up card (with admin debug feature)
-            if (this.players.has(liam)) {
-                this.dealer.cards.push(this.deck.drawSpecificCard(14, 'spades'));
-            } else {
-                this.dealer.cards.push(this.deck.drawCard());
-            }
+            // Deal dealer up card
+            this.dealer.cards.push(this.deck.drawCard());
         } else if (this.dealingPhase === 4) {
-            // Deal dealer hole card (with admin debug feature)
-            if (this.players.has(liam)) {
-                this.dealerHoleCard = this.deck.drawSpecificCard(13, 'spades');
-            } else {
-                this.dealerHoleCard = this.deck.drawCard();
-            }
+            // Deal dealer hole card
+            this.dealerHoleCard = this.deck.drawCard();
         } else if (this.dealingPhase === 5) {
             // Check for dealer blackjack
             if (this.hasDealerBlackjack()) {
@@ -283,12 +276,6 @@ class BlackjackGame {
         if (this.dealerHoleCard) {
             this.dealer.cards.push(this.dealerHoleCard);
             this.dealerHoleCard = null;
-        }
-
-        // Admin debug: don't draw cards for admin
-        if (this.players.has(liam)) {
-            this.gameOver = true;
-            return;
         }
 
         const allHandsBusted = Array.from(this.players.values()).every(player =>

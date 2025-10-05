@@ -769,38 +769,50 @@ async function createStatsEmbed(targetUser, client) {
     }
 
     const stats = userData.statistics;
-    const rouletteWinRate = stats.rouletteSpins > 0 ? ((stats.rouletteWins / stats.rouletteSpins) * 100).toFixed(1) : 0;
+
+    // Calculate win rates
     const winRate = stats.gamesPlayed > 0 ? ((stats.gamesWon / stats.gamesPlayed) * 100).toFixed(1) : 0;
     const slotsWinRate = stats.slotsSpins > 0 ? ((stats.slotsWins / stats.slotsSpins) * 100).toFixed(1) : 0;
     const pokerWinRate = stats.threeCardPokerGames > 0 ? ((stats.threeCardPokerWins / stats.threeCardPokerGames) * 100).toFixed(1) : 0;
+    const rouletteWinRate = stats.rouletteSpins > 0 ? ((stats.rouletteWins / stats.rouletteSpins) * 100).toFixed(1) : 0;
+    const crapsWinRate = stats.crapsGames > 0 ? ((stats.crapsWins / stats.crapsGames) * 100).toFixed(1) : 0;
+    const warWinRate = stats.warGames > 0 ? ((stats.warWins / stats.warGames) * 100).toFixed(1) : 0;
+    const coinflipWinRate = stats.coinflipGames > 0 ? ((stats.coinflipWins / stats.coinflipGames) * 100).toFixed(1) : 0;
+    const horseraceWinRate = stats.horseraceGames > 0 ? ((stats.horseraceWins / stats.horseraceGames) * 100).toFixed(1) : 0;
+    const crashWinRate = stats.crashGames > 0 ? ((stats.crashWins / stats.crashGames) * 100).toFixed(1) : 0;
+    const hiloWinRate = stats.hiloGames > 0 ? ((stats.hiloWins / stats.hiloGames) * 100).toFixed(1) : 0;
+    const bingoWinRate = stats.bingoGames > 0 ? ((stats.bingoWins / stats.bingoGames) * 100).toFixed(1) : 0;
+
     const profitLoss = stats.totalWinnings - stats.totalWagered;
 
     const embed = new EmbedBuilder()
-        .setTitle(`📊 ${targetUser.username}'s Statistics`)
+        .setTitle(`📊 ${targetUser.username}'s Casino Statistics`)
         .setColor('#0099FF')
         .setThumbnail(targetUser.displayAvatarURL())
+        .setDescription(
+            `**Overall Performance**\n` +
+            `🎮 Games: ${(stats.gamesPlayed || 0).toLocaleString()} | ` +
+            `🏆 Won: ${(stats.gamesWon || 0).toLocaleString()} (${winRate}%)\n` +
+            `💰 Wagered: ${(stats.totalWagered || 0).toLocaleString()} | ` +
+            `💵 Winnings: ${(stats.totalWinnings || 0).toLocaleString()}\n` +
+            `📊 Net: ${profitLoss >= 0 ? '+' : ''}${(profitLoss || 0).toLocaleString()} | ` +
+            `💳 Balance: ${(userData.money || 0).toLocaleString()}\n` +
+            `🌟 Best Win: ${(stats.biggestWin || 0).toLocaleString()} | ` +
+            `💔 Worst Loss: ${(stats.biggestLoss || 0).toLocaleString()}`
+        )
         .addFields(
-            { name: '🎮 Games Played', value: (stats.gamesPlayed || 0).toLocaleString(), inline: true },
-            { name: '🏆 Games Won', value: (stats.gamesWon || 0).toLocaleString(), inline: true },
-            { name: '📈 Win Rate', value: `${winRate}%`, inline: true },
-            { name: '💰 Total Wagered', value: `${(stats.totalWagered || 0).toLocaleString()}`, inline: true },
-            { name: '💵 Total Winnings', value: `${(stats.totalWinnings || 0).toLocaleString()}`, inline: true },
-            { name: '📊 Net Profit/Loss', value: `${profitLoss >= 0 ? '+' : ''}${(profitLoss || 0).toLocaleString()}`, inline: true },
-            { name: '🌟 Biggest Win', value: `${(stats.biggestWin || 0).toLocaleString()}`, inline: true },
-            { name: '💔 Biggest Loss', value: `${(stats.biggestLoss || 0).toLocaleString()}`, inline: true },
-            { name: '⚡ Blackjacks', value: (stats.blackjacks || 0).toLocaleString(), inline: true },
-            { name: '🎰 Slots Spins', value: (stats.slotsSpins || 0).toLocaleString(), inline: true },
-            { name: '🎰 Slots Wins', value: (stats.slotsWins || 0).toLocaleString(), inline: true },
-            { name: '📈 Slots Win Rate', value: `${slotsWinRate}%`, inline: true },
-            { name: '🃏 Poker Games', value: (stats.threeCardPokerGames || 0).toLocaleString(), inline: true },
-            { name: '🃏 Poker Wins', value: (stats.threeCardPokerWins || 0).toLocaleString(), inline: true },
-            { name: '📈 Poker Win Rate', value: `${pokerWinRate}%`, inline: true },
-            { name: '🎁 Gifts Sent', value: (userData.giftsSent || 0).toLocaleString(), inline: true },
-            { name: '🎀 Gifts Received', value: (userData.giftsReceived || 0).toLocaleString(), inline: true },
-            { name: '💳 Current Balance', value: `${(userData.money || 0).toLocaleString()}`, inline: true },
-            { name: '🎰 Roulette Spins', value: (stats.rouletteSpins || 0).toLocaleString(), inline: true },
-            { name: '🎰 Roulette Wins', value: (stats.rouletteWins || 0).toLocaleString(), inline: true },
-            { name: '📈 Roulette Win Rate', value: `${rouletteWinRate}%`, inline: true },
+            { name: '🃏 Blackjack', value: `${(stats.handsPlayed || 0).toLocaleString()} hands\n⚡ ${(stats.blackjacks || 0)} blackjacks`, inline: true },
+            { name: '🎴 3-Card Poker', value: `${(stats.threeCardPokerGames || 0).toLocaleString()} games\n${(stats.threeCardPokerWins || 0)} wins (${pokerWinRate}%)`, inline: true },
+            { name: '⚔️ War', value: `${(stats.warGames || 0).toLocaleString()} games\n${(stats.warWins || 0)} wins (${warWinRate}%)`, inline: true },
+            { name: '🎰 Slots', value: `${(stats.slotsSpins || 0).toLocaleString()} spins\n${(stats.slotsWins || 0)} wins (${slotsWinRate}%)`, inline: true },
+            { name: '🎲 Roulette', value: `${(stats.rouletteSpins || 0).toLocaleString()} spins\n${(stats.rouletteWins || 0)} wins (${rouletteWinRate}%)`, inline: true },
+            { name: '🎲 Craps', value: `${(stats.crapsGames || 0).toLocaleString()} games\n${(stats.crapsWins || 0)} wins (${crapsWinRate}%)`, inline: true },
+            { name: '🪙 Coin Flip', value: `${(stats.coinflipGames || 0).toLocaleString()} flips\n${(stats.coinflipWins || 0)} wins (${coinflipWinRate}%)`, inline: true },
+            { name: '🏇 Horse Race', value: `${(stats.horseraceGames || 0).toLocaleString()} races\n${(stats.horseraceWins || 0)} wins (${horseraceWinRate}%)`, inline: true },
+            { name: '🚀 Crash', value: `${(stats.crashGames || 0).toLocaleString()} games\n${(stats.crashWins || 0)} wins (${crashWinRate}%)`, inline: true },
+            { name: '🎴 Hi-Lo', value: `${(stats.hiloGames || 0).toLocaleString()} games\n${(stats.hiloWins || 0)} wins\n🔥 Max: ${(stats.hiloMaxStreak || 0)}`, inline: true },
+            { name: '🎱 Bingo', value: `${(stats.bingoGames || 0).toLocaleString()} games\n${(stats.bingoWins || 0)} wins (${bingoWinRate}%)`, inline: true },
+            { name: '🎁 Social', value: `📤 Sent: ${(userData.giftsSent || 0).toLocaleString()}\n📥 Received: ${(userData.giftsReceived || 0).toLocaleString()}`, inline: true }
         )
         .setTimestamp();
 
@@ -1054,12 +1066,9 @@ async function createCrashEmbed(game, userId) {
     // Show current multiplier with visual effect
     description += `${game.getMultiplierDisplay()}\n\n`;
 
-    // Show progress bar
-    description += `${game.getProgressBar()}\n\n`;
-
     // Game info
     description += `💰 **Bet:** ${game.betAmount.toLocaleString()}\n`;
-    description += `🎯 **Target:** ${game.targetMultiplier.toFixed(2)}x\n`;
+    description += `💵 **Current Value:** ${Math.floor(game.betAmount * game.currentMultiplier).toLocaleString()}\n`;
 
     if (game.gameComplete) {
         description += `💥 **Crashed at:** ${game.crashMultiplier.toFixed(2)}x\n\n`;
@@ -1158,6 +1167,41 @@ async function createBingoEmbed(game, userId, client) {
     return embed;
 }
 
+async function sendPlayerCardsDM(tournament, client) {
+    // Send each player their hole cards via DM
+    for (const [playerId, player] of tournament.players) {
+        if (!player.eliminated && player.cards && player.cards.length > 0) {
+            try {
+                const user = await client.users.fetch(playerId);
+                const cardsDisplay = player.cards.map(card => card.getName()).join(' ');
+
+                let dmMessage = `♠️ **Texas Hold'em Tournament - Hand #${tournament.roundsPlayed}**\n\n`;
+                dmMessage += `🎴 **Your Hole Cards:** ${cardsDisplay}\n\n`;
+                dmMessage += `💎 **Your Chips:** ${player.chips.toLocaleString()}\n`;
+                dmMessage += `💰 **Current Bet:** ${player.bet.toLocaleString()}\n`;
+                dmMessage += `🏆 **Pot:** ${tournament.pot.toLocaleString()}\n\n`;
+
+                if (tournament.communityCards.length > 0) {
+                    const communityDisplay = tournament.communityCards.map(card => card.getName()).join(' ');
+                    dmMessage += `🃏 **Community Cards:** ${communityDisplay}\n\n`;
+                }
+
+                dmMessage += `*Return to the tournament channel to play your hand!*`;
+
+                const dmEmbed = new EmbedBuilder()
+                    .setTitle('🎴 Your Hole Cards')
+                    .setDescription(dmMessage)
+                    .setColor('#FFD700')
+                    .setTimestamp();
+
+                await user.send({ embeds: [dmEmbed] });
+            } catch (error) {
+                console.log(`Could not DM cards to player ${playerId}:`, error.message);
+            }
+        }
+    }
+}
+
 async function createTournamentEmbed(tournament, userId, client) {
     const color = tournament.tournamentComplete ? '#00FF00' : (tournament.tournamentStarted ? '#0099FF' : '#FFD700');
     const embed = new EmbedBuilder()
@@ -1217,14 +1261,7 @@ async function createTournamentEmbed(tournament, userId, client) {
             }
         }
 
-        // Show user's cards if they're in the tournament
-        if (tournament.players.has(userId)) {
-            const userPlayer = tournament.players.get(userId);
-            if (userPlayer.cards && userPlayer.cards.length > 0) {
-                const cardsDisplay = userPlayer.cards.map(card => card.getName()).join(' ');
-                description += `\n🎴 **Your Cards:** ${cardsDisplay}`;
-            }
-        }
+        description += `\n💡 *Check your DMs to see your hole cards!*`;
 
         if (tournament.phase === 'handComplete') {
             description += `\n\n🎲 **Hand Complete!** Click "Next Hand" to continue.`;
@@ -1295,5 +1332,6 @@ module.exports = {
     createInfoEmbed,
     createLeaderboardEmbed,
     createStatsEmbed,
-    createHistoryEmbed
+    createHistoryEmbed,
+    sendPlayerCardsDM
 };

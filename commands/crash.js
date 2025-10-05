@@ -1,48 +1,53 @@
-const { EmbedBuilder, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { getUserMoney } = require('../utils/data');
+const { getUserMoney, setUserMoney } = require('../utils/data');
+const { createGameEmbed } = require('../utils/embeds');
+const { createButtons } = require('../utils/buttons');
+const CrashGame = require('../gameLogic/crashGame');
 
 module.exports = {
     data: {
         name: 'crash',
         description: 'Play Crash - watch the multiplier climb and cash out before it crashes!',
-        options: []
+        options: [
+            {
+                name: 'bet',
+                type: 4, // INTEGER
+                description: 'Amount to bet ($10 - $10,000)',
+                required: true,
+                min_value: 10,
+                max_value: 10000
+            }
+        ]
     },
 
-    async execute(interaction) {
+    async execute(interaction, activeGames) {
         try {
-            const userMoney = await getUserMoney(interaction.user.id);
+            const betAmount = interaction.options.getInteger('bet');
+            const userId = interaction.user.id;
 
-            if (userMoney < 10) {
+            // Check user has enough money
+            const userMoney = await getUserMoney(userId);
+            if (userMoney < betAmount) {
                 return interaction.reply({
-                    content: '❌ You need at least $10 to play Crash!',
+                    content: `❌ You don't have enough money! You have ${userMoney.toLocaleString()}, but need ${betAmount.toLocaleString()}.`,
                     ephemeral: true
                 });
             }
 
-            // Show betting modal
-            const modal = new ModalBuilder()
-                .setCustomId('crash_place_bet')
-                .setTitle('🚀 Play Crash')
-                .addComponents(
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder()
-                            .setCustomId('bet_amount')
-                            .setLabel('Bet Amount ($10 - $10,000)')
-                            .setStyle(TextInputStyle.Short)
-                            .setRequired(true)
-                            .setPlaceholder('100')
-                    ),
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder()
-                            .setCustomId('target_multiplier')
-                            .setLabel('Target Multiplier (1.01x - 100.00x)')
-                            .setStyle(TextInputStyle.Short)
-                            .setRequired(true)
-                            .setPlaceholder('2.00')
-                    )
-                );
+            // Deduct bet
+            await setUserMoney(userId, userMoney - betAmount);
 
-            await interaction.showModal(modal);
+            // Create game
+            const crashGame = new CrashGame(userId, betAmount);
+            activeGames.set(`crash_${userId}`, crashGame);
+
+            // Send initial embed
+            const embed = await createGameEmbed(crashGame, userId, interaction.client);
+            const buttons = createButtons(crashGame, userId, interaction.client);
+
+            await interaction.reply({
+                embeds: [embed],
+                components: buttons ? [buttons] : []
+            });
 
         } catch (error) {
             console.error('Error in crash command:', error);

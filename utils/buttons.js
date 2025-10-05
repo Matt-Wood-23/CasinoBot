@@ -441,12 +441,16 @@ function createHorseRaceButtons(game) {
 
 function createCrashButtons(game) {
     if (!game.gameComplete) {
-        // Show "Continue" button during the game
+        // Show "Continue" and "Cash Out" buttons during the game
         const row = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId('crash_continue')
                     .setLabel('🚀 Continue')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId('crash_cashout')
+                    .setLabel(`💰 Cash Out (${Math.floor(game.betAmount * game.currentMultiplier).toLocaleString()})`)
                     .setStyle(ButtonStyle.Success)
             );
         return row;
@@ -509,9 +513,7 @@ function createTournamentButtons(tournament, userId) {
         return row;
     }
 
-    // Game in progress - show action buttons
-    const currentPlayer = tournament.getCurrentPlayer();
-    const isCurrentPlayer = currentPlayer === userId;
+    // Game in progress - show action buttons to all players
     const player = tournament.players.get(userId);
 
     if (!player || player.eliminated || player.folded) {
@@ -527,7 +529,6 @@ function createTournamentButtons(tournament, userId) {
             .setCustomId('tournament_fold')
             .setLabel('Fold')
             .setStyle(ButtonStyle.Danger)
-            .setDisabled(!isCurrentPlayer)
     );
 
     // Check/Call button
@@ -538,7 +539,6 @@ function createTournamentButtons(tournament, userId) {
                 .setCustomId('tournament_check')
                 .setLabel('Check')
                 .setStyle(ButtonStyle.Secondary)
-                .setDisabled(!isCurrentPlayer)
         );
     } else {
         row.addComponents(
@@ -546,7 +546,6 @@ function createTournamentButtons(tournament, userId) {
                 .setCustomId('tournament_call')
                 .setLabel(`Call ${callAmount}`)
                 .setStyle(ButtonStyle.Primary)
-                .setDisabled(!isCurrentPlayer)
         );
     }
 
@@ -556,7 +555,7 @@ function createTournamentButtons(tournament, userId) {
             .setCustomId('tournament_raise')
             .setLabel('Raise')
             .setStyle(ButtonStyle.Success)
-            .setDisabled(!isCurrentPlayer || player.chips === 0)
+            .setDisabled(player.chips === 0)
     );
 
     return row;

@@ -103,7 +103,7 @@ async function handleLoanRequest(interaction, userId) {
     // Create loan
     const interestRate = getInterestRate(userData.creditScore, amount);
     const repaymentDays = getRepaymentDays(amount);
-    const loan = createLoan(userId, amount);
+    const loan = await createLoan(userId, amount);
 
     if (!loan) {
         return interaction.reply({
@@ -166,7 +166,7 @@ async function handleLoanRepayment(interaction, userId) {
     await setUserMoney(userId, userMoney - paymentAmount);
 
     // Make payment
-    const result = makePayment(userId, paymentAmount);
+    const result = await makePayment(userId, paymentAmount);
 
     const embed = new EmbedBuilder()
         .setTitle(result.paidOff ? '✅ Loan Paid Off!' : '💵 Payment Made')
