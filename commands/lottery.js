@@ -9,7 +9,15 @@ module.exports = {
             {
                 name: 'buy',
                 description: 'Buy a lottery ticket',
-                type: 1
+                type: 1,
+                options: [
+                    {
+                        type: 4, // INTEGER
+                        name: 'quantity',
+                        description: 'Number of tickets to buy (1-10)',
+                        required: false
+                    }
+                ]
             },
             {
                 name: 'status',
@@ -35,12 +43,23 @@ async function handleBuyTicket(interaction) {
         const { setUserMoney } = require('../utils/data');
         const LotteryGame = require('../gameLogic/lotteryGame');
 
+        const quantity = interaction.options.getInteger('quantity') || 1;
+
+        // Validate quantity
+        if (quantity < 1 || quantity > 10) {
+            return interaction.reply({
+                content: '❌ You can only buy between 1 and 10 tickets at a time!',
+                ephemeral: true
+            });
+        }
+
         const userMoney = await getUserMoney(interaction.user.id);
         const ticketPrice = 100;
+        const totalCost = ticketPrice * quantity;
 
-        if (userMoney < ticketPrice) {
+        if (userMoney < totalCost) {
             return interaction.reply({
-                content: `❌ You don't have enough money! Lottery tickets cost ${ticketPrice.toLocaleString()}. You have ${userMoney.toLocaleString()}.`,
+                content: `❌ You don't have enough money! ${quantity} ticket${quantity > 1 ? 's' : ''} cost${quantity === 1 ? 's' : ''} ${totalCost.toLocaleString()}. You have ${userMoney.toLocaleString()}.`,
                 ephemeral: true
             });
         }
@@ -52,28 +71,34 @@ async function handleBuyTicket(interaction) {
 
         const lottery = interaction.client.currentLottery;
 
-        // Auto-generate 5 random unique numbers between 1-50
-        const numbers = [];
-        while (numbers.length < 5) {
-            const num = Math.floor(Math.random() * 50) + 1;
-            if (!numbers.includes(num)) {
-                numbers.push(num);
+        // Buy multiple tickets
+        const purchasedTickets = [];
+        for (let i = 0; i < quantity; i++) {
+            // Auto-generate 5 random unique numbers between 1-50
+            const numbers = [];
+            while (numbers.length < 5) {
+                const num = Math.floor(Math.random() * 50) + 1;
+                if (!numbers.includes(num)) {
+                    numbers.push(num);
+                }
             }
-        }
-        numbers.sort((a, b) => a - b);
+            numbers.sort((a, b) => a - b);
 
-        // Buy ticket
-        const result = lottery.buyTicket(interaction.user.id, numbers);
+            // Buy ticket
+            const result = lottery.buyTicket(interaction.user.id, numbers);
 
-        if (!result.success) {
-            return interaction.reply({
-                content: `❌ ${result.reason}`,
-                ephemeral: true
-            });
+            if (!result.success) {
+                return interaction.reply({
+                    content: `❌ ${result.reason}`,
+                    ephemeral: true
+                });
+            }
+
+            purchasedTickets.push(result.numbers);
         }
 
         // Deduct money
-        await setUserMoney(interaction.user.id, userMoney - ticketPrice);
+        await setUserMoney(interaction.user.id, userMoney - totalCost);
 
         // Schedule draw if not already scheduled
         if (!lottery.drawScheduled && lottery.getTotalTickets() >= 1) {
@@ -85,18 +110,33 @@ async function handleBuyTicket(interaction) {
             }, 30 * 60 * 1000);
         }
 
+        let ticketDescription = `**Tickets Purchased:** ${quantity}\n`;
+
+        // Show ticket numbers (max 5 tickets displayed)
+        const displayCount = Math.min(purchasedTickets.length, 5);
+        for (let i = 0; i < displayCount; i++) {
+            ticketDescription += `🎫 ${purchasedTickets[i].join(', ')}\n`;
+        }
+        if (purchasedTickets.length > 5) {
+            ticketDescription += `... and ${purchasedTickets.length - 5} more ticket${purchasedTickets.length - 5 > 1 ? 's' : ''}\n`;
+        }
+
+        ticketDescription += `\n**Total Cost:** ${totalCost.toLocaleString()}\n` +
+            `**New Balance:** ${(userMoney - totalCost).toLocaleString()}\n\n` +
+            `**Current Prize Pool:** ${lottery.prizePool.toLocaleString()}\n`;
+
+        if (lottery.rolloverAmount > 0) {
+            ticketDescription += `💰 **Includes Rollover:** ${lottery.rolloverAmount.toLocaleString()}\n`;
+        }
+
+        ticketDescription += `**Estimated Jackpot (5/5):** ${lottery.getEstimatedJackpot().toLocaleString()}\n` +
+            `**Total Tickets in Pool:** ${lottery.getTotalTickets()}\n\n` +
+            `Good luck! 🍀`;
+
         const embed = new EmbedBuilder()
-            .setTitle('🎫 Lottery Ticket Purchased!')
+            .setTitle(`🎫 Lottery Ticket${quantity > 1 ? 's' : ''} Purchased!`)
             .setColor('#00FF00')
-            .setDescription(
-                `**Your Numbers:** ${result.numbers.join(', ')}\n\n` +
-                `**Ticket Price:** ${ticketPrice.toLocaleString()}\n` +
-                `**New Balance:** ${(userMoney - ticketPrice).toLocaleString()}\n\n` +
-                `**Current Prize Pool:** ${lottery.prizePool.toLocaleString()}\n` +
-                `**Estimated Jackpot (5/5):** ${lottery.getEstimatedJackpot().toLocaleString()}\n` +
-                `**Total Tickets:** ${lottery.getTotalTickets()}\n\n` +
-                `Good luck! 🍀`
-            )
+            .setDescription(ticketDescription)
             .setTimestamp();
 
         if (lottery.drawTime) {
@@ -118,6 +158,7 @@ async function handleBuyTicket(interaction) {
 
 async function conductDraw(client, lottery) {
     const { setUserMoney, getUserMoney } = require('../utils/data');
+    const LotteryGame = require('../gameLogic/lotteryGame');
 
     lottery.draw();
 
@@ -137,18 +178,23 @@ async function conductDraw(client, lottery) {
             const userWinnings = lottery.getTotalPrizeForUser(ticket.userId);
             const userTickets = lottery.getUserTickets(ticket.userId);
 
+            let description = `**Winning Numbers:** ${lottery.winningNumbers.join(', ')}\n\n` +
+                `**Total Prize Pool:** ${lottery.prizePool.toLocaleString()}\n` +
+                `**Total Winners:** ${lottery.winners.length}\n\n` +
+                `**Your Tickets:** ${userTickets.length}\n` +
+                (userWinnings > 0
+                    ? `\n🎉 **YOU WON ${userWinnings.toLocaleString()}!** 🎉\n`
+                    : '\nBetter luck next time!');
+
+            // Add rollover info if there is one
+            if (lottery.rolloverForNextGame > 0) {
+                description += `\n\n💰 **Next Jackpot starts at ${lottery.rolloverForNextGame.toLocaleString()}!**`;
+            }
+
             const embed = new EmbedBuilder()
                 .setTitle('🎰 LOTTERY DRAW RESULTS 🎰')
                 .setColor(userWinnings > 0 ? '#FFD700' : '#808080')
-                .setDescription(
-                    `**Winning Numbers:** ${lottery.winningNumbers.join(', ')}\n\n` +
-                    `**Total Prize Pool:** ${lottery.prizePool.toLocaleString()}\n` +
-                    `**Total Winners:** ${lottery.winners.length}\n\n` +
-                    `**Your Tickets:** ${userTickets.length}\n` +
-                    (userWinnings > 0
-                        ? `\n🎉 **YOU WON ${userWinnings.toLocaleString()}!** 🎉\n`
-                        : '\nBetter luck next time!')
-                )
+                .setDescription(description)
                 .setTimestamp();
 
             if (userWinnings > 0) {
@@ -169,8 +215,9 @@ async function conductDraw(client, lottery) {
         }
     }
 
-    // Reset lottery
-    client.currentLottery = null;
+    // Create new lottery with rollover amount
+    const rollover = lottery.rolloverForNextGame || 0;
+    client.currentLottery = rollover > 0 ? new LotteryGame(rollover) : null;
 }
 
 async function handleStatus(interaction) {
@@ -193,6 +240,9 @@ async function handleStatus(interaction) {
             .setTimestamp();
 
         let description = `**Prize Pool:** ${lottery.prizePool.toLocaleString()}\n`;
+        if (lottery.rolloverAmount > 0) {
+            description += `💰 **Rollover from Last Draw:** ${lottery.rolloverAmount.toLocaleString()}\n`;
+        }
         description += `**Estimated Jackpot (5/5):** ${lottery.getEstimatedJackpot().toLocaleString()}\n`;
         description += `**Total Tickets Sold:** ${lottery.getTotalTickets()}\n`;
         description += `**Ticket Price:** 100\n\n`;

@@ -154,8 +154,8 @@ async function deductFromWinnings(userId, winnings) {
     const loan = userData.activeLoan;
     const remaining = loan.totalOwed - loan.amountPaid;
 
-    // Take 50% of winnings for loan payment
-    const deduction = Math.min(Math.floor(winnings * 0.5), remaining);
+    // Take 25% of winnings for loan payment
+    const deduction = Math.min(Math.floor(winnings * 0.25), remaining);
 
     if (deduction > 0) {
         await makePayment(userId, deduction);

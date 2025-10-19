@@ -243,7 +243,7 @@ async function handleLoanStatus(interaction, userId) {
         });
     }
 
-    embed.setFooter({ text: '50% of all winnings will be automatically deducted for loan repayment' });
+    embed.setFooter({ text: '25% of all winnings will be automatically deducted for loan repayment' });
     embed.setTimestamp();
 
     await interaction.reply({ embeds: [embed] });

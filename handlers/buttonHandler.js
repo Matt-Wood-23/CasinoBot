@@ -1608,7 +1608,13 @@ async function handleBingoButtons(interaction, activeGames, userId, client) {
                 .setDescription(`Here's your bingo card for the game!\n\n${cardDisplay}\n\n[X] = Marked\nXX = Free Space`)
                 .setColor('#FFD700');
 
-            await user.send({ embeds: [dmEmbed] });
+            const dmMessage = await user.send({ embeds: [dmEmbed] });
+
+            // Store the DM message ID for later editing
+            const playerData = game.players.get(userId);
+            if (playerData) {
+                playerData.dmMessageId = dmMessage.id;
+            }
         } catch (error) {
             console.log(`Could not DM bingo card to ${userId}`);
         }
@@ -1688,7 +1694,22 @@ async function handleBingoButtons(interaction, activeGames, userId, client) {
                     .setDescription(cardMessage)
                     .setColor(playerData.hasBingo ? '#00FF00' : '#FFD700');
 
-                await user.send({ embeds: [dmEmbed] });
+                // Edit the existing DM if we have a message ID, otherwise send a new one
+                if (playerData.dmMessageId) {
+                    try {
+                        const dmChannel = await user.createDM();
+                        const dmMessage = await dmChannel.messages.fetch(playerData.dmMessageId);
+                        await dmMessage.edit({ embeds: [dmEmbed] });
+                    } catch (editError) {
+                        // If editing fails, send a new message and update the ID
+                        const newDmMessage = await user.send({ embeds: [dmEmbed] });
+                        playerData.dmMessageId = newDmMessage.id;
+                    }
+                } else {
+                    // No message ID stored, send a new message
+                    const newDmMessage = await user.send({ embeds: [dmEmbed] });
+                    playerData.dmMessageId = newDmMessage.id;
+                }
             } catch (error) {
                 console.log(`Could not DM update to ${playerId}`);
             }
@@ -1873,31 +1894,66 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
             components: buttons ? [buttons] : []
         });
 
-    } else if (interaction.customId === 'tournament_check') {
+        // Check if hand/tournament is complete after fold
+        if (tournament.phase === 'handComplete') {
+            // Wait 3 seconds then start next hand
+            setTimeout(async () => {
+                tournament.startNewHand();
+
+                // Send player cards via DM for the new hand
+                await sendPlayerCardsDM(tournament, client);
+
+                const newEmbed = await createGameEmbed(tournament, userId, client);
+                const newButtons = createButtons(tournament, userId, client);
+
+                await interaction.message.edit({
+                    embeds: [newEmbed],
+                    components: newButtons ? [newButtons] : []
+                });
+            }, 3000);
+        } else if (tournament.tournamentComplete) {
+            // Award prizes
+            const prizes = tournament.winners;
+            for (const prize of prizes) {
+                const currentMoney = await getUserMoney(prize.userId);
+                await setUserMoney(prize.userId, currentMoney + prize.prize);
+
+                await recordGameResult(prize.userId, 'poker_tournament', tournament.buyIn, prize.prize - tournament.buyIn, 'win', {
+                    place: prize.place,
+                    prizePool: tournament.prizePool
+                });
+            }
+
+            // Record losses for non-winners
+            for (const [playerId] of tournament.players) {
+                const isWinner = prizes.some(p => p.userId === playerId);
+                if (!isWinner) {
+                    await recordGameResult(playerId, 'poker_tournament', tournament.buyIn, -tournament.buyIn, 'lose', {
+                        prizePool: tournament.prizePool
+                    });
+                }
+            }
+        }
+
+    } else if (interaction.customId === 'tournament_check_call') {
         if (tournament.getCurrentPlayer() !== userId) {
             return interaction.reply({ content: '❌ It\'s not your turn!', ephemeral: true });
         }
 
-        const success = tournament.check(userId);
-        if (!success) {
-            return interaction.reply({ content: '❌ You cannot check! You must call or fold.', ephemeral: true });
+        const player = tournament.players.get(userId);
+        const callAmount = tournament.currentBet - player.bet;
+
+        // Determine if this is a check or call
+        if (callAmount === 0) {
+            // Check
+            const success = tournament.check(userId);
+            if (!success) {
+                return interaction.reply({ content: '❌ Cannot check!', ephemeral: true });
+            }
+        } else {
+            // Call
+            tournament.call(userId);
         }
-
-        await interaction.deferUpdate();
-        const embed = await createGameEmbed(tournament, userId, client);
-        const buttons = createButtons(tournament, userId, client);
-
-        await interaction.editReply({
-            embeds: [embed],
-            components: buttons ? [buttons] : []
-        });
-
-    } else if (interaction.customId === 'tournament_call') {
-        if (tournament.getCurrentPlayer() !== userId) {
-            return interaction.reply({ content: '❌ It\'s not your turn!', ephemeral: true });
-        }
-
-        tournament.call(userId);
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(tournament, userId, client);

@@ -513,14 +513,8 @@ function createTournamentButtons(tournament, userId) {
         return row;
     }
 
-    // Game in progress - show action buttons to all players
-    const player = tournament.players.get(userId);
-
-    if (!player || player.eliminated || player.folded) {
-        // Player is out or folded, no buttons
-        return null;
-    }
-
+    // Game in progress - show generic action buttons
+    // Buttons work for all players - the handler will check individual player state
     const row = new ActionRowBuilder();
 
     // Fold button (always available)
@@ -531,23 +525,13 @@ function createTournamentButtons(tournament, userId) {
             .setStyle(ButtonStyle.Danger)
     );
 
-    // Check/Call button
-    const callAmount = tournament.currentBet - player.bet;
-    if (callAmount === 0) {
-        row.addComponents(
-            new ButtonBuilder()
-                .setCustomId('tournament_check')
-                .setLabel('Check')
-                .setStyle(ButtonStyle.Secondary)
-        );
-    } else {
-        row.addComponents(
-            new ButtonBuilder()
-                .setCustomId('tournament_call')
-                .setLabel(`Call ${callAmount}`)
-                .setStyle(ButtonStyle.Primary)
-        );
-    }
+    // Check/Call button (generic - will work for both)
+    row.addComponents(
+        new ButtonBuilder()
+            .setCustomId('tournament_check_call')
+            .setLabel('Check / Call')
+            .setStyle(ButtonStyle.Primary)
+    );
 
     // Raise button
     row.addComponents(
@@ -555,7 +539,6 @@ function createTournamentButtons(tournament, userId) {
             .setCustomId('tournament_raise')
             .setLabel('Raise')
             .setStyle(ButtonStyle.Success)
-            .setDisabled(player.chips === 0)
     );
 
     return row;

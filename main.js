@@ -17,7 +17,7 @@ const CrapsGame = require('./gameLogic/crapsGame');
 const WarGame = require('./gameLogic/warGame');
 
 // Import configuration
-const { token, ALLOWED_CHANNEL_IDS, ADMIN_USER_ID } = require('./config');
+const { token, ALLOWED_CHANNEL_IDS, ADMIN_USER_ID, liam } = require('./config');
 
 // Create client
 const client = new Client({
@@ -226,7 +226,7 @@ client.on('interactionCreate', async interaction => {
             }
 
             // Check loan restrictions for game commands
-            const gameCommands = ['blackjack', 'slots', 'poker', 'roulette', 'craps', 'war', 'coinflip', 'horserace', 'crash', 'bingo', 'hilo', 'pokertournament'];
+            const gameCommands = ['blackjack', 'slots', 'poker', 'roulette', 'craps', 'war', 'coinflip', 'horserace', 'crash', 'bingo', 'hilo', 'pokertournament', 'plinko'];
             if (gameCommands.includes(interaction.commandName)) {
                 const { canPlayGames } = require('./utils/loanSystem');
                 const { canPlay, reason } = canPlayGames(interaction.user.id);
@@ -294,6 +294,17 @@ client.on('error', error => {
 
 process.on('unhandledRejection', error => {
     console.error('Unhandled promise rejection:', error);
+});
+
+client.on('messageCreate', async message => {
+
+    //get the bots id
+    const botID = client.user.id;
+
+
+    if(message.content.toLowerCase() === '!jacob' && message.author.id != botID)
+        message.channel.send({files:['./IMG_3001.jpg']});
+   
 });
 
 const { saveUserData: forceSaveUserData } = require('./utils/data');
