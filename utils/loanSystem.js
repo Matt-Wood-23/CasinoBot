@@ -105,6 +105,10 @@ function makePayment(userId, amount) {
             date: Date.now()
         });
 
+        // Check loan achievements
+        const { checkLoanAchievements } = require('./achievements');
+        await checkLoanAchievements(userId, loan.principalAmount);
+
         userData.activeLoan = null;
     }
 

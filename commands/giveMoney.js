@@ -18,7 +18,7 @@ module.exports = {
                 type: 4,
                 required: true,
                 min_value: 1,
-                max_value: 10000
+                max_value: 100000000
             }
         ]
     },

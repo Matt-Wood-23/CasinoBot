@@ -85,6 +85,42 @@ async function handleButtonInteraction(interaction, activeGames, client, dealCar
         return;
     }
 
+    // Handle challenge reward claims
+    if (customId === 'claim_challenge_rewards') {
+        await handleClaimChallengeRewards(interaction, user.id);
+        return;
+    }
+
+    // Handle shop purchase buttons
+    if (customId.startsWith('shop_buy_')) {
+        await handleShopPurchase(interaction, user.id);
+        return;
+    }
+
+    // Handle property purchase buttons
+    if (customId.startsWith('property_buy_')) {
+        await handlePropertyPurchase(interaction, user.id);
+        return;
+    }
+
+    // Handle inventory use buttons
+    if (customId.startsWith('use_item_')) {
+        await handleUseItem(interaction, user.id);
+        return;
+    }
+
+    // Handle VIP purchase buttons
+    if (customId.startsWith('vip_buy_')) {
+        await handleVIPPurchase(interaction, user.id);
+        return;
+    }
+
+    // Handle guild heist join buttons
+    if (customId.startsWith('guildheist_join_')) {
+        await handleGuildHeistJoin(interaction, user.id);
+        return;
+    }
+
     // Handle blackjack buttons
     if (['hit', 'stand', 'double', 'split', 'play_again_single', 'continue_playing'].includes(customId)) {
         await handleBlackjackButtons(interaction, activeGames, client, dealCardsWithDelay);
@@ -2115,4 +2151,339 @@ async function handleHiLoButtons(interaction, activeGames, userId, client) {
     }
 }
 
-module.exports = { handleButtonInteraction, handleBlackjackButtons, handleTableButtons, updateBettingDisplay, startTurnTimer, handleRouletteButtons, animateDealerDrawing, handleCrapsButtons, handleWarButtons, handleCoinFlipButtons, handleHorseRaceButtons, handleCrashButtons, handleBingoButtons, handleTournamentButtons, handleHiLoButtons };
+async function handleClaimChallengeRewards(interaction, userId) {
+    const { getUserChallenges, awardChallengeReward } = require('../utils/challenges');
+    const { saveUserData } = require('../utils/data');
+
+    try {
+        const challenges = getUserChallenges(userId);
+        if (!challenges) {
+            return interaction.reply({
+                content: '❌ Unable to load your challenges.',
+                ephemeral: true
+            });
+        }
+
+        // Find all completed but not yet claimed challenges
+        const completedChallenges = [...challenges.daily, ...challenges.weekly].filter(c => c.completed);
+
+        if (completedChallenges.length === 0) {
+            return interaction.reply({
+                content: '❌ You have no completed challenges to claim!',
+                ephemeral: true
+            });
+        }
+
+        // Award all rewards
+        let totalReward = 0;
+        const claimedChallenges = [];
+
+        for (const challenge of completedChallenges) {
+            const reward = await awardChallengeReward(userId, challenge);
+            totalReward += reward;
+            claimedChallenges.push(`${challenge.emoji} **${challenge.name}** - $${reward.toLocaleString()}`);
+        }
+
+        // Remove completed challenges from active lists
+        challenges.daily = challenges.daily.filter(c => !c.completed);
+        challenges.weekly = challenges.weekly.filter(c => !c.completed);
+
+        await saveUserData();
+
+        const embed = new EmbedBuilder()
+            .setColor('#00FF00')
+            .setTitle('🎉 Challenge Rewards Claimed!')
+            .setDescription(`You've earned a total of **$${totalReward.toLocaleString()}**!`)
+            .addFields({
+                name: 'Completed Challenges',
+                value: claimedChallenges.join('\n'),
+                inline: false
+            })
+            .setTimestamp();
+
+        await interaction.reply({ embeds: [embed] });
+
+    } catch (error) {
+        console.error('Error claiming challenge rewards:', error);
+        await interaction.reply({
+            content: '❌ An error occurred while claiming your rewards. Please try again.',
+            ephemeral: true
+        });
+    }
+}
+
+async function handleShopPurchase(interaction, userId) {
+    const { purchaseItem, getShopItem } = require('../utils/shop');
+
+    try {
+        const itemId = interaction.customId.replace('shop_buy_', '');
+        const result = await purchaseItem(userId, itemId);
+
+        if (!result.success) {
+            return interaction.reply({
+                content: `❌ ${result.message}`,
+                ephemeral: true
+            });
+        }
+
+        const item = getShopItem(itemId);
+        const embed = new EmbedBuilder()
+            .setColor('#00FF00')
+            .setTitle('✅ Purchase Successful!')
+            .setDescription(result.message)
+            .addFields(
+                { name: 'Item', value: item.name, inline: true },
+                { name: 'Effect', value: item.description, inline: false }
+            )
+            .setFooter({ text: 'Use /inventory to view your items' })
+            .setTimestamp();
+
+        await interaction.reply({ embeds: [embed] });
+
+    } catch (error) {
+        console.error('Error handling shop purchase:', error);
+        await interaction.reply({
+            content: '❌ An error occurred while processing your purchase. Please try again.',
+            ephemeral: true
+        });
+    }
+}
+
+async function handlePropertyPurchase(interaction, userId) {
+    const { purchaseProperty } = require('../utils/properties');
+    const { getUserMoney } = require('../utils/data');
+
+    try {
+        await interaction.deferReply();
+
+        const propertyId = interaction.customId.replace('property_buy_', '');
+        const result = await purchaseProperty(userId, propertyId);
+
+        if (!result.success) {
+            const errorEmbed = new EmbedBuilder()
+                .setColor('#FF0000')
+                .setTitle('❌ Purchase Failed')
+                .setDescription(result.message)
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [errorEmbed] });
+        }
+
+        const property = result.property;
+        const currentMoney = await getUserMoney(userId);
+
+        const embed = new EmbedBuilder()
+            .setColor('#00FF00')
+            .setTitle('✅ Property Purchased!')
+            .setDescription(`${property.emoji} **${property.name}**\n*${property.description}*`)
+            .addFields(
+                {
+                    name: '💰 Purchase Price',
+                    value: `$${property.purchasePrice.toLocaleString()}`,
+                    inline: true
+                },
+                {
+                    name: '💵 Daily Income',
+                    value: `$${property.baseIncome.toLocaleString()}`,
+                    inline: true
+                },
+                {
+                    name: '🔧 Daily Maintenance',
+                    value: `$${property.baseMaintenance.toLocaleString()}`,
+                    inline: true
+                },
+                {
+                    name: '📊 Net Daily Profit',
+                    value: `$${(property.baseIncome - property.baseMaintenance).toLocaleString()}`,
+                    inline: false
+                },
+                {
+                    name: '💳 New Balance',
+                    value: `$${currentMoney.toLocaleString()}`,
+                    inline: true
+                }
+            )
+            .setFooter({ text: 'Use /collect to claim daily income!' })
+            .setTimestamp();
+
+        await interaction.editReply({ embeds: [embed] });
+
+    } catch (error) {
+        console.error('Error handling property purchase:', error);
+
+        const errorMessage = {
+            content: '❌ An error occurred while processing your property purchase. Please try again.',
+            ephemeral: true
+        };
+
+        if (interaction.deferred) {
+            await interaction.editReply(errorMessage);
+        } else {
+            await interaction.reply(errorMessage);
+        }
+    }
+}
+
+async function handleUseItem(interaction, userId) {
+    const { useItem, getUserInventory, SHOP_ITEMS } = require('../utils/shop');
+
+    try {
+        const itemType = interaction.customId.replace('use_item_', '');
+        const inventory = getUserInventory(userId);
+
+        // Find the first item of this type
+        const item = inventory.find(invItem => {
+            const invItemType = invItem.id.split('_')[0] + '_' + invItem.id.split('_')[1];
+            return invItemType === itemType;
+        });
+
+        if (!item) {
+            return interaction.reply({
+                content: '❌ Item not found in your inventory!',
+                ephemeral: true
+            });
+        }
+
+        const result = await useItem(userId, item.id);
+
+        if (!result.success) {
+            return interaction.reply({
+                content: `❌ ${result.message}`,
+                ephemeral: true
+            });
+        }
+
+        const shopItem = SHOP_ITEMS[itemType];
+        const embed = new EmbedBuilder()
+            .setColor('#00FF00')
+            .setTitle('✅ Item Activated!')
+            .setDescription(result.message)
+            .addFields(
+                { name: 'Effect', value: shopItem.description, inline: false },
+                { name: 'Status', value: '⚡ Active - Will be consumed on your next applicable action', inline: false }
+            )
+            .setTimestamp();
+
+        await interaction.reply({ embeds: [embed] });
+
+    } catch (error) {
+        console.error('Error handling item use:', error);
+        await interaction.reply({
+            content: '❌ An error occurred while using the item. Please try again.',
+            ephemeral: true
+        });
+    }
+}
+
+async function handleVIPPurchase(interaction, userId) {
+    const { purchaseVIP, getVIPTierById } = require('../utils/vip');
+    const { getUserMoney } = require('../utils/data');
+
+    try {
+        const tierId = interaction.customId.replace('vip_buy_', '');
+
+        await interaction.deferReply();
+
+        const result = await purchaseVIP(userId, tierId);
+
+        if (!result.success) {
+            const errorEmbed = new EmbedBuilder()
+                .setColor('#FF0000')
+                .setTitle('❌ Purchase Failed')
+                .setDescription(result.message)
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [errorEmbed] });
+        }
+
+        const tier = result.tier;
+        const actionType = result.isUpgrade ? 'Upgraded' : (result.isRenewal ? 'Renewed' : 'Purchased');
+
+        const embed = new EmbedBuilder()
+            .setColor(tier.color)
+            .setTitle(`✅ VIP ${actionType}!`)
+            .setDescription(`${tier.emoji} **${tier.name}**`)
+            .addFields(
+                {
+                    name: '💰 Cost',
+                    value: `$${tier.price.toLocaleString()}`,
+                    inline: true
+                },
+                {
+                    name: '⏰ Duration',
+                    value: '30 days',
+                    inline: true
+                },
+                {
+                    name: '✨ Your Perks',
+                    value: tier.perks.description.join('\n'),
+                    inline: false
+                }
+            )
+            .setTimestamp();
+
+        const expiryDate = new Date(result.expiresAt);
+        embed.setFooter({ text: `Expires on ${expiryDate.toLocaleDateString()}` });
+
+        const currentMoney = await getUserMoney(userId);
+        embed.addFields({
+            name: '💵 New Balance',
+            value: `$${currentMoney.toLocaleString()}`,
+            inline: true
+        });
+
+        await interaction.editReply({ embeds: [embed] });
+
+    } catch (error) {
+        console.error('Error handling VIP purchase:', error);
+        await interaction.reply({
+            content: '❌ An error occurred while processing your VIP purchase. Please try again.',
+            ephemeral: true
+        });
+    }
+}
+
+async function handleGuildHeistJoin(interaction, userId) {
+    const { joinGuildHeist, getActiveGuildHeist } = require('../utils/heist');
+
+    try {
+        const guildId = interaction.customId.replace('guildheist_join_', '');
+
+        const result = await joinGuildHeist(guildId, userId);
+
+        if (!result.success) {
+            return interaction.reply({
+                content: `❌ ${result.message}`,
+                ephemeral: true
+            });
+        }
+
+        // Update the message to show new participant count
+        const heist = getActiveGuildHeist(guildId);
+
+        if (heist) {
+            const originalEmbed = interaction.message.embeds[0];
+            const updatedEmbed = new EmbedBuilder(originalEmbed.data)
+                .setDescription(originalEmbed.description.replace(
+                    /\*\*Current Participants:\*\* \d+/,
+                    `**Current Participants:** ${heist.participants.length}`
+                ));
+
+            await interaction.message.edit({ embeds: [updatedEmbed] });
+        }
+
+        await interaction.reply({
+            content: `✅ You've joined the guild heist! **${result.participantCount}** members are now participating.`,
+            ephemeral: true
+        });
+
+    } catch (error) {
+        console.error('Error handling guild heist join:', error);
+        await interaction.reply({
+            content: '❌ An error occurred while joining the heist. Please try again.',
+            ephemeral: true
+        });
+    }
+}
+
+module.exports = { handleButtonInteraction, handleBlackjackButtons, handleTableButtons, updateBettingDisplay, startTurnTimer, handleRouletteButtons, animateDealerDrawing, handleCrapsButtons, handleWarButtons, handleCoinFlipButtons, handleHorseRaceButtons, handleCrashButtons, handleBingoButtons, handleTournamentButtons, handleHiLoButtons, handleClaimChallengeRewards, handleShopPurchase, handlePropertyPurchase, handleUseItem, handleVIPPurchase, handleGuildHeistJoin };

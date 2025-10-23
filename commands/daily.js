@@ -23,10 +23,37 @@ module.exports = {
             }
             
             // Give daily bonus
-            await setUserMoney(interaction.user.id, userMoney + 500);
+            let dailyAmount = 500;
+            let doubleBoostUsed = false;
+            let vipBonusAmount = 0;
+
+            // Apply VIP daily bonus
+            const { getVIPDailyBonus } = require('../utils/vip');
+            vipBonusAmount = getVIPDailyBonus(interaction.user.id);
+            dailyAmount += vipBonusAmount;
+
+            // Check for Double Daily boost
+            const { hasActiveBoost, consumeBoost } = require('../utils/shop');
+            if (hasActiveBoost(interaction.user.id, 'double_daily')) {
+                dailyAmount *= 2;
+                await consumeBoost(interaction.user.id, 'double_daily');
+                doubleBoostUsed = true;
+            }
+
+            await setUserMoney(interaction.user.id, userMoney + dailyAmount);
             await setLastDaily(interaction.user.id);
-            
-            await interaction.reply('🎁 Daily **$500** bonus claimed!');
+
+            let message = `🎁 Daily bonus claimed! **$${dailyAmount.toLocaleString()}**`;
+
+            if (doubleBoostUsed && vipBonusAmount > 0) {
+                message += ` (💎 Double Daily boost + 👑 VIP bonus activated!)`;
+            } else if (doubleBoostUsed) {
+                message += ` (💎 Double Daily boost activated!)`;
+            } else if (vipBonusAmount > 0) {
+                message += ` (👑 VIP bonus: +$${vipBonusAmount})`;
+            }
+
+            await interaction.reply(message);
         } catch (error) {
             console.error('Error in daily command:', error);
             await interaction.reply({

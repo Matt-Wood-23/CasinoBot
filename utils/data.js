@@ -129,8 +129,48 @@ async function recordGameResult(userId, gameType, bet, winnings, result, details
         id: Date.now() + Math.random()
     };
 
+    // Apply active boost effects
+    const { hasActiveBoost, getActiveBoost, consumeBoost } = require('./shop');
+    const boostsApplied = [];
+    let modifiedWinnings = Math.floor(winnings);
+
+    // Check for Win Multiplier boost (25% bonus on wins)
+    if ((result === 'win' || result === 'blackjack') && hasActiveBoost(userId, 'win_multiplier')) {
+        const boost = getActiveBoost(userId, 'win_multiplier');
+        const bonusAmount = Math.floor(winnings * (boost.value / 100));
+        modifiedWinnings += bonusAmount;
+
+        // Add money for the bonus
+        const currentMoney = await getUserMoney(userId);
+        await setUserMoney(userId, currentMoney + bonusAmount);
+
+        await consumeBoost(userId, 'win_multiplier');
+        boostsApplied.push({ type: 'win_multiplier', bonus: bonusAmount });
+    }
+
+    // Check for Insurance boost (50% refund on loss)
+    if (result === 'lose' && hasActiveBoost(userId, 'insurance')) {
+        const boost = getActiveBoost(userId, 'insurance');
+        const refundAmount = Math.floor(bet * (boost.value / 100));
+
+        // Refund money
+        const currentMoney = await getUserMoney(userId);
+        await setUserMoney(userId, currentMoney + refundAmount);
+
+        modifiedWinnings += refundAmount; // Add to winnings for display
+        await consumeBoost(userId, 'insurance');
+        boostsApplied.push({ type: 'insurance', refund: refundAmount });
+    }
+
+    // Update game record with modified winnings if boosts were applied
+    if (boostsApplied.length > 0) {
+        gameRecord.boostsApplied = boostsApplied;
+        gameRecord.originalWinnings = Math.floor(winnings);
+        gameRecord.winnings = modifiedWinnings;
+    }
+
     userData[userId].gameHistory.unshift(gameRecord);
-    
+
     // Keep only last 50 games
     if (userData[userId].gameHistory.length > 50) {
         userData[userId].gameHistory = userData[userId].gameHistory.slice(0, 50);
@@ -140,13 +180,48 @@ async function recordGameResult(userId, gameType, bet, winnings, result, details
     const stats = userData[userId].statistics;
     stats.gamesPlayed = (stats.gamesPlayed || 0) + 1;
     stats.totalWagered = (stats.totalWagered || 0) + Math.floor(bet);
-    stats.totalWinnings = (stats.totalWinnings || 0) + Math.floor(winnings) + Math.floor(bet);
+    stats.totalWinnings = (stats.totalWinnings || 0) + modifiedWinnings + Math.floor(bet);
 
     if (result === 'win' || result === 'blackjack') {
         stats.gamesWon = (stats.gamesWon || 0) + 1;
-        if (winnings > (stats.biggestWin || 0)) {
-            stats.biggestWin = Math.floor(winnings);
+        if (modifiedWinnings > (stats.biggestWin || 0)) {
+            stats.biggestWin = Math.floor(modifiedWinnings);
         }
+    }
+
+    // Check achievements and update challenges
+    const { checkAchievements } = require('./achievements');
+    const { updateChallengeProgress } = require('./challenges');
+
+    // Check for achievement unlocks
+    const newAchievements = await checkAchievements(userId, {
+        gameType,
+        bet: Math.floor(bet),
+        winnings: Math.floor(winnings),
+        result,
+        details
+    });
+
+    // Update challenge progress
+    const completedChallenges = await updateChallengeProgress(userId, {
+        gameType,
+        bet: Math.floor(bet),
+        winnings: Math.floor(winnings),
+        result,
+        handsPlayed: details.handsPlayed
+    });
+
+    // Store notifications for later (to be shown after game)
+    if (!userData[userId].pendingNotifications) {
+        userData[userId].pendingNotifications = { achievements: [], challenges: [] };
+    }
+
+    if (newAchievements.length > 0) {
+        userData[userId].pendingNotifications.achievements.push(...newAchievements);
+    }
+
+    if (completedChallenges.length > 0) {
+        userData[userId].pendingNotifications.challenges.push(...completedChallenges);
     }
 
     if (gameType === 'roulette') {
@@ -243,27 +318,39 @@ async function updateUserGifts(senderId, receiverId, amount) {
 function cleanUserData() {
     for (const userId in userData) {
         const user = userData[userId];
-        
+
         // Ensure all numeric fields are actually numbers
         user.money = Number(user.money) || 500;
         user.lastDaily = Number(user.lastDaily) || 0;
         user.giftsReceived = Number(user.giftsReceived) || 0;
         user.giftsSent = Number(user.giftsSent) || 0;
-        
+
         if (user.statistics) {
             const stats = user.statistics;
             Object.keys(stats).forEach(key => {
                 stats[key] = Number(stats[key]) || 0;
             });
         }
-        
+
         // Ensure gameHistory is an array
         if (!Array.isArray(user.gameHistory)) {
             user.gameHistory = [];
         }
     }
-    
+
     saveUserData();
+}
+
+// Get and clear pending notifications
+function getPendingNotifications(userId) {
+    if (!userData[userId] || !userData[userId].pendingNotifications) {
+        return { achievements: [], challenges: [] };
+    }
+
+    const notifications = userData[userId].pendingNotifications;
+    userData[userId].pendingNotifications = { achievements: [], challenges: [] };
+
+    return notifications;
 }
 
 module.exports = {
@@ -278,5 +365,6 @@ module.exports = {
     getAllUserData,
     getUserData,
     updateUserGifts,
-    cleanUserData
+    cleanUserData,
+    getPendingNotifications
 };

@@ -52,7 +52,17 @@ module.exports = {
 
         // Random job and pay
         const job = WORK_JOBS[Math.floor(Math.random() * WORK_JOBS.length)];
-        const earnings = Math.floor(Math.random() * (job.pay[1] - job.pay[0] + 1)) + job.pay[0];
+        let earnings = Math.floor(Math.random() * (job.pay[1] - job.pay[0] + 1)) + job.pay[0];
+
+        // Apply VIP work bonus
+        const { getVIPWorkBonus } = require('../utils/vip');
+        const vipBonus = getVIPWorkBonus(userId);
+        let vipBonusAmount = 0;
+
+        if (vipBonus > 0) {
+            vipBonusAmount = Math.floor(earnings * vipBonus);
+            earnings += vipBonusAmount;
+        }
 
         // Update last work time
         userData.lastWork = Date.now();
@@ -79,6 +89,13 @@ module.exports = {
         // Give money
         const currentMoney = await getUserMoney(userId);
         await setUserMoney(userId, currentMoney + afterLoan);
+
+        // Check work achievements and update challenges
+        const { checkWorkAchievements } = require('../utils/achievements');
+        const { updateChallengeProgress } = require('../utils/challenges');
+
+        await checkWorkAchievements(userId);
+        await updateChallengeProgress(userId, { type: 'work' });
 
         const embed = new EmbedBuilder()
             .setTitle('💼 Work Complete!')

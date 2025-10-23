@@ -208,6 +208,18 @@ client.on('interactionCreate', async interaction => {
             // Check loan restrictions for game commands
             const gameCommands = ['blackjack', 'slots', 'poker', 'roulette', 'craps', 'war', 'coinflip', 'horserace'];
             if (gameCommands.includes(interaction.commandName)) {
+                // Check gambling ban from failed heist
+                const { isGamblingBanned } = require('./utils/heist');
+                const banCheck = isGamblingBanned(interaction.user.id);
+
+                if (banCheck.isBanned) {
+                    return interaction.reply({
+                        content: banCheck.reason,
+                        ephemeral: true
+                    });
+                }
+
+                // Check loan restrictions
                 const { canPlayGames } = require('./utils/loanSystem');
                 const { canPlay, reason } = canPlayGames(interaction.user.id);
 
@@ -317,6 +329,43 @@ setInterval(async () => {
         }
     }
 }, 24 * 60 * 60 * 1000); // Every 24 hours
+
+// Daily challenge reset checker - runs every hour
+setInterval(async () => {
+    const { resetAllChallenges } = require('./utils/challenges');
+    await resetAllChallenges('daily');
+    console.log('Checked for daily challenge resets');
+}, 60 * 60 * 1000); // Every hour
+
+// Weekly challenge reset checker - runs every 6 hours
+setInterval(async () => {
+    const { resetAllChallenges } = require('./utils/challenges');
+    await resetAllChallenges('weekly');
+    console.log('Checked for weekly challenge resets');
+}, 6 * 60 * 60 * 1000); // Every 6 hours
+
+// VIP expiry checker - runs every 6 hours
+setInterval(async () => {
+    const { checkExpiredVIP } = require('./utils/vip');
+    const expiredUsers = await checkExpiredVIP();
+
+    if (expiredUsers.length > 0) {
+        console.log(`Checked VIP: ${expiredUsers.length} users' VIP expired`);
+
+        // Try to DM users about expired VIP
+        for (const { userId, tier } of expiredUsers) {
+            try {
+                const user = await client.users.fetch(userId);
+                await user.send({
+                    content: `⚠️ **VIP EXPIRED**\n\nYour **${tier}** VIP membership has expired!\n` +
+                        `Use \`/vip shop\` to renew your membership and keep enjoying exclusive perks!`
+                });
+            } catch (error) {
+                console.log(`Could not DM user ${userId} about expired VIP`);
+            }
+        }
+    }
+}, 6 * 60 * 60 * 1000); // Every 6 hours
 
 // Start the bot
 client.login(token);
