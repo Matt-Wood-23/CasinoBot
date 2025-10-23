@@ -160,6 +160,62 @@ module.exports = {
                     inline: false
                 },
                 {
+                    name: '🚀 Crash',
+                    value:
+                        '**How to Play:**\n' +
+                        '• Place your bet\n' +
+                        '• Watch the multiplier climb from 1.00x\n' +
+                        '• Cash out before it crashes!\n\n' +
+                        '**Mechanics:**\n' +
+                        '• Multiplier increases by 0.10x each step\n' +
+                        '• Crash point is randomly generated (1.00x - 100.00x)\n' +
+                        '• Cash out to win: Bet × Current Multiplier\n' +
+                        '• If you don\'t cash out before crash: Lose bet\n\n' +
+                        '**House Edge:** 3%\n' +
+                        '**RTP:** 97% (average)\n' +
+                        '*Uses inverse exponential distribution for fairness*',
+                    inline: false
+                },
+                {
+                    name: '🎴 Hi-Lo',
+                    value:
+                        '**How to Play:**\n' +
+                        '• Guess if next card is Higher or Lower\n' +
+                        '• Build a streak for bigger payouts\n' +
+                        '• Cash out anytime to keep your winnings\n\n' +
+                        '**Payouts (per correct guess):**\n' +
+                        '• Streak 1-2: 1.5x multiplier\n' +
+                        '• Streak 3-4: 1.8x multiplier\n' +
+                        '• Streak 5-6: 2.0x multiplier\n' +
+                        '• Streak 7+: 2.5x multiplier\n\n' +
+                        '**Rules:**\n' +
+                        '• Aces are low (1)\n' +
+                        '• If equal card, you lose\n' +
+                        '• Wrong guess = lose everything\n\n' +
+                        '**House Edge:** ~2%',
+                    inline: false
+                },
+                {
+                    name: '🃏 Poker Tournament',
+                    value:
+                        '**Format:**\n' +
+                        '• Texas Hold\'em tournament style\n' +
+                        '• 2-8 players compete\n' +
+                        '• Last player standing wins pot\n\n' +
+                        '**Chip Distribution:**\n' +
+                        '• Each player starts with 1000 chips\n' +
+                        '• Blinds increase every few hands\n' +
+                        '• Eliminated when chips reach 0\n\n' +
+                        '**Actions:**\n' +
+                        '• Fold: Give up your hand\n' +
+                        '• Check: Pass without betting (if no bet)\n' +
+                        '• Call: Match current bet\n' +
+                        '• Raise: Increase the bet\n\n' +
+                        '**Prize:** Winner takes entire pot\n' +
+                        '**House Edge:** 0% (player vs player)',
+                    inline: false
+                },
+                {
                     name: '💡 Probability Guide',
                     value:
                         '**Understanding Odds:**\n' +
@@ -177,12 +233,16 @@ module.exports = {
                 {
                     name: '📊 Return to Player (RTP)',
                     value:
+                        '• **Bingo:** 100% (player vs player, no house edge)\n' +
                         '• **Blackjack:** ~99.5% (with basic strategy)\n' +
                         '• **Casino War:** ~97.12% (going to war on ties)\n' +
                         '• **Coin Flip:** 100% (true 50/50)\n' +
+                        '• **Crash:** 97% (3% house edge)\n' +
                         '• **Craps:** ~98.6% (Pass/Don\'t Pass), ~94.4% (Field)\n' +
+                        '• **Hi-Lo:** ~98% (2% house edge)\n' +
                         '• **Horse Racing:** Varies by odds (80-90% avg)\n' +
                         '• **Lottery:** 100% of pool distributed to winners\n' +
+                        '• **Poker Tournament:** 100% (player vs player)\n' +
                         '• **Roulette:** ~94.74% (American wheel)\n' +
                         '• **Slots:** ~94-96% (varies by symbol distribution)\n' +
                         '• **Three Card Poker:** ~96.6% (Ante only)\n\n' +

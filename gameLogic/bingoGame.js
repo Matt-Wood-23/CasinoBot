@@ -34,7 +34,8 @@ class BingoGame {
             card: card,
             markedNumbers: new Set(),
             hasBingo: false,
-            bingoType: null
+            bingoType: null,
+            dmMessageId: null
         });
 
         this.prizePool += this.entryFee;
@@ -173,10 +174,15 @@ class BingoGame {
                         this.winTypes.secondBingo = userId;
                     } else if (!this.winTypes.thirdBingo) {
                         this.winTypes.thirdBingo = userId;
-                        this.gameComplete = true; // End after 3 winners
                     }
                 }
             }
+        }
+
+        // End game when all players have bingo or when we have 3 winners
+        const allPlayersHaveBingo = Array.from(this.players.values()).every(p => p.hasBingo);
+        if (allPlayersHaveBingo || this.winTypes.thirdBingo) {
+            this.gameComplete = true;
         }
     }
 
@@ -251,20 +257,28 @@ class BingoGame {
     // Calculate prizes
     calculatePrizes() {
         const prizes = [];
+        let remainingPool = this.prizePool;
+
+        // Count how many winners we have
+        const winnerCount = [this.winTypes.firstBingo, this.winTypes.secondBingo, this.winTypes.thirdBingo].filter(Boolean).length;
 
         if (this.winTypes.firstBingo) {
             const firstPrize = Math.floor(this.prizePool * 0.50);
             prizes.push({ userId: this.winTypes.firstBingo, place: '1st', prize: firstPrize });
+            remainingPool -= firstPrize;
         }
 
         if (this.winTypes.secondBingo) {
-            const secondPrize = Math.floor(this.prizePool * 0.30);
+            // If there's only 2 winners, give second place all remaining coins
+            // Otherwise calculate 30% for second place
+            const secondPrize = winnerCount === 2 ? remainingPool : Math.floor(this.prizePool * 0.30);
             prizes.push({ userId: this.winTypes.secondBingo, place: '2nd', prize: secondPrize });
+            remainingPool -= secondPrize;
         }
 
         if (this.winTypes.thirdBingo) {
-            const thirdPrize = Math.floor(this.prizePool * 0.20);
-            prizes.push({ userId: this.winTypes.thirdBingo, place: '3rd', prize: thirdPrize });
+            // Give third place all remaining coins to avoid losing any
+            prizes.push({ userId: this.winTypes.thirdBingo, place: '3rd', prize: remainingPool });
         }
 
         return prizes;

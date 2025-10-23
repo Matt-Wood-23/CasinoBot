@@ -1,11 +1,12 @@
 class LotteryGame {
-    constructor() {
+    constructor(rolloverAmount = 0) {
         this.tickets = []; // Array of { userId, numbers: [1,2,3,4,5], ticketId }
         this.ticketPrice = 100;
         this.drawTime = null;
         this.winningNumbers = null;
         this.winners = [];
-        this.prizePool = 0;
+        this.prizePool = rolloverAmount; // Start with rollover from previous lottery
+        this.rolloverAmount = rolloverAmount; // Track the initial rollover
         this.gameComplete = false;
         this.drawScheduled = false;
     }
@@ -78,6 +79,7 @@ class LotteryGame {
         }
 
         this.winners = [];
+        let totalDistributed = 0;
 
         // Distribute jackpot (60%)
         if (winnersByMatches[5].length > 0) {
@@ -89,6 +91,7 @@ class LotteryGame {
                     matches: 5,
                     prize: prizePerWinner
                 });
+                totalDistributed += prizePerWinner;
             }
         }
 
@@ -102,6 +105,7 @@ class LotteryGame {
                     matches: 4,
                     prize: prizePerWinner
                 });
+                totalDistributed += prizePerWinner;
             }
         }
 
@@ -115,8 +119,12 @@ class LotteryGame {
                     matches: 3,
                     prize: prizePerWinner
                 });
+                totalDistributed += prizePerWinner;
             }
         }
+
+        // Calculate rollover amount (undistributed pool)
+        this.rolloverForNextGame = this.prizePool - totalDistributed;
     }
 
     countMatches(ticketNumbers, winningNumbers) {

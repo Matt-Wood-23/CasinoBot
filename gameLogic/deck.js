@@ -24,7 +24,10 @@ class Deck {
     }
 
     drawCard() {
-        if (this.cards.length === 0) this.reset();
+        if (this.cards.length === 0) {
+            console.warn('Deck ran out of cards - reshuffling');
+            this.reset();
+        }
         return this.cards.pop();
     }
 

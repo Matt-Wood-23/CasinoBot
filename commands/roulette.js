@@ -64,11 +64,11 @@ module.exports = {
                 .addComponents(
                     new ButtonBuilder()
                         .setCustomId('roulette_bet_red')
-                        .setLabel('Red (2:1)')
+                        .setLabel('Red (1:1)')
                         .setStyle(ButtonStyle.Danger),
                     new ButtonBuilder()
                         .setCustomId('roulette_bet_black')
-                        .setLabel('Black (2:1)')
+                        .setLabel('Black (1:1)')
                         .setStyle(ButtonStyle.Secondary),
                     new ButtonBuilder()
                         .setCustomId('roulette_bet_green')
@@ -81,19 +81,19 @@ module.exports = {
                 .addComponents(
                     new ButtonBuilder()
                         .setCustomId('roulette_bet_odd')
-                        .setLabel('Odd (2:1)')
+                        .setLabel('Odd (1:1)')
                         .setStyle(ButtonStyle.Primary),
                     new ButtonBuilder()
                         .setCustomId('roulette_bet_even')
-                        .setLabel('Even (2:1)')
+                        .setLabel('Even (1:1)')
                         .setStyle(ButtonStyle.Primary),
                     new ButtonBuilder()
                         .setCustomId('roulette_bet_low')
-                        .setLabel('1-18 (2:1)')
+                        .setLabel('1-18 (1:1)')
                         .setStyle(ButtonStyle.Primary),
                     new ButtonBuilder()
                         .setCustomId('roulette_bet_high')
-                        .setLabel('19-36 (2:1)')
+                        .setLabel('19-36 (1:1)')
                         .setStyle(ButtonStyle.Primary)
                 );
 
@@ -102,15 +102,15 @@ module.exports = {
                 .addComponents(
                     new ButtonBuilder()
                         .setCustomId('roulette_bet_1st12')
-                        .setLabel('1st 12 (3:1)')
+                        .setLabel('1st 12 (2:1)')
                         .setStyle(ButtonStyle.Primary),
                     new ButtonBuilder()
                         .setCustomId('roulette_bet_2nd12')
-                        .setLabel('2nd 12 (3:1)')
+                        .setLabel('2nd 12 (2:1)')
                         .setStyle(ButtonStyle.Primary),
                     new ButtonBuilder()
                         .setCustomId('roulette_bet_3rd12')
-                        .setLabel('3rd 12 (3:1)')
+                        .setLabel('3rd 12 (2:1)')
                         .setStyle(ButtonStyle.Primary),
                     new ButtonBuilder()
                         .setCustomId('roulette_bet_number')

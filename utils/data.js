@@ -26,7 +26,9 @@ async function saveUserData() {
 }
 
 async function getUserMoney(userId) {
-    if (!userData[userId]) {
+    const isNewUser = !userData[userId];
+
+    if (isNewUser) {
         userData[userId] = {
             money: 500,
             lastDaily: 0,
@@ -54,12 +56,14 @@ async function getUserMoney(userId) {
             creditScore: 500,
             lastWork: 0
         };
+        // Save immediately for new users
+        await saveUserData();
     } else {
         // Ensure all fields exist and are numbers to prevent toString() errors
         userData[userId].money = userData[userId].money ?? 500;
         userData[userId].lastDaily = userData[userId].lastDaily ?? 0;
         userData[userId].statistics = userData[userId].statistics ?? {};
-        
+
         const stats = userData[userId].statistics;
         stats.gamesPlayed = stats.gamesPlayed ?? 0;
         stats.gamesWon = stats.gamesWon ?? 0;
@@ -73,7 +77,7 @@ async function getUserMoney(userId) {
         stats.slotsWins = stats.slotsWins ?? 0;
         stats.threeCardPokerGames = stats.threeCardPokerGames ?? 0;
         stats.threeCardPokerWins = stats.threeCardPokerWins ?? 0;
-        
+
         userData[userId].gameHistory = userData[userId].gameHistory ?? [];
         userData[userId].giftsReceived = userData[userId].giftsReceived ?? 0;
         userData[userId].giftsSent = userData[userId].giftsSent ?? 0;
@@ -83,9 +87,9 @@ async function getUserMoney(userId) {
         userData[userId].loanHistory = userData[userId].loanHistory ?? [];
         userData[userId].creditScore = userData[userId].creditScore ?? 500;
         userData[userId].lastWork = userData[userId].lastWork ?? 0;
+        // No save for existing users - saves happen only on modifications
     }
-    
-    await saveUserData();
+
     return userData[userId].money;
 }
 
@@ -100,7 +104,7 @@ async function setUserMoney(userId, amount) {
         const { deductFromWinnings } = require('./loanSystem');
         const winnings = newMoney - oldMoney;
 
-        const { deducted, remaining } = deductFromWinnings(userId, winnings);
+        const { deducted, remaining } = await deductFromWinnings(userId, winnings);
 
         if (deducted > 0) {
             // Set to old money + remaining winnings (after loan deduction)
@@ -113,7 +117,7 @@ async function setUserMoney(userId, amount) {
         userData[userId].money = newMoney;
     }
 
-    saveUserData(); // Non-blocking save
+    await saveUserData(); // Await save for consistency
 }
 
 async function recordGameResult(userId, gameType, bet, winnings, result, details = {},  additionalData = {}) {
@@ -266,6 +270,58 @@ async function recordGameResult(userId, gameType, bet, winnings, result, details
         stats.threeCardPokerGames = (stats.threeCardPokerGames || 0) + 1;
         if (winnings > 0) {
             stats.threeCardPokerWins = (stats.threeCardPokerWins || 0) + 1;
+        }
+    }
+
+    if (gameType === 'craps') {
+        stats.crapsGames = (stats.crapsGames || 0) + 1;
+        if (result === 'win') {
+            stats.crapsWins = (stats.crapsWins || 0) + 1;
+        }
+    }
+
+    if (gameType === 'war') {
+        stats.warGames = (stats.warGames || 0) + 1;
+        if (result === 'win') {
+            stats.warWins = (stats.warWins || 0) + 1;
+        }
+    }
+
+    if (gameType === 'coinflip') {
+        stats.coinflipGames = (stats.coinflipGames || 0) + 1;
+        if (result === 'win') {
+            stats.coinflipWins = (stats.coinflipWins || 0) + 1;
+        }
+    }
+
+    if (gameType === 'horserace') {
+        stats.horseraceGames = (stats.horseraceGames || 0) + 1;
+        if (result === 'win') {
+            stats.horseraceWins = (stats.horseraceWins || 0) + 1;
+        }
+    }
+
+    if (gameType === 'crash') {
+        stats.crashGames = (stats.crashGames || 0) + 1;
+        if (result === 'win') {
+            stats.crashWins = (stats.crashWins || 0) + 1;
+        }
+    }
+
+    if (gameType === 'hilo') {
+        stats.hiloGames = (stats.hiloGames || 0) + 1;
+        if (result === 'win') {
+            stats.hiloWins = (stats.hiloWins || 0) + 1;
+        }
+        if (details.maxStreak) {
+            stats.hiloMaxStreak = Math.max(stats.hiloMaxStreak || 0, details.maxStreak);
+        }
+    }
+
+    if (gameType === 'bingo') {
+        stats.bingoGames = (stats.bingoGames || 0) + 1;
+        if (result === 'win') {
+            stats.bingoWins = (stats.bingoWins || 0) + 1;
         }
     }
 

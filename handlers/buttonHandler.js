@@ -1,7 +1,7 @@
 const { getUserMoney, setUserMoney, recordGameResult } = require('../utils/data');
-const { createGameEmbed } = require('../utils/embeds');
+const { createGameEmbed, sendPlayerCardsDM } = require('../utils/embeds');
 const { createButtons } = require('../utils/buttons');
-const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder } = require('discord.js');
+const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const SlotsGame = require('../gameLogic/slotsGame');
 const ThreeCardPokerGame = require('../gameLogic/threeCardPokerGame');
 const BlackjackGame = require('../gameLogic/blackjackGame');
@@ -1507,6 +1507,14 @@ async function handleHorseRaceButtons(interaction, activeGames, userId, client) 
 }
 
 async function handleCrashButtons(interaction, activeGames, userId, client) {
+    // Check if this is the user's game
+    if (interaction.message.interaction && interaction.message.interaction.user.id !== userId) {
+        return interaction.reply({
+            content: '❌ This is not your game!',
+            ephemeral: true
+        });
+    }
+
     const game = activeGames.get(`crash_${userId}`);
     if (!game) {
         return interaction.reply({ content: '❌ No active crash game found!', ephemeral: true });
@@ -1535,7 +1543,7 @@ async function handleCrashButtons(interaction, activeGames, userId, client) {
             components: buttons ? [buttons] : []
         });
 
-        // If game just completed, award winnings and record result
+        // If game just completed (crashed), record result
         if (game.gameComplete) {
             const currentMoney = await getUserMoney(userId);
             await setUserMoney(userId, currentMoney + game.totalWinnings);
@@ -1543,12 +1551,38 @@ async function handleCrashButtons(interaction, activeGames, userId, client) {
             const gameResult = game.result === 'win' ? 'win' : 'lose';
             await recordGameResult(userId, 'crash', game.betAmount, game.totalWinnings - game.betAmount, gameResult, {
                 crashMultiplier: game.crashMultiplier,
-                targetMultiplier: game.targetMultiplier
+                cashedOutAt: game.result === 'win' ? game.currentMultiplier : null
             });
         }
+    } else if (interaction.customId === 'crash_cashout') {
+        if (!game.canContinue()) {
+            return interaction.reply({ content: '❌ Game is already complete!', ephemeral: true });
+        }
+
+        // Cash out at current multiplier
+        game.cashOut();
+
+        // Award winnings
+        const currentMoney = await getUserMoney(userId);
+        await setUserMoney(userId, currentMoney + game.totalWinnings);
+
+        // Record result
+        await recordGameResult(userId, 'crash', game.betAmount, game.totalWinnings - game.betAmount, 'win', {
+            crashMultiplier: game.crashMultiplier,
+            cashedOutAt: game.currentMultiplier
+        });
+
+        // Update the display
+        await interaction.deferUpdate();
+        const embed = await createGameEmbed(game, userId, client);
+        const buttons = createButtons(game, userId, client);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons ? [buttons] : []
+        });
     } else if (interaction.customId === 'crash_play_again') {
         const bet = game.betAmount;
-        const target = game.targetMultiplier;
         const userMoney = await getUserMoney(userId);
 
         if (userMoney < bet) {
@@ -1560,7 +1594,7 @@ async function handleCrashButtons(interaction, activeGames, userId, client) {
 
         // Deduct bet and create new game
         await setUserMoney(userId, userMoney - bet);
-        const newGame = new CrashGame(userId, bet, target);
+        const newGame = new CrashGame(userId, bet);
         activeGames.set(`crash_${userId}`, newGame);
 
         await interaction.deferUpdate();
@@ -1610,7 +1644,13 @@ async function handleBingoButtons(interaction, activeGames, userId, client) {
                 .setDescription(`Here's your bingo card for the game!\n\n${cardDisplay}\n\n[X] = Marked\nXX = Free Space`)
                 .setColor('#FFD700');
 
-            await user.send({ embeds: [dmEmbed] });
+            const dmMessage = await user.send({ embeds: [dmEmbed] });
+
+            // Store the DM message ID for later editing
+            const playerData = game.players.get(userId);
+            if (playerData) {
+                playerData.dmMessageId = dmMessage.id;
+            }
         } catch (error) {
             console.log(`Could not DM bingo card to ${userId}`);
         }
@@ -1690,7 +1730,22 @@ async function handleBingoButtons(interaction, activeGames, userId, client) {
                     .setDescription(cardMessage)
                     .setColor(playerData.hasBingo ? '#00FF00' : '#FFD700');
 
-                await user.send({ embeds: [dmEmbed] });
+                // Edit the existing DM if we have a message ID, otherwise send a new one
+                if (playerData.dmMessageId) {
+                    try {
+                        const dmChannel = await user.createDM();
+                        const dmMessage = await dmChannel.messages.fetch(playerData.dmMessageId);
+                        await dmMessage.edit({ embeds: [dmEmbed] });
+                    } catch (editError) {
+                        // If editing fails, send a new message and update the ID
+                        const newDmMessage = await user.send({ embeds: [dmEmbed] });
+                        playerData.dmMessageId = newDmMessage.id;
+                    }
+                } else {
+                    // No message ID stored, send a new message
+                    const newDmMessage = await user.send({ embeds: [dmEmbed] });
+                    playerData.dmMessageId = newDmMessage.id;
+                }
             } catch (error) {
                 console.log(`Could not DM update to ${playerId}`);
             }
@@ -1847,6 +1902,9 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
 
         await interaction.deferUpdate();
 
+        // Send player cards via DM
+        await sendPlayerCardsDM(tournament, client);
+
         // Start the tournament
         const embed = await createGameEmbed(tournament, userId, client);
         const buttons = createButtons(tournament, userId, client);
@@ -1872,31 +1930,66 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
             components: buttons ? [buttons] : []
         });
 
-    } else if (interaction.customId === 'tournament_check') {
+        // Check if hand/tournament is complete after fold
+        if (tournament.phase === 'handComplete') {
+            // Wait 3 seconds then start next hand
+            setTimeout(async () => {
+                tournament.startNewHand();
+
+                // Send player cards via DM for the new hand
+                await sendPlayerCardsDM(tournament, client);
+
+                const newEmbed = await createGameEmbed(tournament, userId, client);
+                const newButtons = createButtons(tournament, userId, client);
+
+                await interaction.message.edit({
+                    embeds: [newEmbed],
+                    components: newButtons ? [newButtons] : []
+                });
+            }, 3000);
+        } else if (tournament.tournamentComplete) {
+            // Award prizes
+            const prizes = tournament.winners;
+            for (const prize of prizes) {
+                const currentMoney = await getUserMoney(prize.userId);
+                await setUserMoney(prize.userId, currentMoney + prize.prize);
+
+                await recordGameResult(prize.userId, 'poker_tournament', tournament.buyIn, prize.prize - tournament.buyIn, 'win', {
+                    place: prize.place,
+                    prizePool: tournament.prizePool
+                });
+            }
+
+            // Record losses for non-winners
+            for (const [playerId] of tournament.players) {
+                const isWinner = prizes.some(p => p.userId === playerId);
+                if (!isWinner) {
+                    await recordGameResult(playerId, 'poker_tournament', tournament.buyIn, -tournament.buyIn, 'lose', {
+                        prizePool: tournament.prizePool
+                    });
+                }
+            }
+        }
+
+    } else if (interaction.customId === 'tournament_check_call') {
         if (tournament.getCurrentPlayer() !== userId) {
             return interaction.reply({ content: '❌ It\'s not your turn!', ephemeral: true });
         }
 
-        const success = tournament.check(userId);
-        if (!success) {
-            return interaction.reply({ content: '❌ You cannot check! You must call or fold.', ephemeral: true });
+        const player = tournament.players.get(userId);
+        const callAmount = tournament.currentBet - player.bet;
+
+        // Determine if this is a check or call
+        if (callAmount === 0) {
+            // Check
+            const success = tournament.check(userId);
+            if (!success) {
+                return interaction.reply({ content: '❌ Cannot check!', ephemeral: true });
+            }
+        } else {
+            // Call
+            tournament.call(userId);
         }
-
-        await interaction.deferUpdate();
-        const embed = await createGameEmbed(tournament, userId, client);
-        const buttons = createButtons(tournament, userId, client);
-
-        await interaction.editReply({
-            embeds: [embed],
-            components: buttons ? [buttons] : []
-        });
-
-    } else if (interaction.customId === 'tournament_call') {
-        if (tournament.getCurrentPlayer() !== userId) {
-            return interaction.reply({ content: '❌ It\'s not your turn!', ephemeral: true });
-        }
-
-        tournament.call(userId);
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(tournament, userId, client);
@@ -1912,6 +2005,10 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
             // Wait 3 seconds then start next hand
             setTimeout(async () => {
                 tournament.startNewHand();
+
+                // Send player cards via DM for the new hand
+                await sendPlayerCardsDM(tournament, client);
+
                 const newEmbed = await createGameEmbed(tournament, userId, client);
                 const newButtons = createButtons(tournament, userId, client);
 
@@ -1974,6 +2071,10 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
         tournament.startNewHand();
 
         await interaction.deferUpdate();
+
+        // Send player cards via DM for the new hand
+        await sendPlayerCardsDM(tournament, client);
+
         const embed = await createGameEmbed(tournament, userId, client);
         const buttons = createButtons(tournament, userId, client);
 
