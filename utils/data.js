@@ -44,7 +44,26 @@ async function getUserMoney(userId) {
                 slotsSpins: 0,
                 slotsWins: 0,
                 threeCardPokerGames: 0,
-                threeCardPokerWins: 0
+                threeCardPokerWins: 0,
+                // Work stats
+                totalWorkSessions: 0,
+                totalWorkEarnings: 0,
+                // Property stats
+                totalPropertiesOwned: 0,
+                totalPropertyIncomeCollected: 0,
+                totalPropertyValue: 0,
+                // Shop stats
+                totalItemsPurchased: 0,
+                totalBoostsUsed: 0,
+                totalSpentOnShop: 0,
+                // Achievement/Challenge stats
+                totalAchievementsUnlocked: 0,
+                totalChallengesCompleted: 0,
+                totalChallengeRewardsEarned: 0,
+                // Guild stats
+                totalGuildContributions: 0,
+                guildHeistsParticipated: 0,
+                guildHeistsWon: 0
             },
             gameHistory: [],
             giftsReceived: 0,
@@ -77,6 +96,25 @@ async function getUserMoney(userId) {
         stats.slotsWins = stats.slotsWins ?? 0;
         stats.threeCardPokerGames = stats.threeCardPokerGames ?? 0;
         stats.threeCardPokerWins = stats.threeCardPokerWins ?? 0;
+        // Work stats
+        stats.totalWorkSessions = stats.totalWorkSessions ?? 0;
+        stats.totalWorkEarnings = stats.totalWorkEarnings ?? 0;
+        // Property stats
+        stats.totalPropertiesOwned = stats.totalPropertiesOwned ?? 0;
+        stats.totalPropertyIncomeCollected = stats.totalPropertyIncomeCollected ?? 0;
+        stats.totalPropertyValue = stats.totalPropertyValue ?? 0;
+        // Shop stats
+        stats.totalItemsPurchased = stats.totalItemsPurchased ?? 0;
+        stats.totalBoostsUsed = stats.totalBoostsUsed ?? 0;
+        stats.totalSpentOnShop = stats.totalSpentOnShop ?? 0;
+        // Achievement/Challenge stats
+        stats.totalAchievementsUnlocked = stats.totalAchievementsUnlocked ?? 0;
+        stats.totalChallengesCompleted = stats.totalChallengesCompleted ?? 0;
+        stats.totalChallengeRewardsEarned = stats.totalChallengeRewardsEarned ?? 0;
+        // Guild stats
+        stats.totalGuildContributions = stats.totalGuildContributions ?? 0;
+        stats.guildHeistsParticipated = stats.guildHeistsParticipated ?? 0;
+        stats.guildHeistsWon = stats.guildHeistsWon ?? 0;
 
         userData[userId].gameHistory = userData[userId].gameHistory ?? [];
         userData[userId].giftsReceived = userData[userId].giftsReceived ?? 0;

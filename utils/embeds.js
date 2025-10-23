@@ -819,6 +819,319 @@ async function createStatsEmbed(targetUser, client) {
     return embed;
 }
 
+async function createEconomyStatsEmbed(targetUser, client) {
+    const { getUserData } = require('./data');
+    const { getUserProperties } = require('./properties');
+    const { getUserVIPTier } = require('./vip');
+
+    const userData = getUserData(targetUser.id);
+
+    if (!userData) {
+        return createErrorEmbed('No Data', 'No statistics found for this user.');
+    }
+
+    const stats = userData.statistics;
+    const properties = getUserProperties(targetUser.id);
+    const vipTier = getUserVIPTier(targetUser.id);
+
+    // Calculate property values
+    let totalDailyIncome = 0;
+    let totalDailyMaintenance = 0;
+    for (const prop of properties) {
+        totalDailyIncome += prop.dailyIncome;
+        totalDailyMaintenance += prop.dailyMaintenance;
+    }
+    const netDailyIncome = totalDailyIncome - totalDailyMaintenance;
+
+    const embed = new EmbedBuilder()
+        .setTitle(`💼 ${targetUser.username}'s Economy Stats`)
+        .setColor('#00D9FF')
+        .setThumbnail(targetUser.displayAvatarURL())
+        .setDescription(
+            `**Financial Overview**\n` +
+            `💳 Current Balance: $${(userData.money || 0).toLocaleString()}\n` +
+            `📊 Net Worth: $${((userData.money || 0) + (stats.totalPropertyValue || 0)).toLocaleString()}\n` +
+            `⚖️ Credit Score: ${userData.creditScore || 500}/1000`
+        )
+        .addFields(
+            {
+                name: '🏢 Properties',
+                value: `Owned: ${stats.totalPropertiesOwned || 0}\n` +
+                       `Portfolio Value: $${(stats.totalPropertyValue || 0).toLocaleString()}\n` +
+                       `Total Income Collected: $${(stats.totalPropertyIncomeCollected || 0).toLocaleString()}\n` +
+                       `Daily Net Income: $${netDailyIncome.toLocaleString()}/day`,
+                inline: true
+            },
+            {
+                name: '💼 Work',
+                value: `Sessions: ${stats.totalWorkSessions || 0}\n` +
+                       `Total Earned: $${(stats.totalWorkEarnings || 0).toLocaleString()}\n` +
+                       `Avg per Session: $${stats.totalWorkSessions > 0 ? Math.floor((stats.totalWorkEarnings || 0) / stats.totalWorkSessions).toLocaleString() : '0'}`,
+                inline: true
+            },
+            {
+                name: '🏪 Shopping',
+                value: `Items Purchased: ${stats.totalItemsPurchased || 0}\n` +
+                       `Boosts Used: ${stats.totalBoostsUsed || 0}\n` +
+                       `Total Spent: $${(stats.totalSpentOnShop || 0).toLocaleString()}`,
+                inline: true
+            },
+            {
+                name: '✨ VIP Status',
+                value: vipTier
+                    ? `${vipTier.emoji} **${vipTier.name}**\n` +
+                      `Work Bonus: +${vipTier.perks.workMultiplier * 100}%\n` +
+                      `Daily Bonus: $${vipTier.perks.dailyBonus.toLocaleString()}`
+                    : 'No VIP Membership\nUse `/vip shop` to upgrade!',
+                inline: true
+            },
+            {
+                name: '💸 Loans',
+                value: userData.activeLoan
+                    ? `Active Loan: $${(userData.activeLoan.totalOwed - userData.activeLoan.amountPaid).toLocaleString()}\n` +
+                      `Loans Taken: ${userData.loanHistory?.length || 0}`
+                    : `No Active Loan\nLoans Taken: ${userData.loanHistory?.length || 0}`,
+                inline: true
+            },
+            {
+                name: '🎁 Gifts',
+                value: `Sent: ${userData.giftsSent || 0} ($${(userData.totalGiftsSent || 0).toLocaleString()})\n` +
+                       `Received: ${userData.giftsReceived || 0} ($${(userData.totalGiftsReceived || 0).toLocaleString()})`,
+                inline: true
+            }
+        )
+        .setTimestamp();
+
+    return embed;
+}
+
+async function createHeistStatsEmbed(targetUser, client) {
+    const { getUserData } = require('./data');
+    const { initializeHeist, isGamblingBanned } = require('./heist');
+
+    const userData = getUserData(targetUser.id);
+    const heistData = initializeHeist(targetUser.id);
+
+    if (!userData || !heistData) {
+        return createErrorEmbed('No Data', 'No heist statistics found for this user.');
+    }
+
+    const stats = userData.statistics;
+    const soloSuccessRate = heistData.totalHeists > 0
+        ? ((heistData.successfulHeists / heistData.totalHeists) * 100).toFixed(1)
+        : '0.0';
+
+    const guildSuccessRate = stats.guildHeistsParticipated > 0
+        ? ((stats.guildHeistsWon / stats.guildHeistsParticipated) * 100).toFixed(1)
+        : '0.0';
+
+    const netProfit = (heistData.totalEarned || 0) - (heistData.totalLost || 0);
+    const banCheck = isGamblingBanned(targetUser.id);
+
+    const embed = new EmbedBuilder()
+        .setTitle(`🎭 ${targetUser.username}'s Heist Stats`)
+        .setColor(banCheck.isBanned ? '#FF0000' : '#FF6600')
+        .setThumbnail(targetUser.displayAvatarURL())
+        .setDescription(
+            banCheck.isBanned
+                ? `🚫 **CURRENTLY GAMBLING BANNED**\n${banCheck.reason}\n\n`
+                : `**Heist Overview**\n`
+        )
+        .addFields(
+            {
+                name: '🎭 Solo Heists',
+                value: `Total Attempts: ${heistData.totalHeists || 0}\n` +
+                       `Successful: ${heistData.successfulHeists || 0} (${soloSuccessRate}%)\n` +
+                       `Failed: ${(heistData.totalHeists || 0) - (heistData.successfulHeists || 0)}\n` +
+                       `Biggest Score: $${(heistData.biggestScore || 0).toLocaleString()}`,
+                inline: true
+            },
+            {
+                name: '👥 Guild Heists',
+                value: `Participated: ${stats.guildHeistsParticipated || 0}\n` +
+                       `Won: ${stats.guildHeistsWon || 0} (${guildSuccessRate}%)\n` +
+                       `Failed: ${(stats.guildHeistsParticipated || 0) - (stats.guildHeistsWon || 0)}`,
+                inline: true
+            },
+            {
+                name: '💰 Earnings',
+                value: `Total Earned: $${(heistData.totalEarned || 0).toLocaleString()}\n` +
+                       `Total Lost: $${(heistData.totalLost || 0).toLocaleString()}\n` +
+                       `Net Profit: ${netProfit >= 0 ? '+' : ''}$${netProfit.toLocaleString()}`,
+                inline: true
+            },
+            {
+                name: '📊 Overall Stats',
+                value: `Combined Heists: ${(heistData.totalHeists || 0) + (stats.guildHeistsParticipated || 0)}\n` +
+                       `Combined Success: ${(heistData.successfulHeists || 0) + (stats.guildHeistsWon || 0)}\n` +
+                       `Heist Debt: $${(userData.heistDebt || 0).toLocaleString()}`,
+                inline: false
+            }
+        )
+        .setTimestamp();
+
+    // Add cooldown info if applicable
+    const now = Date.now();
+    if (heistData.cooldownUntil > now) {
+        const timeLeft = heistData.cooldownUntil - now;
+        const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
+        const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
+
+        embed.setFooter({ text: `Next heist available in: ${hoursLeft}h ${minutesLeft}m` });
+    } else {
+        embed.setFooter({ text: 'Ready for another heist!' });
+    }
+
+    return embed;
+}
+
+async function createProgressionStatsEmbed(targetUser, client) {
+    const { getUserData } = require('./data');
+    const { getUserAchievements } = require('./achievements');
+    const { getUserChallenges } = require('./challenges');
+
+    const userData = getUserData(targetUser.id);
+
+    if (!userData) {
+        return createErrorEmbed('No Data', 'No progression data found for this user.');
+    }
+
+    const stats = userData.statistics;
+    const achievements = getUserAchievements(targetUser.id);
+    const challenges = getUserChallenges(targetUser.id);
+
+    // Calculate challenge completion
+    const dailyCompleted = challenges?.daily.filter(c => c.progress >= c.target).length || 0;
+    const weeklyCompleted = challenges?.weekly.filter(c => c.progress >= c.target).length || 0;
+
+    const embed = new EmbedBuilder()
+        .setTitle(`🏆 ${targetUser.username}'s Progression`)
+        .setColor('#FFD700')
+        .setThumbnail(targetUser.displayAvatarURL())
+        .setDescription(`**Achievement & Challenge Progress**`)
+        .addFields(
+            {
+                name: '🏅 Achievements',
+                value: `Unlocked: ${achievements?.unlocked.length || 0}/${Object.keys(achievements?.unlocked || {}).length + (achievements?.locked.length || 0)}\n` +
+                       `Total Unlocked: ${stats.totalAchievementsUnlocked || 0}\n` +
+                       `Completion: ${achievements?.unlocked.length > 0 ? ((achievements.unlocked.length / (achievements.unlocked.length + achievements.locked.length)) * 100).toFixed(1) : '0'}%`,
+                inline: true
+            },
+            {
+                name: '🎯 Challenges',
+                value: `Daily: ${dailyCompleted}/${challenges?.daily.length || 0} completed\n` +
+                       `Weekly: ${weeklyCompleted}/${challenges?.weekly.length || 0} completed\n` +
+                       `Total Completed: ${stats.totalChallengesCompleted || 0}`,
+                inline: true
+            },
+            {
+                name: '💎 Rewards Earned',
+                value: `Challenge Rewards: $${(stats.totalChallengeRewardsEarned || 0).toLocaleString()}\n` +
+                       `Achievement Points: ${(achievements?.totalPoints || 0).toLocaleString()}`,
+                inline: true
+            }
+        )
+        .setTimestamp();
+
+    // Show recent achievements
+    if (achievements && achievements.unlocked.length > 0) {
+        const recentAchievements = achievements.unlocked
+            .sort((a, b) => (b.unlockedAt || 0) - (a.unlockedAt || 0))
+            .slice(0, 3)
+            .map(a => `${a.emoji} **${a.name}**`)
+            .join('\n');
+
+        embed.addFields({
+            name: '⭐ Recent Achievements',
+            value: recentAchievements || 'None yet',
+            inline: false
+        });
+    }
+
+    embed.setFooter({ text: 'Use /achievements and /challenges for details' });
+
+    return embed;
+}
+
+async function createGuildStatsEmbed(targetUser, client) {
+    const { getUserData } = require('./data');
+    const { getUserGuild } = require('./guilds');
+
+    const userData = getUserData(targetUser.id);
+    const guild = getUserGuild(targetUser.id);
+
+    if (!userData) {
+        return createErrorEmbed('No Data', 'No guild statistics found for this user.');
+    }
+
+    const stats = userData.statistics;
+
+    if (!guild) {
+        return createInfoEmbed(
+            '🏰 No Guild',
+            `**${targetUser.username}** is not in a guild!\n\n` +
+            `Use \`/guild create\` to start your own guild, or\n` +
+            `Use \`/guild join\` to join an existing guild.`
+        );
+    }
+
+    const isOwner = guild.ownerId === targetUser.id;
+    const memberCount = guild.members.length;
+
+    // Get user's member data
+    const memberData = guild.members.find(m => m.userId === targetUser.id);
+    const joinedDate = memberData ? new Date(memberData.joinedAt) : null;
+    const daysInGuild = joinedDate ? Math.floor((Date.now() - joinedDate.getTime()) / (24 * 60 * 60 * 1000)) : 0;
+
+    const embed = new EmbedBuilder()
+        .setTitle(`🏰 ${targetUser.username}'s Guild Stats`)
+        .setColor('#9B59B6')
+        .setThumbnail(targetUser.displayAvatarURL())
+        .setDescription(`**Guild: ${guild.name}**\n${isOwner ? '👑 Owner' : '👤 Member'}`)
+        .addFields(
+            {
+                name: '📊 Guild Info',
+                value: `Members: ${memberCount}/10\n` +
+                       `Treasury: $${guild.treasury.toLocaleString()}\n` +
+                       `Created: ${new Date(guild.createdAt).toLocaleDateString()}`,
+                inline: true
+            },
+            {
+                name: '🎭 Your Contributions',
+                value: `Total Donated: $${(userData.guild?.contributedTotal || 0).toLocaleString()}\n` +
+                       `Guild Stats: $${(stats.totalGuildContributions || 0).toLocaleString()}\n` +
+                       `Days in Guild: ${daysInGuild}`,
+                inline: true
+            },
+            {
+                name: '🏴‍☠️ Guild Heists',
+                value: `Participated: ${stats.guildHeistsParticipated || 0}\n` +
+                       `Won: ${stats.guildHeistsWon || 0}\n` +
+                       `Success Rate: ${stats.guildHeistsParticipated > 0 ? ((stats.guildHeistsWon / stats.guildHeistsParticipated) * 100).toFixed(1) : '0'}%`,
+                inline: true
+            }
+        )
+        .setTimestamp();
+
+    // Check if guild heist is on cooldown
+    if (userData.guild?.guildHeistData) {
+        const now = Date.now();
+        const cooldownUntil = userData.guild.guildHeistData.cooldownUntil;
+
+        if (cooldownUntil > now) {
+            const timeLeft = cooldownUntil - now;
+            const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
+            const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
+
+            embed.setFooter({ text: `Next guild heist in: ${hoursLeft}h ${minutesLeft}m` });
+        } else {
+            embed.setFooter({ text: 'Guild heist available! Use /guildheist' });
+        }
+    }
+
+    return embed;
+}
+
 async function createHistoryEmbed(user, gamesToShow = 10) {
     const { getUserData } = require('./data');
     const userData = getUserData(user.id);
@@ -1332,6 +1645,10 @@ module.exports = {
     createInfoEmbed,
     createLeaderboardEmbed,
     createStatsEmbed,
+    createEconomyStatsEmbed,
+    createHeistStatsEmbed,
+    createProgressionStatsEmbed,
+    createGuildStatsEmbed,
     createHistoryEmbed,
     sendPlayerCardsDM
 };
