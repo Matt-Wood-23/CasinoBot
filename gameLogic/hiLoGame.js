@@ -5,7 +5,7 @@ class HiLoGame {
         this.userId = userId;
         this.initialBet = initialBet;
         this.deck = new Deck();
-        this.currentCard = this.deck.draw();
+        this.currentCard = this.deck.drawCard();
         this.nextCard = null;
         this.streak = 0;
         this.multiplier = 1.0;
@@ -22,7 +22,7 @@ class HiLoGame {
         }
 
         // Draw next card
-        this.nextCard = this.deck.draw();
+        this.nextCard = this.deck.drawCard();
 
         const currentValue = this.getCardValue(this.currentCard);
         const nextValue = this.getCardValue(this.nextCard);

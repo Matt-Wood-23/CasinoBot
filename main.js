@@ -17,7 +17,7 @@ const CrapsGame = require('./gameLogic/crapsGame');
 const WarGame = require('./gameLogic/warGame');
 
 // Import configuration
-const { token, ALLOWED_CHANNEL_IDS, ADMIN_USER_ID } = require('./config');
+const { token, ALLOWED_CHANNEL_IDS, ADMIN_USER_ID, liam } = require('./config');
 
 // Create client
 const client = new Client({
@@ -57,8 +57,17 @@ for (const file of commandFiles) {
 // Helper functions
 async function dealCardsWithDelay(interaction, message, game, userId, delay = 1000) {
     const { getUserMoney, setUserMoney, recordGameResult } = require('./utils/data');
-    
-    while (game.dealingPhase < 5 && !game.gameOver) {
+
+    // Prevent concurrent dealing for the same game
+    if (game.isDealing) {
+        console.log(`Game ${game.gameId} is already dealing, skipping duplicate call`);
+        return;
+    }
+
+    game.isDealing = true;
+    const currentGameId = game.gameId;
+
+    while (game.dealingPhase < 5 && !game.gameOver && game.gameId === currentGameId) {
         game.dealNextCard();
         
         const embed = await createGameEmbed(game, userId, client);
@@ -80,10 +89,18 @@ async function dealCardsWithDelay(interaction, message, game, userId, delay = 10
             });
         } catch (error) {
             console.error('Error updating game message during dealing:', error);
+            game.isDealing = false;
             return;
         }
-        
+
         await new Promise(resolve => setTimeout(resolve, delay));
+    }
+
+    // Check if game was replaced during dealing
+    if (game.gameId !== currentGameId) {
+        console.log(`Game ${currentGameId} was replaced, stopping dealing`);
+        game.isDealing = false;
+        return;
     }
 
     if (game.dealingPhase === 5) {
@@ -144,9 +161,12 @@ async function dealCardsWithDelay(interaction, message, game, userId, delay = 10
             });
         } catch (error) {
             console.error('Error updating game message:', error);
+            game.isDealing = false;
             return;
         }
     }
+
+    game.isDealing = false;
 }
 
 function cleanupStaleGames() {
@@ -206,7 +226,7 @@ client.on('interactionCreate', async interaction => {
             }
 
             // Check loan restrictions for game commands
-            const gameCommands = ['blackjack', 'slots', 'poker', 'roulette', 'craps', 'war', 'coinflip', 'horserace'];
+            const gameCommands = ['blackjack', 'slots', 'poker', 'roulette', 'craps', 'war', 'coinflip', 'horserace', 'crash', 'bingo', 'hilo', 'pokertournament', 'plinko'];
             if (gameCommands.includes(interaction.commandName)) {
                 const { canPlayGames } = require('./utils/loanSystem');
                 const { canPlay, reason } = canPlayGames(interaction.user.id);
@@ -275,6 +295,19 @@ client.on('error', error => {
 process.on('unhandledRejection', error => {
     console.error('Unhandled promise rejection:', error);
 });
+
+client.on('messageCreate', async message => {
+
+    //get the bots id
+    const botID = client.user.id;
+
+
+    if(message.content.toLowerCase() === '!jacob' && message.author.id != botID)
+        message.channel.send({files:['./IMG_3001.jpg']});
+   
+});
+
+const { saveUserData: forceSaveUserData } = require('./utils/data');
 
 // Graceful shutdown handling
 async function gracefulShutdown(signal) {

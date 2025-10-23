@@ -168,7 +168,7 @@ class PokerTournament {
         for (const userId of this.activePlayers) {
             const player = this.players.get(userId);
             if (!player.eliminated) {
-                player.cards = [this.deck.draw(), this.deck.draw()];
+                player.cards = [this.deck.drawCard(), this.deck.drawCard()];
             }
         }
     }
@@ -297,15 +297,15 @@ class PokerTournament {
 
         if (this.phase === 'preflop') {
             this.phase = 'flop';
-            this.communityCards.push(this.deck.draw(), this.deck.draw(), this.deck.draw());
+            this.communityCards.push(this.deck.drawCard(), this.deck.drawCard(), this.deck.drawCard());
             this.currentPlayerIndex = (this.dealerButtonIndex + 1) % this.activePlayers.length;
         } else if (this.phase === 'flop') {
             this.phase = 'turn';
-            this.communityCards.push(this.deck.draw());
+            this.communityCards.push(this.deck.drawCard());
             this.currentPlayerIndex = (this.dealerButtonIndex + 1) % this.activePlayers.length;
         } else if (this.phase === 'turn') {
             this.phase = 'river';
-            this.communityCards.push(this.deck.draw());
+            this.communityCards.push(this.deck.drawCard());
             this.currentPlayerIndex = (this.dealerButtonIndex + 1) % this.activePlayers.length;
         } else if (this.phase === 'river') {
             this.phase = 'showdown';

@@ -441,12 +441,16 @@ function createHorseRaceButtons(game) {
 
 function createCrashButtons(game) {
     if (!game.gameComplete) {
-        // Show "Continue" button during the game
+        // Show "Continue" and "Cash Out" buttons during the game
         const row = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId('crash_continue')
                     .setLabel('🚀 Continue')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId('crash_cashout')
+                    .setLabel(`💰 Cash Out (${Math.floor(game.betAmount * game.currentMultiplier).toLocaleString()})`)
                     .setStyle(ButtonStyle.Success)
             );
         return row;
@@ -509,16 +513,8 @@ function createTournamentButtons(tournament, userId) {
         return row;
     }
 
-    // Game in progress - show action buttons
-    const currentPlayer = tournament.getCurrentPlayer();
-    const isCurrentPlayer = currentPlayer === userId;
-    const player = tournament.players.get(userId);
-
-    if (!player || player.eliminated || player.folded) {
-        // Player is out or folded, no buttons
-        return null;
-    }
-
+    // Game in progress - show generic action buttons
+    // Buttons work for all players - the handler will check individual player state
     const row = new ActionRowBuilder();
 
     // Fold button (always available)
@@ -527,28 +523,15 @@ function createTournamentButtons(tournament, userId) {
             .setCustomId('tournament_fold')
             .setLabel('Fold')
             .setStyle(ButtonStyle.Danger)
-            .setDisabled(!isCurrentPlayer)
     );
 
-    // Check/Call button
-    const callAmount = tournament.currentBet - player.bet;
-    if (callAmount === 0) {
-        row.addComponents(
-            new ButtonBuilder()
-                .setCustomId('tournament_check')
-                .setLabel('Check')
-                .setStyle(ButtonStyle.Secondary)
-                .setDisabled(!isCurrentPlayer)
-        );
-    } else {
-        row.addComponents(
-            new ButtonBuilder()
-                .setCustomId('tournament_call')
-                .setLabel(`Call ${callAmount}`)
-                .setStyle(ButtonStyle.Primary)
-                .setDisabled(!isCurrentPlayer)
-        );
-    }
+    // Check/Call button (generic - will work for both)
+    row.addComponents(
+        new ButtonBuilder()
+            .setCustomId('tournament_check_call')
+            .setLabel('Check / Call')
+            .setStyle(ButtonStyle.Primary)
+    );
 
     // Raise button
     row.addComponents(
@@ -556,7 +539,6 @@ function createTournamentButtons(tournament, userId) {
             .setCustomId('tournament_raise')
             .setLabel('Raise')
             .setStyle(ButtonStyle.Success)
-            .setDisabled(!isCurrentPlayer || player.chips === 0)
     );
 
     return row;

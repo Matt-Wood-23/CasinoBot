@@ -1,12 +1,11 @@
 class CrashGame {
-    constructor(userId, betAmount, targetMultiplier) {
+    constructor(userId, betAmount) {
         this.userId = userId;
         this.betAmount = betAmount;
-        this.targetMultiplier = parseFloat(targetMultiplier);
 
         this.crashMultiplier = this.generateCrashPoint();
         this.currentMultiplier = 1.00;
-        this.stepSize = 0.10; // Increment by 0.10x each step
+        this.stepSize = 0.25; // Increment by 0.10x each step
         this.gameComplete = false;
         this.totalWinnings = 0;
         this.result = null;
@@ -37,12 +36,6 @@ class CrashGame {
             return false;
         }
 
-        // Check if we've hit the target multiplier (player wins)
-        if (this.currentMultiplier >= this.targetMultiplier) {
-            this.cashOut();
-            return false;
-        }
-
         return true; // Can continue stepping
     }
 
@@ -55,14 +48,13 @@ class CrashGame {
 
     cashOut() {
         this.gameComplete = true;
-        this.currentMultiplier = this.targetMultiplier;
-        this.totalWinnings = Math.floor(this.betAmount * this.targetMultiplier);
+        this.totalWinnings = Math.floor(this.betAmount * this.currentMultiplier);
         this.result = 'win';
     }
 
     getProgressBar() {
         const barLength = 20;
-        const progress = Math.min(this.currentMultiplier / Math.max(this.targetMultiplier, this.crashMultiplier), 1);
+        const progress = Math.min(this.currentMultiplier / this.crashMultiplier, 1);
         const filledLength = Math.floor(progress * barLength);
         const emptyLength = barLength - filledLength;
 
@@ -83,9 +75,9 @@ class CrashGame {
         }
 
         if (this.result === 'win') {
-            return `✅ Cashed out at ${this.targetMultiplier.toFixed(2)}x! (Crashed at ${this.crashMultiplier.toFixed(2)}x)`;
+            return `✅ Cashed out at ${this.currentMultiplier.toFixed(2)}x! (Crashed at ${this.crashMultiplier.toFixed(2)}x)`;
         } else {
-            return `💥 CRASHED at ${this.crashMultiplier.toFixed(2)}x! (Target was ${this.targetMultiplier.toFixed(2)}x)`;
+            return `💥 CRASHED at ${this.crashMultiplier.toFixed(2)}x!`;
         }
     }
 

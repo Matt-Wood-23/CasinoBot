@@ -46,7 +46,7 @@ function canGetLoan(userId) {
 }
 
 // Create a new loan
-function createLoan(userId, amount) {
+async function createLoan(userId, amount) {
     const userData = getUserData(userId);
     if (!userData) return null;
 
@@ -68,12 +68,12 @@ function createLoan(userId, amount) {
         originalDueDays: repaymentDays
     };
 
-    saveUserData();
+    await saveUserData();
     return userData.activeLoan;
 }
 
 // Make a loan payment
-function makePayment(userId, amount) {
+async function makePayment(userId, amount) {
     const userData = getUserData(userId);
     if (!userData || !userData.activeLoan) return null;
 
@@ -108,12 +108,12 @@ function makePayment(userId, amount) {
         userData.activeLoan = null;
     }
 
-    saveUserData();
+    await saveUserData();
     return { payment, remaining, paidOff: remaining <= 0 };
 }
 
 // Check and update overdue loans (run daily)
-function checkOverdueLoans() {
+async function checkOverdueLoans() {
     const allUserData = require('./data').getAllUserData();
     const overdueUsers = [];
 
@@ -138,14 +138,14 @@ function checkOverdueLoans() {
     }
 
     if (overdueUsers.length > 0) {
-        saveUserData();
+        await saveUserData();
     }
 
     return overdueUsers;
 }
 
 // Auto-deduct from winnings
-function deductFromWinnings(userId, winnings) {
+async function deductFromWinnings(userId, winnings) {
     const userData = getUserData(userId);
     if (!userData || !userData.activeLoan || winnings <= 0) {
         return { deducted: 0, remaining: winnings };
@@ -154,11 +154,11 @@ function deductFromWinnings(userId, winnings) {
     const loan = userData.activeLoan;
     const remaining = loan.totalOwed - loan.amountPaid;
 
-    // Take 50% of winnings for loan payment
-    const deduction = Math.min(Math.floor(winnings * 0.5), remaining);
+    // Take 25% of winnings for loan payment
+    const deduction = Math.min(Math.floor(winnings * 0.25), remaining);
 
     if (deduction > 0) {
-        makePayment(userId, deduction);
+        await makePayment(userId, deduction);
     }
 
     return { deducted: deduction, remaining: winnings - deduction };
