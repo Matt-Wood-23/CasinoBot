@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney, saveUserData } = require('./data');
+const { getUserMoney, setUserMoney } = require('./data');
 const { SHOP_ITEMS } = require('./shop');
 
 // Mystery Box Tiers
@@ -155,24 +155,12 @@ async function openMysteryBox(userId, tierId) {
         const item = SHOP_ITEMS[itemReward.itemId];
         const quantity = itemReward.quantity || 1;
 
-        // Add items to inventory
-        const { getUserData } = require('./data');
-        const userData = getUserData(userId);
-
-        if (!userData.inventory) {
-            userData.inventory = [];
-        }
+        // Add items to inventory using database
+        const { addToInventory } = require('./data');
 
         for (let i = 0; i < quantity; i++) {
-            const inventoryItem = {
-                ...item,
-                purchasedAt: Date.now(),
-                id: `${item.id}_${Date.now()}_${Math.random()}`
-            };
-            userData.inventory.push(inventoryItem);
+            await addToInventory(userId, itemReward.itemId);
         }
-
-        await saveUserData();
 
         reward = {
             type: 'item',

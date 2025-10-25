@@ -37,7 +37,7 @@ async function createGameEmbed(game, userId, client, options = {}) {
 }
 
 async function createPokerEmbed(game, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
 
     const embed = new EmbedBuilder()
@@ -141,7 +141,7 @@ async function createPokerEmbed(game, userId) {
 }
 
 async function createSlotsEmbed(game, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
 
     const embed = new EmbedBuilder()
@@ -173,7 +173,7 @@ async function createSlotsEmbed(game, userId) {
 }
 
 async function createBlackjackEmbed(game, userId, client) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
 
     let embed;
@@ -361,7 +361,7 @@ async function createMultiPlayerGameEmbed(game, userId, client) {
 }
 
 async function createRouletteEmbed(game, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
     
     const embed = new EmbedBuilder()
@@ -557,7 +557,7 @@ function getBetTypeDisplayName(betType) {
 }
 
 async function createSinglePlayerGameEmbed(game, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
     const player = game.players.get(userId);
 
@@ -720,7 +720,7 @@ function createInfoEmbed(title, description) {
 
 async function createLeaderboardEmbed(client) {
     const { getAllUserData } = require('./data');
-    const userData = getAllUserData() || {}; // Ensure userData is an object
+    const userData = await getAllUserData() || {}; // Ensure userData is an object
 
     const sortedUsers = Object.entries(userData)
         .filter(([_, data]) => data && typeof data === 'object' && 'money' in data)
@@ -762,7 +762,7 @@ async function createLeaderboardEmbed(client) {
 
 async function createStatsEmbed(targetUser, client) {
     const { getUserData } = require('./data');
-    const userData = getUserData(targetUser.id);
+    const userData = await getUserData(targetUser.id);
 
     if (!userData) {
         return createErrorEmbed('No Data', 'No statistics found for this user.');
@@ -824,7 +824,7 @@ async function createEconomyStatsEmbed(targetUser, client) {
     const { getUserProperties } = require('./properties');
     const { getUserVIPTier } = require('./vip');
 
-    const userData = getUserData(targetUser.id);
+    const userData = await getUserData(targetUser.id);
 
     if (!userData) {
         return createErrorEmbed('No Data', 'No statistics found for this user.');
@@ -907,10 +907,11 @@ async function createEconomyStatsEmbed(targetUser, client) {
 
 async function createHeistStatsEmbed(targetUser, client) {
     const { getUserData } = require('./data');
-    const { initializeHeist, isGamblingBanned } = require('./heist');
+    const { getUserHeistStats, getHeistDebt, isGamblingBanned } = require('../database/queries');
 
-    const userData = getUserData(targetUser.id);
-    const heistData = initializeHeist(targetUser.id);
+    const userData = await getUserData(targetUser.id);
+    const heistData = await getUserHeistStats(targetUser.id);
+    const heistDebt = await getHeistDebt(targetUser.id);
 
     if (!userData || !heistData) {
         return createErrorEmbed('No Data', 'No heist statistics found for this user.');
@@ -926,7 +927,8 @@ async function createHeistStatsEmbed(targetUser, client) {
         : '0.0';
 
     const netProfit = (heistData.totalEarned || 0) - (heistData.totalLost || 0);
-    const banCheck = isGamblingBanned(targetUser.id);
+    const isBanned = await isGamblingBanned(targetUser.id);
+    const banCheck = { isBanned, reason: isBanned ? '🚫 You are currently banned from gambling.' : '' };
 
     const embed = new EmbedBuilder()
         .setTitle(`🎭 ${targetUser.username}'s Heist Stats`)
@@ -964,7 +966,7 @@ async function createHeistStatsEmbed(targetUser, client) {
                 name: '📊 Overall Stats',
                 value: `Combined Heists: ${(heistData.totalHeists || 0) + (stats.guildHeistsParticipated || 0)}\n` +
                        `Combined Success: ${(heistData.successfulHeists || 0) + (stats.guildHeistsWon || 0)}\n` +
-                       `Heist Debt: $${(userData.heistDebt || 0).toLocaleString()}`,
+                       `Heist Debt: $${(heistDebt || 0).toLocaleString()}`,
                 inline: false
             }
         )
@@ -990,7 +992,7 @@ async function createProgressionStatsEmbed(targetUser, client) {
     const { getUserAchievements } = require('./achievements');
     const { getUserChallenges } = require('./challenges');
 
-    const userData = getUserData(targetUser.id);
+    const userData = await getUserData(targetUser.id);
 
     if (!userData) {
         return createErrorEmbed('No Data', 'No progression data found for this user.');
@@ -998,7 +1000,7 @@ async function createProgressionStatsEmbed(targetUser, client) {
 
     const stats = userData.statistics;
     const achievements = getUserAchievements(targetUser.id);
-    const challenges = getUserChallenges(targetUser.id);
+    const challenges = await getUserChallenges(targetUser.id);
 
     // Calculate challenge completion
     const dailyCompleted = challenges?.daily.filter(c => c.progress >= c.target).length || 0;
@@ -1057,7 +1059,7 @@ async function createGuildStatsEmbed(targetUser, client) {
     const { getUserData } = require('./data');
     const { getUserGuild } = require('./guilds');
 
-    const userData = getUserData(targetUser.id);
+    const userData = await getUserData(targetUser.id);
     const guild = getUserGuild(targetUser.id);
 
     if (!userData) {
@@ -1134,7 +1136,7 @@ async function createGuildStatsEmbed(targetUser, client) {
 
 async function createHistoryEmbed(user, gamesToShow = 10) {
     const { getUserData } = require('./data');
-    const userData = getUserData(user.id);
+    const userData = await getUserData(user.id);
 
     if (!userData || !userData.gameHistory || userData.gameHistory.length === 0) {
         return createInfoEmbed('No History', 'You have no game history yet! Play some games first.');
@@ -1164,7 +1166,7 @@ async function createHistoryEmbed(user, gamesToShow = 10) {
 }
 
 async function createCrapsEmbed(game, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
 
     const embed = new EmbedBuilder()
@@ -1239,7 +1241,7 @@ async function createCrapsEmbed(game, userId) {
 }
 
 async function createWarEmbed(game, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
 
     const embed = new EmbedBuilder()
@@ -1296,7 +1298,7 @@ async function createWarEmbed(game, userId) {
 }
 
 async function createCoinFlipEmbed(game, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
 
     const embed = new EmbedBuilder()
@@ -1325,7 +1327,7 @@ async function createCoinFlipEmbed(game, userId) {
 }
 
 async function createHorseRaceEmbed(game, userId, options = {}) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
 
     const { frame } = options;
@@ -1366,7 +1368,7 @@ async function createHorseRaceEmbed(game, userId, options = {}) {
 }
 
 async function createCrashEmbed(game, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
 
     const color = game.gameComplete ? (game.result === 'win' ? '#00FF00' : '#FF0000') : '#FFD700';
@@ -1587,7 +1589,7 @@ async function createTournamentEmbed(tournament, userId, client) {
 }
 
 async function createHiLoEmbed(game, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
 
     const color = game.gameComplete ? (game.result === 'win' ? '#00FF00' : '#FF0000') : '#FFD700';

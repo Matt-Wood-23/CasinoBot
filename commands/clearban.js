@@ -1,7 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
-const { getUserData, saveUserData } = require('../utils/data');
+const { isGamblingBanned, clearGamblingBan } = require('../utils/data');
 const { ADMIN_USER_ID } = require('../config');
-const { initializeHeist } = require('../utils/heist');
 
 module.exports = {
     data: {
@@ -37,22 +36,18 @@ module.exports = {
                 });
             }
 
-            // Get user data and clear ban
-            const heistData = initializeHeist(targetUser.id);
+            // Check if user is currently banned
+            const wasBanned = await isGamblingBanned(targetUser.id);
 
-            if (!heistData) {
+            // Clear the gambling ban
+            const success = await clearGamblingBan(targetUser.id);
+
+            if (!success) {
                 return await interaction.reply({
-                    content: '❌ User data not found!',
+                    content: '❌ Failed to clear ban. Please try again.',
                     ephemeral: true
                 });
             }
-
-            const wasBanned = heistData.gamblingBanUntil > Date.now();
-
-            // Clear the gambling ban
-            heistData.gamblingBanUntil = 0;
-
-            await saveUserData();
 
             const embed = new EmbedBuilder()
                 .setColor(wasBanned ? '#00FF00' : '#FFA500')
@@ -69,10 +64,17 @@ module.exports = {
 
         } catch (error) {
             console.error('Error in clearban command:', error);
-            await interaction.reply({
+
+            const errorMessage = {
                 content: '❌ An error occurred while clearing the ban. Please try again.',
                 ephemeral: true
-            });
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
         }
     }
 };

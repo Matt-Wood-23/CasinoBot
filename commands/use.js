@@ -27,11 +27,11 @@ module.exports = {
         try {
             const userId = interaction.user.id;
             const itemType = interaction.options.getString('item');
-            const inventory = getUserInventory(userId);
+            const inventory = await getUserInventory(userId);
 
             // Find the first item of this type in inventory
             const item = inventory.find(invItem => {
-                const invItemType = invItem.id.split('_')[0] + '_' + invItem.id.split('_')[1];
+                const invItemType = invItem.itemId.split('_')[0] + '_' + invItem.itemId.split('_')[1];
                 return invItemType === itemType;
             });
 
@@ -44,7 +44,7 @@ module.exports = {
             }
 
             // Use the item
-            const result = await useItem(userId, item.id);
+            const result = await useItem(userId, item.itemId);
 
             if (!result.success) {
                 return interaction.reply({
@@ -68,10 +68,17 @@ module.exports = {
 
         } catch (error) {
             console.error('Error in use command:', error);
-            await interaction.reply({
+
+            const errorMessage = {
                 content: '❌ An error occurred while using the item. Please try again.',
                 ephemeral: true
-            });
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
         }
     }
 };

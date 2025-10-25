@@ -29,12 +29,12 @@ module.exports = {
 
             // Apply VIP daily bonus
             const { getVIPDailyBonus } = require('../utils/vip');
-            vipBonusAmount = getVIPDailyBonus(interaction.user.id);
+            vipBonusAmount = await getVIPDailyBonus(interaction.user.id);
             dailyAmount += vipBonusAmount;
 
             // Check for Double Daily boost
             const { hasActiveBoost, consumeBoost } = require('../utils/shop');
-            if (hasActiveBoost(interaction.user.id, 'double_daily')) {
+            if (await hasActiveBoost(interaction.user.id, 'double_daily')) {
                 dailyAmount *= 2;
                 await consumeBoost(interaction.user.id, 'double_daily');
                 doubleBoostUsed = true;
@@ -56,10 +56,17 @@ module.exports = {
             await interaction.reply(message);
         } catch (error) {
             console.error('Error in daily command:', error);
-            await interaction.reply({
+
+            const errorMessage = {
                 content: '❌ An error occurred while claiming your daily bonus. Please try again.',
                 ephemeral: true
-            });
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
         }
     }
 };

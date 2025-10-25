@@ -10,7 +10,7 @@ module.exports = {
     async execute(interaction) {
         try {
             const userId = interaction.user.id;
-            const challenges = getUserChallenges(userId);
+            const challenges = await getUserChallenges(userId);
 
             if (!challenges) {
                 return interaction.reply({
@@ -37,10 +37,17 @@ module.exports = {
                         `Reward: ${reward}`;
                 }).join('\n\n');
 
-                const timeUntilReset = getTimeUntilReset(challenges.lastDailyReset, 24);
+                // Calculate time until reset based on expiresAt
+                const timeUntilReset = getTimeUntilExpiry(challenges.daily[0].expiresAt);
                 embed.addFields({
                     name: `🌅 Daily Challenges (Resets in ${timeUntilReset})`,
                     value: dailyText,
+                    inline: false
+                });
+            } else {
+                embed.addFields({
+                    name: '🌅 Daily Challenges',
+                    value: 'No active daily challenges. They will be generated soon!',
                     inline: false
                 });
             }
@@ -58,10 +65,17 @@ module.exports = {
                         `Reward: ${reward}`;
                 }).join('\n\n');
 
-                const timeUntilReset = getTimeUntilReset(challenges.lastWeeklyReset, 168); // 7 days in hours
+                // Calculate time until reset based on expiresAt
+                const timeUntilReset = getTimeUntilExpiry(challenges.weekly[0].expiresAt);
                 embed.addFields({
                     name: `📅 Weekly Challenges (Resets in ${timeUntilReset})`,
                     value: weeklyText,
+                    inline: false
+                });
+            } else {
+                embed.addFields({
+                    name: '📅 Weekly Challenges',
+                    value: 'No active weekly challenges. They will be generated soon!',
                     inline: false
                 });
             }
@@ -69,10 +83,9 @@ module.exports = {
             // Add challenge stats
             const completedDaily = challenges.daily.filter(c => c.completed).length;
             const completedWeekly = challenges.weekly.filter(c => c.completed).length;
-            const totalCompleted = challenges.completionHistory.length;
 
             embed.setFooter({
-                text: `Daily: ${completedDaily}/${challenges.daily.length} | Weekly: ${completedWeekly}/${challenges.weekly.length} | Total Completed: ${totalCompleted}`
+                text: `Daily: ${completedDaily}/${challenges.daily.length} | Weekly: ${completedWeekly}/${challenges.weekly.length}`
             });
 
             // Add claim button if any challenges are completed
@@ -95,10 +108,17 @@ module.exports = {
 
         } catch (error) {
             console.error('Error in challenges command:', error);
-            await interaction.reply({
+
+            const errorMessage = {
                 content: '❌ An error occurred while fetching your challenges. Please try again.',
                 ephemeral: true
-            });
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
         }
     }
 };
@@ -112,11 +132,10 @@ function createProgressBar(current, target, length = 10) {
     return '▰'.repeat(filled) + '▱'.repeat(empty);
 }
 
-// Helper function to get time until reset
-function getTimeUntilReset(lastReset, hoursUntilReset) {
+// Helper function to get time until expiry
+function getTimeUntilExpiry(expiresAt) {
     const now = Date.now();
-    const resetTime = lastReset + (hoursUntilReset * 60 * 60 * 1000);
-    const timeLeft = resetTime - now;
+    const timeLeft = expiresAt - now;
 
     if (timeLeft <= 0) return 'Soon';
 

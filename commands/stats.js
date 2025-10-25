@@ -6,6 +6,7 @@ const {
     createGuildStatsEmbed
 } = require('../utils/embeds');
 const { getUserMoney, getAllUserData } = require('../utils/data');
+const { getAllUserHeistStats } = require('../database/queries');
 const { EmbedBuilder } = require('discord.js');
 
 module.exports = {
@@ -142,10 +143,17 @@ module.exports = {
 
         } catch (error) {
             console.error('Error in stats command:', error);
-            await interaction.reply({
+
+            const errorMessage = {
                 content: '❌ An error occurred while retrieving statistics. Please try again.',
                 ephemeral: true
-            });
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
         }
     }
 };
@@ -173,7 +181,7 @@ async function handleLeaderboards(interaction, category) {
 }
 
 async function handleRichestLeaderboard(interaction) {
-    const allUserData = getAllUserData();
+    const allUserData = await getAllUserData();
     const users = [];
 
     for (const [userId, userData] of Object.entries(allUserData)) {
@@ -230,22 +238,8 @@ async function handleRichestLeaderboard(interaction) {
 }
 
 async function handleHeistLeaderboard(interaction) {
-    const allUserData = getAllUserData();
-    const users = [];
-
-    for (const [userId, userData] of Object.entries(allUserData)) {
-        if (userData.heist && userData.heist.totalHeists > 0) {
-            const successRate = (userData.heist.successfulHeists / userData.heist.totalHeists) * 100;
-            users.push({
-                userId,
-                totalHeists: userData.heist.totalHeists,
-                successfulHeists: userData.heist.successfulHeists,
-                successRate,
-                biggestScore: userData.heist.biggestScore || 0,
-                totalEarned: userData.heist.totalEarned || 0
-            });
-        }
-    }
+    // Get all user heist stats from database
+    const users = await getAllUserHeistStats();
 
     if (users.length === 0) {
         return interaction.reply({
@@ -299,7 +293,7 @@ async function handleHeistLeaderboard(interaction) {
 }
 
 async function handlePropertyLeaderboard(interaction) {
-    const allUserData = getAllUserData();
+    const allUserData = await getAllUserData();
     const users = [];
 
     for (const [userId, userData] of Object.entries(allUserData)) {
@@ -407,7 +401,7 @@ async function handleGuildLeaderboard(interaction) {
 }
 
 async function handleDebtorsLeaderboard(interaction) {
-    const allUserData = getAllUserData();
+    const allUserData = await getAllUserData();
     const debtors = [];
 
     // Collect all users with active loans

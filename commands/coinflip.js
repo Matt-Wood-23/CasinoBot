@@ -72,10 +72,17 @@ module.exports = {
 
         } catch (error) {
             console.error('Error in coinflip command:', error);
-            await interaction.reply({
+
+            const errorMessage = {
                 content: '❌ An error occurred while starting coin flip. Please try again.',
                 ephemeral: true
-            });
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
         }
     }
 };

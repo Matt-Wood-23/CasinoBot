@@ -46,7 +46,7 @@ module.exports = {
 
             // Create initial embed and buttons
             const embed = await createGameEmbed(game, interaction.user.id, interaction.client);
-            const buttons = createButtons(game, interaction.user.id, interaction.client);
+            const buttons = await createButtons(game, interaction.user.id, interaction.client);
 
             let components = [];
             if (buttons) {
@@ -69,10 +69,17 @@ module.exports = {
 
         } catch (error) {
             console.error('Error in blackjack command:', error);
-            await interaction.reply({
+
+            const errorMessage = {
                 content: '❌ An error occurred while starting the blackjack game. Please try again.',
                 ephemeral: true
-            });
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
         }
     }
 };

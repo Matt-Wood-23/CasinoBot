@@ -148,11 +148,18 @@ async function handleBuyTicket(interaction) {
         await interaction.reply({ embeds: [embed] });
 
     } catch (error) {
-        console.error('Error in lottery buy:', error);
-        await interaction.reply({
-            content: '❌ An error occurred while buying a lottery ticket. Please try again.',
-            ephemeral: true
-        });
+            console.error('Error in lottery buy:', error);
+
+            const errorMessage = {
+                content: '❌ An error occurred while buying a lottery ticket. Please try again.',
+                ephemeral: true
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
     }
 }
 
@@ -275,10 +282,17 @@ async function handleStatus(interaction) {
         await interaction.reply({ embeds: [embed] });
 
     } catch (error) {
-        console.error('Error in lottery status:', error);
-        await interaction.reply({
-            content: '❌ An error occurred while checking lottery status. Please try again.',
-            ephemeral: true
-        });
+            console.error('Error in lottery status:', error);
+
+            const errorMessage = {
+                content: '❌ An error occurred while checking lottery status. Please try again.',
+                ephemeral: true
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
     }
 }

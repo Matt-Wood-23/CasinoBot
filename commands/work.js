@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { getUserMoney, setUserMoney, getUserData } = require('../utils/data');
+const { getUserMoney, setUserMoney, getUserData, setLastWork } = require('../utils/data');
 const { makePayment } = require('../utils/loanSystem');
 
 // Work cooldown: 4 hours
@@ -27,7 +27,7 @@ module.exports = {
 
     async execute(interaction) {
         const userId = interaction.user.id;
-        const userData = getUserData(userId);
+        const userData = await getUserData(userId);
 
         if (!userData) {
             return interaction.reply({
@@ -56,7 +56,7 @@ module.exports = {
 
         // Apply VIP work bonus
         const { getVIPWorkBonus } = require('../utils/vip');
-        const vipBonus = getVIPWorkBonus(userId);
+        const vipBonus = await getVIPWorkBonus(userId);
         let vipBonusAmount = 0;
 
         if (vipBonus > 0) {
@@ -65,8 +65,7 @@ module.exports = {
         }
 
         // Update last work time
-        userData.lastWork = Date.now();
-        require('../utils/data').saveUserData();
+        await setLastWork(userId);
 
         // Check if has loan
         let loanDeduction = 0;
@@ -81,7 +80,7 @@ module.exports = {
             loanDeduction = Math.min(Math.floor(earnings * deductionRate), remaining);
 
             if (loanDeduction > 0) {
-                const paymentResult = makePayment(userId, loanDeduction);
+                const paymentResult = await makePayment(userId, loanDeduction);
                 afterLoan = earnings - loanDeduction;
             }
         }
@@ -103,7 +102,7 @@ module.exports = {
             .setDescription(`${job.name} and earned **${earnings.toLocaleString()}**!`);
 
         if (loanDeduction > 0) {
-            const updatedUserData = getUserData(userId);
+            const updatedUserData = await getUserData(userId);
             const stillHasLoan = updatedUserData.activeLoan !== null;
 
             embed.addFields(

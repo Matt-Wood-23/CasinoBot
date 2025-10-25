@@ -2,10 +2,14 @@ const Deck = require('./deck');
 
 class BlackjackGame {
     constructor(channelId, creatorId, bet, isMultiPlayer) {
+
+        // Ensure bet is a valid number
+        const validBet = (typeof bet === 'number' && !isNaN(bet) && bet > 0) ? Math.floor(bet) : 0;
+
         this.channelId = channelId;
         this.players = new Map([[creatorId, {
-            bet,
-            hands: [{ cards: [], bet }],
+            bet: validBet,
+            hands: [{ cards: [], bet: validBet }],
             stood: false,
             currentHandIndex: 0,
             hasSplit: false
@@ -28,12 +32,16 @@ class BlackjackGame {
     // Multi-player methods
     addPlayer(playerId, bet) {
         if (!this.isMultiPlayer || this.dealingPhase > 0 || this.bettingPhase) return false;
-        this.players.set(playerId, { 
-            bet, 
-            hands: [{ cards: [], bet }], 
-            stood: false, 
-            currentHandIndex: 0, 
-            hasSplit: false 
+
+        // Ensure bet is a valid number
+        const validBet = (typeof bet === 'number' && !isNaN(bet) && bet > 0) ? Math.floor(bet) : 0;
+
+        this.players.set(playerId, {
+            bet: validBet,
+            hands: [{ cards: [], bet: validBet }],
+            stood: false,
+            currentHandIndex: 0,
+            hasSplit: false
         });
         return true;
     }
@@ -148,22 +156,26 @@ class BlackjackGame {
     split(userId) {
         const player = this.players.get(userId);
         if (!this.canSplit(userId)) return false;
-        
+
         const originalHand = player.hands[0];
         const splitCard = originalHand.cards.pop();
-        
+
+        // Ensure bet is valid
+        const baseBet = (typeof player.bet === 'number' && !isNaN(player.bet)) ? player.bet : 0;
+        const handBet = (typeof originalHand.bet === 'number' && !isNaN(originalHand.bet)) ? originalHand.bet : baseBet;
+
         player.hands.push({
             cards: [splitCard],
-            bet: player.bet,
+            bet: handBet,
             stood: false,
             doubled: false
         });
-        
+
         player.hands[0].cards.push(this.deck.drawCard());
         player.hands[1].cards.push(this.deck.drawCard());
         player.hasSplit = true;
-        player.bet *= 2;
-        
+        player.bet = baseBet * 2;
+
         return true;
     }
 
@@ -197,18 +209,24 @@ class BlackjackGame {
 
     double(userId) {
         const player = this.players.get(userId);
-        if (!player || player.hands[player.currentHandIndex].cards.length !== 2 || 
+        if (!player || player.hands[player.currentHandIndex].cards.length !== 2 ||
             player.hands[player.currentHandIndex].doubled) return false;
-            
+
         const currentHand = player.hands[player.currentHandIndex];
-        currentHand.bet *= 2;
+
+        // Ensure bet is valid before doubling
+        if (typeof currentHand.bet !== 'number' || isNaN(currentHand.bet)) {
+            currentHand.bet = (typeof player.bet === 'number' && !isNaN(player.bet)) ? player.bet : 0;
+        }
+
+        currentHand.bet = Math.floor(currentHand.bet * 2);
         currentHand.doubled = true;
-        
+
         this.hit(userId);
         if (!this.gameOver) {
             this.stand(userId);
         }
-        
+
         return true;
     }
 
@@ -361,7 +379,13 @@ class BlackjackGame {
         // Calculate main blackjack winnings
         for (let i = 0; i < player.hands.length; i++) {
             const result = this.getHandResult(userId, i);
-            const handBet = player.hands[i].bet;
+            let handBet = player.hands[i].bet;
+
+            // Ensure bet is valid
+            if (typeof handBet !== 'number' || isNaN(handBet)) {
+                console.error(`Invalid bet for hand ${i} of player ${userId}: ${handBet}, using player.bet as fallback`);
+                handBet = (typeof player.bet === 'number' && !isNaN(player.bet)) ? player.bet : 0;
+            }
 
             switch (result) {
                 case 'blackjack':
@@ -384,7 +408,10 @@ class BlackjackGame {
 
     getTotalBet(userId) {
         const player = this.players.get(userId);
-        return player.hands.reduce((total, hand) => total + hand.bet, 0);
+        return player.hands.reduce((total, hand) => {
+            const bet = (typeof hand.bet === 'number' && !isNaN(hand.bet)) ? hand.bet : 0;
+            return total + bet;
+        }, 0);
     }
 }
 

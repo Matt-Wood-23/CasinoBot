@@ -42,7 +42,7 @@ module.exports = {
 
             // Create embed and buttons
             const embed = await createGameEmbed(warGame, userId, interaction.client);
-            const buttons = createButtons(warGame, userId, interaction.client);
+            const buttons = await createButtons(warGame, userId, interaction.client);
 
             await interaction.reply({
                 embeds: [embed],
@@ -51,10 +51,17 @@ module.exports = {
 
         } catch (error) {
             console.error('Error in war command:', error);
-            await interaction.reply({
+
+            const errorMessage = {
                 content: '❌ An error occurred while starting the game. Please try again.',
                 ephemeral: true
-            });
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
         }
     }
 };

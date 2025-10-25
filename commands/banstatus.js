@@ -1,5 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
-const { isGamblingBanned, initializeHeist } = require('../utils/heist');
+const { isGamblingBanned, getGamblingBanTime } = require('../database/queries');
+const { getUserHeistStats } = require('../database/queries');
 
 module.exports = {
     data: {
@@ -10,8 +11,8 @@ module.exports = {
     async execute(interaction) {
         try {
             const userId = interaction.user.id;
-            const banCheck = isGamblingBanned(userId);
-            const heistData = initializeHeist(userId);
+            const isBanned = await isGamblingBanned(userId);
+            const heistData = await getUserHeistStats(userId);
 
             if (!heistData) {
                 return await interaction.reply({
@@ -23,12 +24,13 @@ module.exports = {
             const embed = new EmbedBuilder()
                 .setTimestamp();
 
-            if (banCheck.isBanned) {
-                const timeLeft = heistData.gamblingBanUntil - Date.now();
+            if (isBanned) {
+                const gamblingBanUntil = await getGamblingBanTime(userId);
+                const timeLeft = gamblingBanUntil - Date.now();
                 const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
                 const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
 
-                const banExpiry = new Date(heistData.gamblingBanUntil);
+                const banExpiry = new Date(gamblingBanUntil);
 
                 embed
                     .setColor('#FF0000')
@@ -83,10 +85,17 @@ module.exports = {
 
         } catch (error) {
             console.error('Error in banstatus command:', error);
-            await interaction.reply({
+
+            const errorMessage = {
                 content: '❌ An error occurred while checking your ban status. Please try again.',
                 ephemeral: true
-            });
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
         }
     }
 };

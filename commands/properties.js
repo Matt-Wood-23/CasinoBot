@@ -60,16 +60,23 @@ module.exports = {
 
         } catch (error) {
             console.error('Error in properties command:', error);
-            await interaction.reply({
+
+            const errorMessage = {
                 content: '❌ An error occurred while processing your property request. Please try again.',
                 ephemeral: true
-            });
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
         }
     }
 };
 
 async function showOwnedProperties(interaction, userId) {
-    const ownedProperties = getUserProperties(userId);
+    const ownedProperties = await getUserProperties(userId);
 
     const embed = new EmbedBuilder()
         .setColor('#FFD700')
@@ -124,12 +131,12 @@ async function showOwnedProperties(interaction, userId) {
 }
 
 async function showPropertyShop(interaction, userId) {
-    const vipTier = getUserVIPTier(userId);
+    const vipTier = await getUserVIPTier(userId);
     const userVipLevel = vipTier ? vipTier.level : 0;
     const availableProperties = getAllProperties(userVipLevel);
     const allProperties = getAllProperties();
     const userMoney = await getUserMoney(userId);
-    const ownedProperties = getUserProperties(userId);
+    const ownedProperties = await getUserProperties(userId);
     const ownedIds = ownedProperties.map(p => p.id);
 
     const embed = new EmbedBuilder()

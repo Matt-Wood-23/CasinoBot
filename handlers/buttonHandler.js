@@ -183,7 +183,7 @@ async function handlePokerButtons(interaction, activeGames, customId, userId, cl
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -206,7 +206,7 @@ async function handlePokerButtons(interaction, activeGames, customId, userId, cl
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -236,7 +236,7 @@ async function handlePokerButtons(interaction, activeGames, customId, userId, cl
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(newGame, userId, client);
-        const buttons = createButtons(newGame, userId, client);
+        const buttons = await createButtons(newGame, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -398,7 +398,7 @@ async function handleRouletteButtons(interaction, activeGames, userId, client, r
         // Create and send response
         await interaction.deferUpdate();
         const embed = await createGameEmbed(rouletteGame, userId, client);
-        const buttons = createButtons(rouletteGame, userId, client);
+        const buttons = await createButtons(rouletteGame, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -448,7 +448,7 @@ async function handleRouletteButtons(interaction, activeGames, userId, client, r
         // Update the message
         await interaction.deferUpdate();
         const embed = await createGameEmbed(newGame, userId, client);
-        const buttons = createButtons(newGame, userId, client);
+        const buttons = await createButtons(newGame, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -632,7 +632,7 @@ async function handleSlotsSpinAgain(interaction, userId, client) {
     await recordGameResult(userId, 'slots', bet, slotsGame.winnings, slotsGame.winnings > 0 ? 'win' : 'lose');
 
     const embed = await createGameEmbed(slotsGame, userId, client);
-    const buttons = createButtons(slotsGame, userId, client);
+    const buttons = await createButtons(slotsGame, userId, client);
 
     await interaction.update({
         embeds: [embed],
@@ -916,7 +916,10 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
             if (!isMultiPlayer) {
                 const winnings = game.getWinnings(user.id);
                 const currentMoney = await getUserMoney(user.id);
-                await setUserMoney(user.id, currentMoney + game.getTotalBet(user.id) + winnings);
+                const totalBet = game.getTotalBet(user.id);
+                const newMoney = currentMoney + totalBet + winnings;
+
+                await setUserMoney(user.id, newMoney);
                 const results = game.getResult(user.id);
                 const result = Array.isArray(results) ?
                     (results.includes('blackjack') ? 'blackjack' :
@@ -930,7 +933,10 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
                 for (const [playerId] of game.players) {
                     const winnings = game.getWinnings(playerId);
                     const currentMoney = await getUserMoney(playerId);
-                    await setUserMoney(playerId, currentMoney + game.getTotalBet(playerId) + winnings);
+                    const totalBet = game.getTotalBet(playerId);
+                    const newMoney = currentMoney + totalBet + winnings;
+
+                    await setUserMoney(playerId, newMoney);
                     const results = game.getResult(playerId);
                     const result = Array.isArray(results) ?
                         (results.includes('blackjack') ? 'blackjack' :
@@ -946,7 +952,7 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
 
         // Update the game display
         const embed = await createGameEmbed(game, user.id, client);
-        const buttons = createButtons(game, user.id, client);
+        const buttons = await createButtons(game, user.id, client);
         let components = [];
         if (buttons) {
             if (Array.isArray(buttons)) {
@@ -979,7 +985,7 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
 async function updateBettingDisplay(game, interaction, client, options = {}) {
     try {
         const embed = await createGameEmbed(game, interaction.user.id, client);
-        const buttons = createButtons(game, interaction.user.id, client, options);
+        const buttons = await createButtons(game, interaction.user.id, client, options);
         let components = [];
         if (buttons) {
             if (Array.isArray(buttons)) {
@@ -1035,7 +1041,7 @@ function startTurnTimer(game, interaction, activeGames, client, dealCardsWithDel
 
         try {
             const embed = await createGameEmbed(game, currentPlayerId, client);
-            const buttons = createButtons(game, currentPlayerId, client);
+            const buttons = await createButtons(game, currentPlayerId, client);
             let components = [];
             if (buttons) {
                 if (Array.isArray(buttons)) {
@@ -1072,7 +1078,7 @@ async function animateDealerDrawing(game, interaction, userId, client) {
 
         // Update display
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
         let components = [];
         if (buttons) {
             if (Array.isArray(buttons)) {
@@ -1095,7 +1101,7 @@ async function animateDealerDrawing(game, interaction, userId, client) {
     // Final update after dealer is done to show game over buttons
     if (game.gameOver) {
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
         let components = [];
         if (buttons) {
             if (Array.isArray(buttons)) {
@@ -1147,7 +1153,7 @@ async function handleCrapsButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1171,7 +1177,7 @@ async function handleCrapsButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(newGame, userId, client);
-        const buttons = createButtons(newGame, userId, client);
+        const buttons = await createButtons(newGame, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1202,7 +1208,7 @@ async function handleWarButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1235,7 +1241,7 @@ async function handleWarButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1259,7 +1265,7 @@ async function handleWarButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(newGame, userId, client);
-        const buttons = createButtons(newGame, userId, client);
+        const buttons = await createButtons(newGame, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1316,7 +1322,7 @@ async function handleCoinFlipButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(newGame, userId, client);
-        const buttons = createButtons(newGame, userId, client);
+        const buttons = await createButtons(newGame, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1363,7 +1369,7 @@ async function handleCoinFlipButtons(interaction, activeGames, userId, client) {
     // Create result embed
     await interaction.deferUpdate();
     const embed = await createGameEmbed(game, userId, client);
-    const buttons = createButtons(game, userId, client);
+    const buttons = await createButtons(game, userId, client);
 
     await interaction.editReply({
         embeds: [embed],
@@ -1436,7 +1442,7 @@ async function handleHorseRaceButtons(interaction, activeGames, userId, client) 
 
         // Show final result with buttons
         const finalEmbed = await createGameEmbed(newGame, userId, client);
-        const buttons = createButtons(newGame, userId, client);
+        const buttons = await createButtons(newGame, userId, client);
 
         await interaction.editReply({
             embeds: [finalEmbed],
@@ -1498,7 +1504,7 @@ async function handleHorseRaceButtons(interaction, activeGames, userId, client) 
 
     // Show final result with buttons
     const finalEmbed = await createGameEmbed(game, userId, client);
-    const buttons = createButtons(game, userId, client);
+    const buttons = await createButtons(game, userId, client);
 
     await interaction.editReply({
         embeds: [finalEmbed],
@@ -1536,7 +1542,7 @@ async function handleCrashButtons(interaction, activeGames, userId, client) {
         // Update the display
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1575,7 +1581,7 @@ async function handleCrashButtons(interaction, activeGames, userId, client) {
         // Update the display
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1599,7 +1605,7 @@ async function handleCrashButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(newGame, userId, client);
-        const buttons = createButtons(newGame, userId, client);
+        const buttons = await createButtons(newGame, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1691,7 +1697,7 @@ async function handleBingoButtons(interaction, activeGames, userId, client) {
 
         // Start the game
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1753,7 +1759,7 @@ async function handleBingoButtons(interaction, activeGames, userId, client) {
 
         // Update main display
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1907,7 +1913,7 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
 
         // Start the tournament
         const embed = await createGameEmbed(tournament, userId, client);
-        const buttons = createButtons(tournament, userId, client);
+        const buttons = await createButtons(tournament, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1923,7 +1929,7 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(tournament, userId, client);
-        const buttons = createButtons(tournament, userId, client);
+        const buttons = await createButtons(tournament, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1940,7 +1946,7 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
                 await sendPlayerCardsDM(tournament, client);
 
                 const newEmbed = await createGameEmbed(tournament, userId, client);
-                const newButtons = createButtons(tournament, userId, client);
+                const newButtons = await createButtons(tournament, userId, client);
 
                 await interaction.message.edit({
                     embeds: [newEmbed],
@@ -1993,7 +1999,7 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(tournament, userId, client);
-        const buttons = createButtons(tournament, userId, client);
+        const buttons = await createButtons(tournament, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -2010,7 +2016,7 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
                 await sendPlayerCardsDM(tournament, client);
 
                 const newEmbed = await createGameEmbed(tournament, userId, client);
-                const newButtons = createButtons(tournament, userId, client);
+                const newButtons = await createButtons(tournament, userId, client);
 
                 await interaction.message.edit({
                     embeds: [newEmbed],
@@ -2076,7 +2082,7 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
         await sendPlayerCardsDM(tournament, client);
 
         const embed = await createGameEmbed(tournament, userId, client);
-        const buttons = createButtons(tournament, userId, client);
+        const buttons = await createButtons(tournament, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -2157,7 +2163,7 @@ async function handleHiLoButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -2181,7 +2187,7 @@ async function handleHiLoButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -2218,7 +2224,7 @@ async function handleHiLoButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -2243,7 +2249,7 @@ async function handleHiLoButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(newGame, userId, client);
-        const buttons = createButtons(newGame, userId, client);
+        const buttons = await createButtons(newGame, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -2254,10 +2260,10 @@ async function handleHiLoButtons(interaction, activeGames, userId, client) {
 
 async function handleClaimChallengeRewards(interaction, userId) {
     const { getUserChallenges, awardChallengeReward } = require('../utils/challenges');
-    const { saveUserData } = require('../utils/data');
+    const { markChallengeClaimedDB } = require('../utils/data');
 
     try {
-        const challenges = getUserChallenges(userId);
+        const challenges = await getUserChallenges(userId);
         if (!challenges) {
             return interaction.reply({
                 content: '❌ Unable to load your challenges.',
@@ -2266,7 +2272,7 @@ async function handleClaimChallengeRewards(interaction, userId) {
         }
 
         // Find all completed but not yet claimed challenges
-        const completedChallenges = [...challenges.daily, ...challenges.weekly].filter(c => c.completed);
+        const completedChallenges = [...challenges.daily, ...challenges.weekly].filter(c => c.completed && !c.claimed);
 
         if (completedChallenges.length === 0) {
             return interaction.reply({
@@ -2283,13 +2289,12 @@ async function handleClaimChallengeRewards(interaction, userId) {
             const reward = await awardChallengeReward(userId, challenge);
             totalReward += reward;
             claimedChallenges.push(`${challenge.emoji} **${challenge.name}** - $${reward.toLocaleString()}`);
+
+            // Mark challenge as claimed in the database
+            await markChallengeClaimedDB(userId, challenge.id);
         }
 
-        // Remove completed challenges from active lists
-        challenges.daily = challenges.daily.filter(c => !c.completed);
-        challenges.weekly = challenges.weekly.filter(c => !c.completed);
-
-        await saveUserData();
+        // Challenges remain in DB as "completed & claimed" until reset period expires
 
         const embed = new EmbedBuilder()
             .setColor('#00FF00')

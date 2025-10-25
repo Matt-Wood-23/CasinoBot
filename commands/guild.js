@@ -81,10 +81,17 @@ module.exports = {
 
         } catch (error) {
             console.error('Error in guild command:', error);
-            await interaction.reply({
+
+            const errorMessage = {
                 content: '❌ An error occurred while processing your guild request. Please try again.',
                 ephemeral: true
-            });
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
         }
     }
 };
@@ -224,7 +231,7 @@ async function leaveGuildCommand(interaction, userId) {
 }
 
 async function showGuildInfo(interaction, userId) {
-    const guild = getUserGuild(userId);
+    const guild = await getUserGuild(userId);
 
     if (!guild) {
         return interaction.reply({
@@ -310,7 +317,7 @@ async function donateToGuildCommand(interaction, userId) {
 }
 
 async function showGuildMembers(interaction, userId) {
-    const guild = getUserGuild(userId);
+    const guild = await getUserGuild(userId);
 
     if (!guild) {
         return interaction.reply({
@@ -343,7 +350,7 @@ async function showGuildMembers(interaction, userId) {
 }
 
 async function showGuildLeaderboard(interaction) {
-    const leaderboards = getGuildLeaderboards();
+    const leaderboards = await getGuildLeaderboards();
 
     const embed = new EmbedBuilder()
         .setColor('#FFD700')

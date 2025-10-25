@@ -1,4 +1,15 @@
-const { getUserData, saveUserData } = require('./data');
+const {
+    getUserMoney,
+    setUserMoney,
+    addToInventory,
+    removeFromInventory,
+    getUserInventory,
+    addBoost,
+    hasActiveBoost,
+    getActiveBoost,
+    consumeBoost,
+    getUserBoosts
+} = require('./data');
 
 // Shop item definitions
 const SHOP_ITEMS = {
@@ -64,22 +75,6 @@ const SHOP_ITEMS = {
     }
 };
 
-// Initialize inventory for a user
-function initializeInventory(userId) {
-    const userData = getUserData(userId);
-    if (!userData) return null;
-
-    if (!userData.inventory) {
-        userData.inventory = [];
-    }
-
-    if (!userData.activeBoosts) {
-        userData.activeBoosts = [];
-    }
-
-    return userData;
-}
-
 // Get all shop items
 function getShopItems() {
     return Object.values(SHOP_ITEMS);
@@ -104,14 +99,13 @@ function getShopItem(itemId) {
     return SHOP_ITEMS[itemId] || null;
 }
 
-// Purchase an item
+// Purchase an item (FIXED - now uses database)
 async function purchaseItem(userId, itemId) {
     const item = getShopItem(itemId);
     if (!item) {
         return { success: false, message: 'Item not found!' };
     }
 
-    const { getUserMoney, setUserMoney } = require('./data');
     const currentMoney = await getUserMoney(userId);
 
     if (currentMoney < item.price) {
@@ -121,168 +115,112 @@ async function purchaseItem(userId, itemId) {
         };
     }
 
-    const userData = initializeInventory(userId);
-    if (!userData) {
-        return { success: false, message: 'User data not found!' };
-    }
+    try {
+        // Deduct money
+        await setUserMoney(userId, currentMoney - item.price);
 
-    // Deduct money
-    await setUserMoney(userId, currentMoney - item.price);
+        // Add to inventory using database
+        await addToInventory(userId, itemId);
 
-    // Add to inventory
-    const inventoryItem = {
-        ...item,
-        purchasedAt: Date.now(),
-        id: `${itemId}_${Date.now()}_${Math.random()}`
-    };
-
-    userData.inventory.push(inventoryItem);
-    await saveUserData();
-
-    return {
-        success: true,
-        message: `Successfully purchased **${item.name}** for $${item.price.toLocaleString()}!`,
-        item: inventoryItem
-    };
-}
-
-// Get user's inventory
-function getUserInventory(userId) {
-    const userData = initializeInventory(userId);
-    if (!userData) return [];
-
-    return userData.inventory;
-}
-
-// Use/activate an item
-async function useItem(userId, itemId) {
-    const userData = initializeInventory(userId);
-    if (!userData) {
-        return { success: false, message: 'User data not found!' };
-    }
-
-    // Find item in inventory
-    const itemIndex = userData.inventory.findIndex(item => item.id === itemId);
-    if (itemIndex === -1) {
-        return { success: false, message: 'Item not found in your inventory!' };
-    }
-
-    const item = userData.inventory[itemIndex];
-
-    // Check if user already has an active boost
-    if (userData.activeBoosts.length > 0) {
-        const activeBoost = userData.activeBoosts[0];
-        const boostItem = SHOP_ITEMS[activeBoost.itemType];
+        return {
+            success: true,
+            message: `Successfully purchased **${item.name}** for $${item.price.toLocaleString()}!`,
+            item: item
+        };
+    } catch (error) {
+        console.error('Error purchasing item:', error);
+        // Refund money if inventory addition failed
+        await setUserMoney(userId, currentMoney);
         return {
             success: false,
-            message: `You already have an active boost: **${boostItem.name}**! Use it first before activating another.`
+            message: 'Purchase failed! Your money has been refunded.'
         };
     }
-
-    // Remove from inventory
-    userData.inventory.splice(itemIndex, 1);
-
-    // Add to active boosts
-    const activeBoost = {
-        itemType: item.id.split('_')[0] + '_' + item.id.split('_')[1], // Get original item type
-        effect: item.effect,
-        value: item.value,
-        activatedAt: Date.now(),
-        used: false
-    };
-
-    userData.activeBoosts.push(activeBoost);
-    await saveUserData();
-
-    return {
-        success: true,
-        message: `Activated **${item.name}**! It will be used on your next applicable action.`,
-        boost: activeBoost
-    };
 }
 
-// Check if user has an active boost of a specific type
-function hasActiveBoost(userId, boostType) {
-    const userData = getUserData(userId);
-    if (!userData || !userData.activeBoosts) return false;
+// Get user's inventory (FIXED - now uses database)
+async function getInventory(userId) {
+    const inventoryItems = await getUserInventory(userId);
 
-    return userData.activeBoosts.some(boost => boost.effect === boostType && !boost.used);
+    // Map to include full item details
+    return inventoryItems.map(invItem => ({
+        itemId: invItem.itemId,  // Preserve itemId field
+        ...SHOP_ITEMS[invItem.itemId],
+        quantity: invItem.quantity,
+        acquiredAt: invItem.acquiredAt
+    }));
 }
 
-// Get active boost of a specific type
-function getActiveBoost(userId, boostType) {
-    const userData = getUserData(userId);
-    if (!userData || !userData.activeBoosts) return null;
+// Use/activate an item (FIXED - now uses database)
+async function useItem(userId, itemId) {
+    const item = getShopItem(itemId);
+    if (!item) {
+        return { success: false, message: 'Item not found!' };
+    }
 
-    return userData.activeBoosts.find(boost => boost.effect === boostType && !boost.used) || null;
-}
+    try {
+        // Check if user has this item
+        const inventory = await getUserInventory(userId);
+        const hasItem = inventory.some(invItem => invItem.itemId === itemId && invItem.quantity > 0);
 
-// Consume/use an active boost
-async function consumeBoost(userId, boostType) {
-    const userData = getUserData(userId);
-    if (!userData || !userData.activeBoosts) return false;
+        if (!hasItem) {
+            return { success: false, message: 'Item not found in your inventory!' };
+        }
 
-    const boostIndex = userData.activeBoosts.findIndex(
-        boost => boost.effect === boostType && !boost.used
-    );
+        // Check if user already has an active boost of this type
+        const hasBoost = await hasActiveBoost(userId, item.effect);
+        if (hasBoost) {
+            return {
+                success: false,
+                message: `You already have an active **${item.name}** boost! Use it first before activating another.`
+            };
+        }
 
-    if (boostIndex === -1) return false;
+        // Remove from inventory
+        const removed = await removeFromInventory(userId, itemId);
+        if (!removed) {
+            return { success: false, message: 'Failed to remove item from inventory!' };
+        }
 
-    // Mark as used and remove
-    userData.activeBoosts.splice(boostIndex, 1);
-    await saveUserData();
+        // Add to active boosts
+        await addBoost(userId, item.effect, item.value, 1);
 
-    return true;
-}
-
-// Get all active boosts for a user
-function getActiveBoosts(userId) {
-    const userData = getUserData(userId);
-    if (!userData || !userData.activeBoosts) return [];
-
-    return userData.activeBoosts.filter(boost => !boost.used);
-}
-
-// Clear expired or used boosts
-async function cleanupBoosts(userId) {
-    const userData = getUserData(userId);
-    if (!userData || !userData.activeBoosts) return;
-
-    // Remove used boosts
-    const activeBefore = userData.activeBoosts.length;
-    userData.activeBoosts = userData.activeBoosts.filter(boost => !boost.used);
-
-    if (userData.activeBoosts.length !== activeBefore) {
-        await saveUserData();
+        return {
+            success: true,
+            message: `Activated **${item.name}**! It will be used on your next applicable action.`
+        };
+    } catch (error) {
+        console.error('Error using item:', error);
+        return { success: false, message: 'Failed to use item!' };
     }
 }
 
 // Get inventory count by item type
-function getInventoryCount(userId) {
-    const inventory = getUserInventory(userId);
+async function getInventoryCount(userId) {
+    const inventory = await getUserInventory(userId);
     const counts = {};
 
     for (const item of inventory) {
-        const itemType = item.id.split('_')[0] + '_' + item.id.split('_')[1];
-        counts[itemType] = (counts[itemType] || 0) + 1;
+        counts[item.itemId] = item.quantity;
     }
 
     return counts;
 }
 
+// Export both old function name and new for compatibility
 module.exports = {
     SHOP_ITEMS,
-    initializeInventory,
     getShopItems,
     getShopItemsByCategory,
     getShopItem,
     purchaseItem,
-    getUserInventory,
+    getUserInventory: getInventory, // Use database version
+    getInventory, // New name
     useItem,
-    hasActiveBoost,
-    getActiveBoost,
-    consumeBoost,
-    getActiveBoosts,
-    cleanupBoosts,
+    hasActiveBoost, // Export from data layer
+    getActiveBoost, // Export from data layer
+    consumeBoost, // Export from data layer
+    getActiveBoosts: getUserBoosts, // Map old name to new
+    cleanupBoosts: async () => {}, // No longer needed - database handles cleanup
     getInventoryCount
 };

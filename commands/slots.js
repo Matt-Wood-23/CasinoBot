@@ -50,7 +50,7 @@ module.exports = {
 
             // Create and send the result
             const embed = await createGameEmbed(slotsGame, interaction.user.id, interaction.client);
-            const buttons = createButtons(slotsGame, interaction.user.id, interaction.client);
+            const buttons = await createButtons(slotsGame, interaction.user.id, interaction.client);
             
             await interaction.reply({
                 embeds: [embed],
@@ -59,10 +59,17 @@ module.exports = {
             
         } catch (error) {
             console.error('Error in slots command:', error);
-            await interaction.reply({
+
+            const errorMessage = {
                 content: '❌ An error occurred while playing slots. Please try again.',
                 ephemeral: true
-            });
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
         }
     }
 };

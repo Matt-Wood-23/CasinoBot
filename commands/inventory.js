@@ -10,9 +10,9 @@ module.exports = {
     async execute(interaction) {
         try {
             const userId = interaction.user.id;
-            const inventory = getUserInventory(userId);
-            const activeBoosts = getActiveBoosts(userId);
-            const inventoryCounts = getInventoryCount(userId);
+            const inventory = await getUserInventory(userId);
+            const activeBoosts = await getActiveBoosts(userId);
+            const inventoryCounts = await getInventoryCount(userId);
 
             const embed = new EmbedBuilder()
                 .setColor('#00D9FF')
@@ -72,7 +72,7 @@ module.exports = {
             const rows = [];
             if (inventory.length > 0 && activeBoosts.length === 0) {
                 const uniqueItems = [...new Set(inventory.map(item => {
-                    return item.id.split('_')[0] + '_' + item.id.split('_')[1];
+                    return item.itemId.split('_')[0] + '_' + item.itemId.split('_')[1];
                 }))];
 
                 const row = new ActionRowBuilder();
@@ -101,10 +101,17 @@ module.exports = {
 
         } catch (error) {
             console.error('Error in inventory command:', error);
-            await interaction.reply({
+
+            const errorMessage = {
                 content: '❌ An error occurred while loading your inventory. Please try again.',
                 ephemeral: true
-            });
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
         }
     }
 };

@@ -129,7 +129,7 @@ async function handleRouletteModal(interaction, activeGames, client) {
 
         // Create and send response
         const embed = await createGameEmbed(rouletteGame, userId, client);
-        const buttons = createButtons(rouletteGame, userId, client);
+        const buttons = await createButtons(rouletteGame, userId, client);
 
         await interaction.reply({
             embeds: [embed],
@@ -256,7 +256,7 @@ async function handleAdjustedBetSubmission(interaction, activeGames, client, dea
     } else {
         // Not all players ready yet - just update the display
         const embed = await createGameEmbed(game, interaction.user.id, client);
-        const buttons = createButtons(game, interaction.user.id, client);
+        const buttons = await createButtons(game, interaction.user.id, client);
         let components = [];
         if (buttons) {
             if (Array.isArray(buttons)) {
@@ -568,7 +568,7 @@ async function handleCrapsModal(interaction, activeGames, client) {
 
         // Send game display
         const embed = await createGameEmbed(crapsGame, userId, client);
-        const buttons = createButtons(crapsGame, userId, client);
+        const buttons = await createButtons(crapsGame, userId, client);
 
         await interaction.reply({
             embeds: [embed],
@@ -674,7 +674,7 @@ async function handleTournamentRaise(interaction, activeGames, client) {
         const { createButtons } = require('../utils/buttons');
 
         const embed = await createGameEmbed(tournament, userId, client);
-        const buttons = createButtons(tournament, userId, client);
+        const buttons = await createButtons(tournament, userId, client);
 
         await interaction.message.edit({
             embeds: [embed],
@@ -722,7 +722,7 @@ async function handleHiLoModal(interaction, activeGames, client) {
 
         // Send initial embed
         const embed = await createGameEmbed(hiLoGame, userId, client);
-        const buttons = createButtons(hiLoGame, userId, client);
+        const buttons = await createButtons(hiLoGame, userId, client);
 
         await interaction.reply({
             embeds: [embed],

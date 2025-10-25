@@ -9,6 +9,8 @@
   "author": "matt",
   "license": "ISC",
   "dependencies": {
-    "discord.js": "^14.22.1"
+    "discord.js": "^14.22.1",
+    "dotenv": "^17.2.3",
+    "pg": "^8.16.3"
   }
 }

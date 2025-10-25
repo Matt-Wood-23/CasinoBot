@@ -73,7 +73,7 @@ module.exports = {
 
 async function handleLoanRequest(interaction, userId) {
     const amount = interaction.options.getInteger('amount');
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
 
     if (!userData) {
         return interaction.reply({
@@ -135,7 +135,7 @@ async function handleLoanRequest(interaction, userId) {
 }
 
 async function handleLoanRepayment(interaction, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
 
     if (!userData || !userData.activeLoan) {
         return interaction.reply({
@@ -178,7 +178,7 @@ async function handleLoanRepayment(interaction, userId) {
         );
 
     if (result.paidOff) {
-        const updatedUser = getUserData(userId);
+        const updatedUser = await getUserData(userId);
         embed.addFields({ name: '📊 New Credit Score', value: `${updatedUser.creditScore}`, inline: true });
         embed.setFooter({ text: 'Your credit score has been updated!' });
     }
@@ -188,7 +188,7 @@ async function handleLoanRepayment(interaction, userId) {
 }
 
 async function handleLoanStatus(interaction, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
 
     if (!userData) {
         return interaction.reply({ content: '❌ User data not found!', ephemeral: true });
@@ -250,7 +250,7 @@ async function handleLoanStatus(interaction, userId) {
 }
 
 async function handleLoanHistory(interaction, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
 
     if (!userData || !userData.loanHistory || userData.loanHistory.length === 0) {
         return interaction.reply({

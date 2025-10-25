@@ -1,4 +1,12 @@
-const { getUserData, saveUserData, getUserMoney, setUserMoney } = require('./data');
+const {
+    getUserMoney,
+    setUserMoney,
+    purchasePropertyDB,
+    getUserPropertiesDB,
+    upgradePropertyDB,
+    updatePropertyCollectionTime,
+    getPropertyLastCollected
+} = require('./data');
 const { getUserVIPTier } = require('./vip');
 
 // Property Definitions (tiered by VIP level)
@@ -117,21 +125,6 @@ const PROPERTIES = {
     }
 };
 
-// Initialize properties for a user
-function initializeProperties(userId) {
-    const userData = getUserData(userId);
-    if (!userData) return null;
-
-    if (!userData.properties) {
-        userData.properties = {
-            owned: [],
-            lastCollection: 0
-        };
-    }
-
-    return userData.properties;
-}
-
 // Get all properties (optionally filter by VIP level)
 function getAllProperties(userVipLevel = 0) {
     const allProps = Object.values(PROPERTIES);
@@ -148,14 +141,14 @@ function getPropertyById(propertyId) {
     return PROPERTIES[propertyId] || null;
 }
 
-// Check if user can purchase property
-function canPurchaseProperty(userId, propertyId) {
+// Check if user can purchase property (FIXED - now async with database)
+async function canPurchaseProperty(userId, propertyId) {
     const property = getPropertyById(propertyId);
     if (!property) {
         return { canPurchase: false, reason: 'Property not found!' };
     }
 
-    const vipTier = getUserVIPTier(userId);
+    const vipTier = await getUserVIPTier(userId);
     const userVipLevel = vipTier ? vipTier.level : 0;
 
     if (property.vipLevel > userVipLevel) {
@@ -165,12 +158,9 @@ function canPurchaseProperty(userId, propertyId) {
         };
     }
 
-    const userProperties = initializeProperties(userId);
-    if (!userProperties) {
-        return { canPurchase: false, reason: 'User data not found!' };
-    }
+    const userProperties = await getUserPropertiesDB(userId);
+    const alreadyOwned = userProperties.some(p => p.propertyId === propertyId);
 
-    const alreadyOwned = userProperties.owned.some(p => p.id === propertyId);
     if (alreadyOwned) {
         return { canPurchase: false, reason: 'You already own this property!' };
     }
@@ -178,14 +168,14 @@ function canPurchaseProperty(userId, propertyId) {
     return { canPurchase: true };
 }
 
-// Purchase a property
+// Purchase a property (FIXED - now uses database)
 async function purchaseProperty(userId, propertyId) {
     const property = getPropertyById(propertyId);
     if (!property) {
         return { success: false, message: 'Property not found!' };
     }
 
-    const canPurchase = canPurchaseProperty(userId, propertyId);
+    const canPurchase = await canPurchaseProperty(userId, propertyId);
     if (!canPurchase.canPurchase) {
         return { success: false, message: canPurchase.reason };
     }
@@ -199,34 +189,40 @@ async function purchaseProperty(userId, propertyId) {
         };
     }
 
-    // Deduct money
-    await setUserMoney(userId, currentMoney - property.purchasePrice);
+    try {
+        // Deduct money
+        await setUserMoney(userId, currentMoney - property.purchasePrice);
 
-    // Add property to user
-    const userProperties = initializeProperties(userId);
-    userProperties.owned.push({
-        id: propertyId,
-        purchasedAt: Date.now(),
-        upgradeLevel: 0
-    });
+        // Add property to database
+        const success = await purchasePropertyDB(userId, propertyId);
 
-    await saveUserData();
+        if (!success) {
+            // Refund if database operation failed
+            await setUserMoney(userId, currentMoney);
+            return { success: false, message: 'Failed to purchase property!' };
+        }
 
-    return {
-        success: true,
-        property: property
-    };
+        return {
+            success: true,
+            property: property
+        };
+    } catch (error) {
+        console.error('Error in purchaseProperty:', error);
+        // Refund on error
+        await setUserMoney(userId, currentMoney);
+        return { success: false, message: 'Purchase failed!' };
+    }
 }
 
-// Upgrade a property
+// Upgrade a property (FIXED - now uses database)
 async function upgradeProperty(userId, propertyId) {
     const property = getPropertyById(propertyId);
     if (!property) {
         return { success: false, message: 'Property not found!' };
     }
 
-    const userProperties = initializeProperties(userId);
-    const ownedProperty = userProperties.owned.find(p => p.id === propertyId);
+    const userProperties = await getUserPropertiesDB(userId);
+    const ownedProperty = userProperties.find(p => p.propertyId === propertyId);
 
     if (!ownedProperty) {
         return { success: false, message: 'You don\'t own this property!' };
@@ -248,21 +244,31 @@ async function upgradeProperty(userId, propertyId) {
         };
     }
 
-    // Deduct money
-    await setUserMoney(userId, currentMoney - upgrade.cost);
+    try {
+        // Deduct money
+        await setUserMoney(userId, currentMoney - upgrade.cost);
 
-    // Upgrade property
-    ownedProperty.upgradeLevel = currentLevel + 1;
-    ownedProperty.lastUpgraded = Date.now();
+        // Upgrade in database
+        const newLevel = await upgradePropertyDB(userId, propertyId);
 
-    await saveUserData();
+        if (newLevel === false) {
+            // Refund if database operation failed
+            await setUserMoney(userId, currentMoney);
+            return { success: false, message: 'Failed to upgrade property!' };
+        }
 
-    return {
-        success: true,
-        property: property,
-        newLevel: ownedProperty.upgradeLevel,
-        upgrade: upgrade
-    };
+        return {
+            success: true,
+            property: property,
+            newLevel: newLevel,
+            upgrade: upgrade
+        };
+    } catch (error) {
+        console.error('Error in upgradeProperty:', error);
+        // Refund on error
+        await setUserMoney(userId, currentMoney);
+        return { success: false, message: 'Upgrade failed!' };
+    }
 }
 
 // Calculate property income and maintenance
@@ -284,13 +290,14 @@ function calculatePropertyStats(property, upgradeLevel) {
     };
 }
 
-// Get user's properties with stats
-function getUserProperties(userId) {
-    const userProperties = initializeProperties(userId);
-    if (!userProperties) return [];
+// Get user's properties with stats (FIXED - now uses database)
+async function getUserProperties(userId) {
+    const userProperties = await getUserPropertiesDB(userId);
 
-    return userProperties.owned.map(ownedProp => {
-        const property = getPropertyById(ownedProp.id);
+    if (userProperties.length === 0) return [];
+
+    return userProperties.map(ownedProp => {
+        const property = getPropertyById(ownedProp.propertyId);
         if (!property) return null;
 
         const stats = calculatePropertyStats(property, ownedProp.upgradeLevel || 0);
@@ -304,9 +311,9 @@ function getUserProperties(userId) {
     }).filter(p => p !== null);
 }
 
-// Collect daily income from all properties
+// Collect daily income from all properties (FIXED - now uses database)
 async function collectPropertyIncome(userId) {
-    const userProperties = getUserProperties(userId);
+    const userProperties = await getUserProperties(userId);
 
     if (userProperties.length === 0) {
         return {
@@ -315,9 +322,8 @@ async function collectPropertyIncome(userId) {
         };
     }
 
-    const userData = getUserData(userId);
     const now = Date.now();
-    const lastCollection = userData.properties.lastCollection || 0;
+    const lastCollection = await getPropertyLastCollected(userId);
     const oneDayMs = 24 * 60 * 60 * 1000;
 
     if (now - lastCollection < oneDayMs) {
@@ -341,26 +347,32 @@ async function collectPropertyIncome(userId) {
 
     const netIncome = totalIncome - totalMaintenance;
 
-    // Add money
-    const currentMoney = await getUserMoney(userId);
-    await setUserMoney(userId, currentMoney + netIncome);
+    try {
+        // Add money
+        const currentMoney = await getUserMoney(userId);
+        await setUserMoney(userId, currentMoney + netIncome);
 
-    // Update last collection time
-    userData.properties.lastCollection = now;
-    await saveUserData();
+        // Update last collection time in database
+        await updatePropertyCollectionTime(userId);
 
-    return {
-        success: true,
-        totalIncome,
-        totalMaintenance,
-        netIncome,
-        propertyCount: userProperties.length
-    };
+        return {
+            success: true,
+            totalIncome,
+            totalMaintenance,
+            netIncome,
+            propertyCount: userProperties.length
+        };
+    } catch (error) {
+        console.error('Error in collectPropertyIncome:', error);
+        return {
+            success: false,
+            message: 'Failed to collect income!'
+        };
+    }
 }
 
 module.exports = {
     PROPERTIES,
-    initializeProperties,
     getAllProperties,
     getPropertyById,
     canPurchaseProperty,
