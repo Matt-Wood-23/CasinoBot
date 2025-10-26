@@ -1068,10 +1068,23 @@ function startTurnTimer(game, interaction, activeGames, client, dealCardsWithDel
 // Animate dealer drawing cards one at a time
 async function animateDealerDrawing(game, interaction, userId, client) {
     const delay = 1000; // 1 second between each dealer card
+    const currentGameId = game.gameId; // Store gameId to detect if game is replaced
 
     while (game.shouldDealerContinue()) {
+        // Check if game was replaced during animation
+        if (game.gameId !== currentGameId) {
+            console.log(`Game ${currentGameId} was replaced during dealer animation, stopping`);
+            return;
+        }
+
         // Wait before drawing next card
         await new Promise(resolve => setTimeout(resolve, delay));
+
+        // Check again after delay in case game was replaced while waiting
+        if (game.gameId !== currentGameId) {
+            console.log(`Game ${currentGameId} was replaced during dealer animation, stopping`);
+            return;
+        }
 
         // Draw one card
         game.dealerPlay();
@@ -1098,6 +1111,13 @@ async function animateDealerDrawing(game, interaction, userId, client) {
             break;
         }
     }
+
+    // Check if game was replaced before final update
+    if (game.gameId !== currentGameId) {
+        console.log(`Game ${currentGameId} was replaced during dealer animation, stopping`);
+        return;
+    }
+
     // Final update after dealer is done to show game over buttons
     if (game.gameOver) {
         const embed = await createGameEmbed(game, userId, client);
