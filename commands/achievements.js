@@ -10,7 +10,7 @@ module.exports = {
     async execute(interaction) {
         try {
             const userId = interaction.user.id;
-            const { unlocked, locked, progress, stats } = getUserAchievements(userId);
+            const { unlocked, locked, progress, stats } = await getUserAchievements(userId);
 
             const embed = new EmbedBuilder()
                 .setColor('#FFD700')

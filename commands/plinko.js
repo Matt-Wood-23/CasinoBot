@@ -1,5 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { getUserMoney, setUserMoney, recordGameResult } = require('../utils/data');
+const { isGamblingBanned, getGamblingBanTime } = require('../database/queries');
+const { validateBet } = require('../utils/vip');
 const PlinkoGame = require('../gameLogic/plinkoGame');
 
 module.exports = {
@@ -9,11 +11,11 @@ module.exports = {
         options: [
             {
                 name: 'bet',
-                description: 'Amount to bet (1-10000)',
+                description: 'Amount to bet (VIP gets higher limits!)',
                 type: 4,
                 required: true,
                 min_value: 1,
-                max_value: 10000
+                max_value: 20000
             },
             {
                 name: 'risk',
@@ -34,6 +36,30 @@ module.exports = {
             const bet = interaction.options.getInteger('bet');
             const risk = interaction.options.getString('risk') || 'medium';
             const userId = interaction.user.id;
+
+            // Validate bet against VIP limits
+            const betValidation = await validateBet(userId, bet, 1, 10000);
+            if (!betValidation.valid) {
+                return await interaction.reply({
+                    content: betValidation.message,
+                    ephemeral: true
+                });
+            }
+
+            // Check if user is gambling banned
+            const isBanned = await isGamblingBanned(userId);
+            if (isBanned) {
+                const banUntil = await getGamblingBanTime(userId);
+                const timeLeft = banUntil - Date.now();
+                const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
+                const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
+
+                return await interaction.reply({
+                    content: `🚫 You're banned from gambling after a failed heist!\nBan expires in: ${hoursLeft}h ${minutesLeft}m`,
+                    ephemeral: true
+                });
+            }
+
             const userMoney = await getUserMoney(userId);
 
             // Check if user has enough money

@@ -83,7 +83,7 @@ module.exports = {
 };
 
 async function showVIPStatus(interaction, userId) {
-    const status = getVIPStatus(userId);
+    const status = await getVIPStatus(userId);
 
     const embed = new EmbedBuilder()
         .setTitle(`${interaction.user.username}'s VIP Status`)
@@ -131,7 +131,7 @@ async function showVIPStatus(interaction, userId) {
 async function showVIPShop(interaction, userId) {
     const tiers = getAllVIPTiers();
     const userMoney = await getUserMoney(userId);
-    const currentStatus = getVIPStatus(userId);
+    const currentStatus = await getVIPStatus(userId);
 
     const embed = new EmbedBuilder()
         .setColor('#FFD700')

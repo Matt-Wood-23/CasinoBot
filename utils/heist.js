@@ -193,13 +193,13 @@ function cleanupExpiredGuildHeists() {
 async function startGuildHeist(guildId, initiatorId) {
     try {
         const { getUserGuild } = require('./guilds');
-        const guild = getUserGuild(initiatorId);
+        const guild = await getUserGuild(initiatorId);
 
         if (!guild) {
             return { success: false, message: "You're not in a guild!" };
         }
 
-        if (guild.id !== guildId) {
+        if (guild.guildId !== guildId) {
             return { success: false, message: 'You can only start heists for your own guild!' };
         }
 
@@ -266,7 +266,7 @@ async function joinGuildHeist(guildId, userId) {
 
         // Check if user is in the guild
         const { getUserGuild } = require('./guilds');
-        const guild = getUserGuild(userId);
+        const guild = await getUserGuild(userId);
 
         if (!guild || guild.id !== guildId) {
             return { success: false, message: 'You must be in this guild to join the heist!' };

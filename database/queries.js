@@ -4,6 +4,31 @@ const { query, getClient } = require('./connection');
 // This mimics the old JSON behavior where notifications were stored temporarily
 const pendingNotifications = new Map();
 
+// Helper function to convert snake_case to camelCase
+function snakeToCamel(str) {
+    return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+}
+
+// Helper function to recursively convert object keys from snake_case to camelCase
+function convertKeysToCamelCase(obj) {
+    if (obj === null || obj === undefined) return obj;
+
+    if (Array.isArray(obj)) {
+        return obj.map(item => convertKeysToCamelCase(item));
+    }
+
+    if (typeof obj === 'object' && obj.constructor === Object) {
+        const converted = {};
+        for (const [key, value] of Object.entries(obj)) {
+            const camelKey = snakeToCamel(key);
+            converted[camelKey] = convertKeysToCamelCase(value);
+        }
+        return converted;
+    }
+
+    return obj;
+}
+
 // Initialize database - called on bot startup
 async function loadUserData() {
     try {
@@ -149,8 +174,8 @@ async function recordGameResult(userId, gameType, bet, winnings, result, details
         let modifiedWinnings = Math.floor(winnings);
 
         // Check for Win Multiplier boost (25% bonus on wins)
-        if ((result === 'win' || result === 'blackjack') && hasActiveBoost(userId, 'win_multiplier')) {
-            const boost = getActiveBoost(userId, 'win_multiplier');
+        if ((result === 'win' || result === 'blackjack') && await hasActiveBoost(userId, 'win_multiplier')) {
+            const boost = await getActiveBoost(userId, 'win_multiplier');
             const bonusAmount = Math.floor(winnings * (boost.value / 100));
             modifiedWinnings += bonusAmount;
 
@@ -163,8 +188,8 @@ async function recordGameResult(userId, gameType, bet, winnings, result, details
         }
 
         // Check for Insurance boost (50% refund on loss)
-        if (result === 'lose' && hasActiveBoost(userId, 'insurance')) {
-            const boost = getActiveBoost(userId, 'insurance');
+        if (result === 'lose' && await hasActiveBoost(userId, 'insurance')) {
+            const boost = await getActiveBoost(userId, 'insurance');
             const refundAmount = Math.floor(bet * (boost.value / 100));
 
             // Refund money
@@ -427,7 +452,7 @@ async function getAllUserData() {
                 giftsSent: parseInt(row.gifts_sent),
                 totalGiftsReceived: parseInt(row.total_gifts_received),
                 totalGiftsSent: parseInt(row.total_gifts_sent),
-                statistics: row.statistics || {}
+                statistics: convertKeysToCamelCase(row.statistics) || {}
             };
         }
 
@@ -465,6 +490,7 @@ async function getUserData(userId) {
 
         const row = result.rows[0];
 
+        // Convert all nested objects from snake_case to camelCase for compatibility
         return {
             money: parseInt(row.money),
             lastDaily: parseInt(row.last_daily),
@@ -474,10 +500,10 @@ async function getUserData(userId) {
             giftsSent: parseInt(row.gifts_sent),
             totalGiftsReceived: parseInt(row.total_gifts_received),
             totalGiftsSent: parseInt(row.total_gifts_sent),
-            statistics: row.statistics || {},
-            gameHistory: row.game_history || [],
-            activeLoan: row.active_loan || null,
-            loanHistory: row.loan_history || []
+            statistics: convertKeysToCamelCase(row.statistics) || {},
+            gameHistory: convertKeysToCamelCase(row.game_history) || [],
+            activeLoan: convertKeysToCamelCase(row.active_loan) || null,
+            loanHistory: convertKeysToCamelCase(row.loan_history) || []
         };
     } catch (error) {
         console.error('Error getting user data:', error);
@@ -2708,6 +2734,198 @@ async function clearGamblingBan(userId) {
     }
 }
 
+// ============ PROGRESSIVE JACKPOT FUNCTIONS ============
+
+// Get server jackpot
+async function getServerJackpot(serverId) {
+    try {
+        // Ensure jackpot row exists
+        await query(
+            `INSERT INTO progressive_jackpot (server_id, current_amount, created_at)
+             VALUES ($1, 0, $2)
+             ON CONFLICT (server_id) DO NOTHING`,
+            [serverId, Date.now()]
+        );
+
+        const result = await query(
+            `SELECT current_amount, last_winner_id, last_winner_amount, last_won_at, total_contributed, times_won
+             FROM progressive_jackpot
+             WHERE server_id = $1`,
+            [serverId]
+        );
+
+        if (result.rows.length === 0) return null;
+
+        const row = result.rows[0];
+        return {
+            currentAmount: parseInt(row.current_amount) || 0,
+            lastWinnerId: row.last_winner_id,
+            lastWinnerAmount: parseInt(row.last_winner_amount) || 0,
+            lastWonAt: parseInt(row.last_won_at) || 0,
+            totalContributed: parseInt(row.total_contributed) || 0,
+            timesWon: parseInt(row.times_won) || 0
+        };
+    } catch (error) {
+        console.error('Error getting server jackpot:', error);
+        return null;
+    }
+}
+
+// Add to jackpot pool
+async function addToJackpot(serverId, amount) {
+    try {
+        // Ensure jackpot row exists
+        await query(
+            `INSERT INTO progressive_jackpot (server_id, current_amount, created_at)
+             VALUES ($1, 0, $2)
+             ON CONFLICT (server_id) DO NOTHING`,
+            [serverId, Date.now()]
+        );
+
+        await query(
+            `UPDATE progressive_jackpot
+             SET current_amount = current_amount + $1,
+                 total_contributed = total_contributed + $1
+             WHERE server_id = $2`,
+            [amount, serverId]
+        );
+
+        return true;
+    } catch (error) {
+        console.error('Error adding to jackpot:', error);
+        return false;
+    }
+}
+
+// Reset jackpot after win
+async function resetJackpot(serverId, winnerId, winAmount) {
+    try {
+        await query(
+            `UPDATE progressive_jackpot
+             SET current_amount = 0,
+                 last_winner_id = $1,
+                 last_winner_amount = $2,
+                 last_won_at = $3,
+                 times_won = times_won + 1
+             WHERE server_id = $4`,
+            [winnerId, winAmount, Date.now(), serverId]
+        );
+
+        return true;
+    } catch (error) {
+        console.error('Error resetting jackpot:', error);
+        return false;
+    }
+}
+
+// ============ LOGIN STREAK FUNCTIONS ============
+
+// Get user's login streak
+async function getLoginStreak(userId) {
+    try {
+        const result = await query(
+            'SELECT login_streak, best_login_streak, last_streak_claim FROM users WHERE discord_id = $1',
+            [userId]
+        );
+
+        if (result.rows.length === 0) return { currentStreak: 0, bestStreak: 0, lastClaim: 0 };
+
+        const row = result.rows[0];
+        return {
+            currentStreak: parseInt(row.login_streak) || 0,
+            bestStreak: parseInt(row.best_login_streak) || 0,
+            lastClaim: parseInt(row.last_streak_claim) || 0
+        };
+    } catch (error) {
+        console.error('Error getting login streak:', error);
+        return { currentStreak: 0, bestStreak: 0, lastClaim: 0 };
+    }
+}
+
+// Update login streak (increment or reset)
+async function updateLoginStreak(userId, isNewClaim = true) {
+    try {
+        await getUserMoney(userId); // Ensure user exists
+
+        const streakData = await getLoginStreak(userId);
+        const now = Date.now();
+        const lastClaim = streakData.lastClaim;
+        const timeSinceLastClaim = now - lastClaim;
+        const fortyEightHours = 48 * 60 * 60 * 1000;
+
+        let newStreak = 0;
+
+        if (isNewClaim) {
+            // Check if streak should continue or reset
+            if (timeSinceLastClaim < fortyEightHours && timeSinceLastClaim > 0) {
+                // Continue streak
+                newStreak = streakData.currentStreak + 1;
+            } else {
+                // Reset streak (missed a day or first claim)
+                newStreak = 1;
+            }
+
+            // Update database
+            await query(
+                `UPDATE users
+                 SET login_streak = $1,
+                     best_login_streak = GREATEST(best_login_streak, $1),
+                     last_streak_claim = $2
+                 WHERE discord_id = $3`,
+                [newStreak, now, userId]
+            );
+
+            // Get updated best streak
+            const updatedData = await getLoginStreak(userId);
+            return {
+                currentStreak: newStreak,
+                bestStreak: updatedData.bestStreak,
+                wasReset: newStreak === 1 && streakData.currentStreak > 0
+            };
+        } else {
+            // Just checking, not claiming
+            if (timeSinceLastClaim >= fortyEightHours && streakData.currentStreak > 0) {
+                // Streak expired, reset it
+                await query(
+                    'UPDATE users SET login_streak = 0 WHERE discord_id = $1',
+                    [userId]
+                );
+                return { currentStreak: 0, bestStreak: streakData.bestStreak, wasReset: true };
+            }
+
+            return { ...streakData, wasReset: false };
+        }
+    } catch (error) {
+        console.error('Error updating login streak:', error);
+        return { currentStreak: 0, bestStreak: 0, wasReset: false };
+    }
+}
+
+// Calculate streak bonus multiplier
+function getStreakMultiplier(streak) {
+    if (streak <= 1) return 1.0;
+    if (streak === 2) return 1.2;
+    if (streak === 3) return 1.5;
+    if (streak === 4) return 1.8;
+    if (streak === 5) return 2.2;
+    if (streak === 6) return 2.5;
+    if (streak >= 7 && streak < 14) return 3.0;
+    if (streak >= 14 && streak < 30) return 5.0;
+    if (streak >= 30) return 10.0;
+    return 1.0;
+}
+
+// Get next milestone for streak
+function getNextStreakMilestone(currentStreak) {
+    const milestones = [2, 3, 5, 7, 14, 30];
+    for (const milestone of milestones) {
+        if (currentStreak < milestone) {
+            return milestone;
+        }
+    }
+    return null; // Max milestone reached
+}
+
 module.exports = {
     loadUserData,
     saveUserData,
@@ -2792,5 +3010,14 @@ module.exports = {
     getGuildHeistStats,
     updateGuildHeistCooldown,
     recordGuildHeistAttempt,
-    getAllUserHeistStats
+    getAllUserHeistStats,
+    // Progressive Jackpot
+    getServerJackpot,
+    addToJackpot,
+    resetJackpot,
+    // Login Streaks
+    getLoginStreak,
+    updateLoginStreak,
+    getStreakMultiplier,
+    getNextStreakMilestone
 };

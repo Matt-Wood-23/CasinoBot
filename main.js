@@ -128,12 +128,9 @@ async function dealCardsWithDelay(interaction, message, game, userId, delay = 10
                     });
                 }
             } else {
-                const winnings = game.getWinnings(userId);
+                let winnings = game.getWinnings(userId);
                 const currentMoney = await getUserMoney(userId);
                 const totalBet = game.getTotalBet(userId);
-                const newMoney = currentMoney + totalBet + winnings;
-
-                await setUserMoney(userId, newMoney);
 
                 const results = game.getResult(userId);
                 const result = Array.isArray(results) ?
@@ -141,10 +138,43 @@ async function dealCardsWithDelay(interaction, message, game, userId, delay = 10
                      (results.includes('win') ? 'win' :
                       (results.includes('lose') ? 'lose' : 'push'))) : results;
 
+                // Check for jackpot win on natural blackjack (0.03% chance)
+                let jackpotAmount = 0;
+                if (result === 'blackjack' && game.serverId) {
+                    const { getServerJackpot, resetJackpot } = require('./database/queries');
+                    const jackpotChance = Math.random();
+                    const wonJackpot = jackpotChance < 0.0003; // 0.03% chance
+
+                    if (wonJackpot) {
+                        const jackpotData = await getServerJackpot(game.serverId);
+                        if (jackpotData && jackpotData.currentAmount > 0) {
+                            jackpotAmount = jackpotData.currentAmount;
+                            await resetJackpot(game.serverId, userId, jackpotAmount);
+                            winnings += jackpotAmount;
+                            game.jackpotWon = jackpotAmount; // Store on game object for embed
+                        }
+                    }
+                }
+
+                const newMoney = currentMoney + totalBet + winnings;
+                await setUserMoney(userId, newMoney);
+
                 const bet = game.getTotalBet(userId);
                 await recordGameResult(userId, 'blackjack', bet, winnings, result, {
                     handsPlayed: game.players.get(userId).hands.length
                 });
+
+                // Announce jackpot win in channel
+                if (jackpotAmount > 0) {
+                    try {
+                        const channel = await client.channels.fetch(game.channelId);
+                        await channel.send({
+                            content: `🎉🎉🎉 **JACKPOT ALERT!** 🎉🎉🎉\n<@${userId}> just won the **$${jackpotAmount.toLocaleString()}** Progressive Jackpot with a Natural Blackjack! 💎🃏`
+                        });
+                    } catch (error) {
+                        console.error('Error sending jackpot announcement:', error);
+                    }
+                }
             }
         }
 
@@ -192,9 +222,21 @@ function cleanupStaleGames() {
 client.once('ready', async () => {
     console.log(`${client.user.tag} is online!`);
     await loadUserData();
-    
-    // Set activity
-    client.user.setActivity("Blackjack, Poker & Slots 🎰", { type: "PLAYING" });
+
+    // Check for active holiday event
+    const { getCurrentHoliday, getHolidayMessage } = require('./utils/holidayEvents');
+    const currentHoliday = getCurrentHoliday();
+    if (currentHoliday) {
+        console.log(`🎉 ${currentHoliday.name} event is currently active!`);
+        const welcomeMessage = getHolidayMessage('welcome', currentHoliday.id);
+        console.log(welcomeMessage);
+
+        // Update bot activity to reflect event
+        client.user.setActivity(`${currentHoliday.emoji} ${currentHoliday.name} Event! 🎰`, { type: "PLAYING" });
+    } else {
+        // Set normal activity
+        client.user.setActivity("Blackjack, Poker & Slots 🎰", { type: "PLAYING" });
+    }
 
     // Register slash commands
     const commands = client.commands.map(command => command.data);

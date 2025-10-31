@@ -122,6 +122,10 @@ async function createGuildCommand(interaction, userId) {
 
     const guild = result.guild;
 
+    // Fetch members separately since createGuild doesn't return them
+    const { getGuildMembers } = require('../database/queries');
+    const members = await getGuildMembers(guild.name);
+
     const embed = new EmbedBuilder()
         .setColor('#00FF00')
         .setTitle('✅ Guild Created!')
@@ -134,7 +138,7 @@ async function createGuildCommand(interaction, userId) {
             },
             {
                 name: '👥 Members',
-                value: `${guild.members.length}/10`,
+                value: `${members.length}/10`,
                 inline: true
             },
             {
@@ -182,6 +186,10 @@ async function joinGuildCommand(interaction, userId) {
 
     const guild = result.guild;
 
+    // Fetch members separately since joinGuild doesn't return them
+    const { getGuildMembers } = require('../database/queries');
+    const members = await getGuildMembers(guild.name);
+
     const embed = new EmbedBuilder()
         .setColor('#00FF00')
         .setTitle('✅ Joined Guild!')
@@ -189,7 +197,7 @@ async function joinGuildCommand(interaction, userId) {
         .addFields(
             {
                 name: '👥 Members',
-                value: `${guild.members.length}/10`,
+                value: `${members.length}/10`,
                 inline: true
             },
             {
@@ -231,11 +239,22 @@ async function leaveGuildCommand(interaction, userId) {
 }
 
 async function showGuildInfo(interaction, userId) {
-    const guild = await getUserGuild(userId);
+    const userGuild = await getUserGuild(userId);
+
+    if (!userGuild) {
+        return interaction.reply({
+            content: '❌ You\'re not in a guild! Use `/guild create` or `/guild join` to get started.',
+            ephemeral: true
+        });
+    }
+
+    // Get full guild info with members
+    const { getGuildInfo } = require('../utils/guilds');
+    const guild = await getGuildInfo(userGuild.guildName);
 
     if (!guild) {
         return interaction.reply({
-            content: '❌ You\'re not in a guild! Use `/guild create` or `/guild join` to get started.',
+            content: '❌ Failed to load guild information.',
             ephemeral: true
         });
     }
@@ -317,11 +336,22 @@ async function donateToGuildCommand(interaction, userId) {
 }
 
 async function showGuildMembers(interaction, userId) {
-    const guild = await getUserGuild(userId);
+    const userGuild = await getUserGuild(userId);
+
+    if (!userGuild) {
+        return interaction.reply({
+            content: '❌ You\'re not in a guild!',
+            ephemeral: true
+        });
+    }
+
+    // Get full guild info with members
+    const { getGuildInfo } = require('../utils/guilds');
+    const guild = await getGuildInfo(userGuild.guildName);
 
     if (!guild) {
         return interaction.reply({
-            content: '❌ You\'re not in a guild!',
+            content: '❌ Failed to load guild information.',
             ephemeral: true
         });
     }

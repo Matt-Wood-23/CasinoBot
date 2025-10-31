@@ -1,4 +1,5 @@
 const { getUserMoney, setUserMoney } = require('../utils/data');
+const { isGamblingBanned, getGamblingBanTime, addToJackpot } = require('../database/queries');
 const { createGameEmbed } = require('../utils/embeds');
 const { createButtons } = require('../utils/buttons');
 const BlackjackGame = require('../gameLogic/blackjackGame');
@@ -6,7 +7,7 @@ const BlackjackGame = require('../gameLogic/blackjackGame');
 module.exports = {
     data: {
         name: 'blackjack',
-        description: 'Start a single-player blackjack game',
+        description: 'Start a single-player blackjack game - Chance to win the jackpot!',
         options: [
             {
                 name: 'bet',
@@ -23,6 +24,21 @@ module.exports = {
         try {
             const bet = interaction.options.getInteger('bet');
             const userMoney = await getUserMoney(interaction.user.id);
+            const serverId = interaction.guildId;
+
+            // Check if user is gambling banned
+            const isBanned = await isGamblingBanned(interaction.user.id);
+            if (isBanned) {
+                const banUntil = await getGamblingBanTime(interaction.user.id);
+                const timeLeft = banUntil - Date.now();
+                const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
+                const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
+
+                return await interaction.reply({
+                    content: `🚫 You're banned from gambling after a failed heist!\nBan expires in: ${hoursLeft}h ${minutesLeft}m`,
+                    ephemeral: true
+                });
+            }
 
             // Clean up any existing game
             if (activeGames.has(interaction.user.id)) {
@@ -37,11 +53,18 @@ module.exports = {
                 });
             }
 
+            // Contribute to jackpot (0.5% of bet)
+            if (serverId) {
+                const jackpotContribution = Math.floor(bet * 0.005);
+                await addToJackpot(serverId, jackpotContribution);
+            }
+
             // Deduct bet from user's money
             await setUserMoney(interaction.user.id, userMoney - bet);
 
             // Create new game
             const game = new BlackjackGame(interaction.channelId, interaction.user.id, bet, false);
+            game.serverId = serverId; // Store serverId for jackpot checking
             activeGames.set(interaction.user.id, game);
 
             // Create initial embed and buttons

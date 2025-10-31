@@ -100,7 +100,7 @@ module.exports = {
                     });
                 }
 
-                const guild = getUserGuild(targetUser.id);
+                const guild = await getUserGuild(targetUser.id);
 
                 if (!guild) {
                     return await interaction.reply({

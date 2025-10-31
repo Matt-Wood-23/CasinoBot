@@ -1,6 +1,7 @@
 const { getUserMoney, setUserMoney, recordGameResult } = require('../utils/data');
 const { createGameEmbed, sendPlayerCardsDM } = require('../utils/embeds');
 const { createButtons } = require('../utils/buttons');
+const { applyHolidayWinningsBonus } = require('../utils/holidayEvents');
 const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const SlotsGame = require('../gameLogic/slotsGame');
 const ThreeCardPokerGame = require('../gameLogic/threeCardPokerGame');
@@ -171,15 +172,16 @@ async function handlePokerButtons(interaction, activeGames, customId, userId, cl
         await setUserMoney(userId, userMoney - game.anteBet);
         game.makeDecision('play');
 
-        const winnings = game.calculateWinnings();
-        console.log('Winnings total:', winnings.total);
-        console.log('Winnings breakdown:', winnings.breakdown);
+        const baseWinnings = game.calculateWinnings();
+        const adjustedWinnings = applyHolidayWinningsBonus(baseWinnings.total);
+        console.log('Winnings total:', baseWinnings.total);
+        console.log('Winnings breakdown:', baseWinnings.breakdown);
         console.log('Game phase:', game.gamePhase);
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + game.anteBet + game.playBet + winnings.total);
+        await setUserMoney(userId, currentMoney + game.anteBet + game.playBet + adjustedWinnings);
 
         const totalBet = game.anteBet + game.playBet + game.pairPlusBet;
-        await recordGameResult(userId, 'three_card_poker', totalBet, winnings.total, winnings.total >= 0 ? 'win' : 'lose');
+        await recordGameResult(userId, 'three_card_poker', totalBet, adjustedWinnings, adjustedWinnings >= 0 ? 'win' : 'lose');
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
@@ -197,12 +199,13 @@ async function handlePokerButtons(interaction, activeGames, customId, userId, cl
 
         game.makeDecision('fold');
 
-        const winnings = game.calculateWinnings();
+        const baseWinnings = game.calculateWinnings();
+        const adjustedWinnings = applyHolidayWinningsBonus(baseWinnings.total);
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + winnings.total);
+        await setUserMoney(userId, currentMoney + adjustedWinnings);
 
         const totalBet = game.anteBet + game.pairPlusBet;
-        await recordGameResult(userId, 'three_card_poker', totalBet, winnings.total, 'lose');
+        await recordGameResult(userId, 'three_card_poker', totalBet, adjustedWinnings, 'lose');
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
@@ -377,14 +380,17 @@ async function handleRouletteButtons(interaction, activeGames, userId, client, r
         // Create and play the game
         const rouletteGame = new RouletteGame(userId, session.bets);
 
-        // Award winnings
+        // Award winnings with holiday bonus applied to profit
+        const baseProfit = rouletteGame.totalWinnings - session.totalBet;
+        const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+        const adjustedTotalWinnings = session.totalBet + adjustedProfit;
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + rouletteGame.totalWinnings);
+        await setUserMoney(userId, currentMoney + adjustedTotalWinnings);
 
         // Record game result
-        const gameResult = rouletteGame.totalWinnings > session.totalBet ? 'win' :
-            rouletteGame.totalWinnings === session.totalBet ? 'push' : 'lose';
-        await recordGameResult(userId, 'roulette', session.totalBet, rouletteGame.totalWinnings, gameResult, {
+        const gameResult = adjustedTotalWinnings > session.totalBet ? 'win' :
+            adjustedTotalWinnings === session.totalBet ? 'push' : 'lose';
+        await recordGameResult(userId, 'roulette', session.totalBet, adjustedTotalWinnings, gameResult, {
             winningNumber: rouletteGame.winningNumber,
             betsPlaced: Object.keys(session.bets).length
         });
@@ -430,14 +436,17 @@ async function handleRouletteButtons(interaction, activeGames, userId, client, r
         // Create new game with same bets
         const newGame = new RouletteGame(userId, game.bets);
 
-        // Award winnings
+        // Award winnings with holiday bonus applied to profit
+        const baseProfit = newGame.totalWinnings - totalBet;
+        const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+        const adjustedTotalWinnings = totalBet + adjustedProfit;
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + newGame.totalWinnings);
+        await setUserMoney(userId, currentMoney + adjustedTotalWinnings);
 
         // Record game result
-        const gameResult = newGame.totalWinnings > totalBet ? 'win' :
-            newGame.totalWinnings === totalBet ? 'push' : 'lose';
-        await recordGameResult(userId, 'roulette', totalBet, newGame.totalWinnings, gameResult, {
+        const gameResult = adjustedTotalWinnings > totalBet ? 'win' :
+            adjustedTotalWinnings === totalBet ? 'push' : 'lose';
+        await recordGameResult(userId, 'roulette', totalBet, adjustedTotalWinnings, gameResult, {
             winningNumber: newGame.winningNumber,
             betsPlaced: Object.keys(newGame.bets).length
         });
@@ -628,8 +637,9 @@ async function handleSlotsSpinAgain(interaction, userId, client) {
 
     await setUserMoney(userId, userMoney - bet);
     const slotsGame = new SlotsGame(userId, bet);
-    await setUserMoney(userId, userMoney - bet + slotsGame.winnings);
-    await recordGameResult(userId, 'slots', bet, slotsGame.winnings, slotsGame.winnings > 0 ? 'win' : 'lose');
+    const adjustedWinnings = applyHolidayWinningsBonus(slotsGame.winnings);
+    await setUserMoney(userId, userMoney - bet + adjustedWinnings);
+    await recordGameResult(userId, 'slots', bet, adjustedWinnings, adjustedWinnings > 0 ? 'win' : 'lose');
 
     const embed = await createGameEmbed(slotsGame, userId, client);
     const buttons = await createButtons(slotsGame, userId, client);
@@ -914,7 +924,8 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
         // Handle game completion
         if (actionSuccess && game.gameOver) {
             if (!isMultiPlayer) {
-                const winnings = game.getWinnings(user.id);
+                const baseWinnings = game.getWinnings(user.id);
+                const winnings = applyHolidayWinningsBonus(baseWinnings);
                 const currentMoney = await getUserMoney(user.id);
                 const totalBet = game.getTotalBet(user.id);
                 const newMoney = currentMoney + totalBet + winnings;
@@ -931,7 +942,8 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
                 });
             } else {
                 for (const [playerId] of game.players) {
-                    const winnings = game.getWinnings(playerId);
+                    const baseWinnings = game.getWinnings(playerId);
+                    const winnings = applyHolidayWinningsBonus(baseWinnings);
                     const currentMoney = await getUserMoney(playerId);
                     const totalBet = game.getTotalBet(playerId);
                     const newMoney = currentMoney + totalBet + winnings;
@@ -1022,7 +1034,8 @@ function startTurnTimer(game, interaction, activeGames, client, dealCardsWithDel
 
         if (game.gameOver) {
             for (const [playerId] of game.players) {
-                const winnings = game.getWinnings(playerId);
+                const baseWinnings = game.getWinnings(playerId);
+                const winnings = applyHolidayWinningsBonus(baseWinnings);
                 const currentMoney = await getUserMoney(playerId);
                 await setUserMoney(playerId, currentMoney + game.getTotalBet(playerId) + winnings);
                 const results = game.getResult(playerId);
@@ -1157,15 +1170,17 @@ async function handleCrapsButtons(interaction, activeGames, userId, client) {
         // Roll the dice
         game.play();
 
-        const winnings = game.totalWinnings;
-        const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + winnings);
-
         const totalBet = game.getTotalBet();
-        const gameResult = winnings > totalBet ? 'win' : (winnings === totalBet ? 'push' : 'lose');
+        const baseProfit = game.totalWinnings - totalBet;
+        const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+        const adjustedWinnings = totalBet + adjustedProfit;
+        const currentMoney = await getUserMoney(userId);
+        await setUserMoney(userId, currentMoney + adjustedWinnings);
+
+        const gameResult = adjustedWinnings > totalBet ? 'win' : (adjustedWinnings === totalBet ? 'push' : 'lose');
 
         if (game.gameComplete) {
-            await recordGameResult(userId, 'craps', totalBet, winnings - totalBet, gameResult, {
+            await recordGameResult(userId, 'craps', totalBet, adjustedProfit, gameResult, {
                 point: game.point,
                 rolls: game.rollHistory.length
             });
@@ -1221,10 +1236,15 @@ async function handleWarButtons(interaction, activeGames, userId, client) {
         // Surrender - get half bet back
         game.surrender();
 
-        const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + game.winnings);
+        // Apply holiday bonus (surrender gives back half bet, so profit is negative)
+        const baseProfit = game.getProfit();
+        const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+        const adjustedWinnings = game.bet + adjustedProfit;
 
-        await recordGameResult(userId, 'war', game.bet, game.getProfit(), 'surrender');
+        const currentMoney = await getUserMoney(userId);
+        await setUserMoney(userId, currentMoney + adjustedWinnings);
+
+        await recordGameResult(userId, 'war', game.bet, adjustedProfit, 'surrender');
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
@@ -1250,14 +1270,19 @@ async function handleWarButtons(interaction, activeGames, userId, client) {
         // Go to war
         game.goToWar();
 
+        // Apply holiday bonus to profit
+        const baseProfit = game.getProfit();
+        const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+        const adjustedWinnings = game.getTotalBet() + adjustedProfit;
+
         // Award winnings if any
-        if (game.winnings > 0) {
+        if (adjustedWinnings > 0) {
             const newMoney = await getUserMoney(userId);
-            await setUserMoney(userId, newMoney + game.winnings);
+            await setUserMoney(userId, newMoney + adjustedWinnings);
         }
 
         const gameResult = game.result.includes('win') ? 'win' : 'lose';
-        await recordGameResult(userId, 'war', game.getTotalBet(), game.getProfit(), gameResult);
+        await recordGameResult(userId, 'war', game.getTotalBet(), adjustedProfit, gameResult);
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
@@ -1324,15 +1349,20 @@ async function handleCoinFlipButtons(interaction, activeGames, userId, client) {
         await setUserMoney(userId, userMoney - bet);
         const newGame = new CoinFlipGame(userId, bet, game.choice);
 
+        // Apply holiday bonus to profit
+        const baseProfit = newGame.winnings - bet;
+        const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+        const adjustedWinnings = bet + adjustedProfit;
+
         // Award winnings
-        if (newGame.winnings > 0) {
+        if (adjustedWinnings > 0) {
             const currentMoney = await getUserMoney(userId);
-            await setUserMoney(userId, currentMoney + newGame.winnings);
+            await setUserMoney(userId, currentMoney + adjustedWinnings);
         }
 
         // Record result
         const gameResult = newGame.won ? 'win' : 'lose';
-        await recordGameResult(userId, 'coinflip', bet, newGame.winnings - bet, gameResult, {
+        await recordGameResult(userId, 'coinflip', bet, adjustedProfit, gameResult, {
             choice: newGame.choice,
             result: newGame.result
         });
@@ -1370,15 +1400,20 @@ async function handleCoinFlipButtons(interaction, activeGames, userId, client) {
     // Play game
     const game = new CoinFlipGame(userId, bet, choice);
 
+    // Apply holiday bonus to profit
+    const baseProfit = game.winnings - bet;
+    const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+    const adjustedWinnings = bet + adjustedProfit;
+
     // Award winnings
-    if (game.winnings > 0) {
+    if (adjustedWinnings > 0) {
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + game.winnings);
+        await setUserMoney(userId, currentMoney + adjustedWinnings);
     }
 
     // Record result
     const gameResult = game.won ? 'win' : 'lose';
-    await recordGameResult(userId, 'coinflip', bet, game.winnings - bet, gameResult, {
+    await recordGameResult(userId, 'coinflip', bet, adjustedProfit, gameResult, {
         choice: game.choice,
         result: game.result
     });
@@ -1429,15 +1464,20 @@ async function handleHorseRaceButtons(interaction, activeGames, userId, client) 
         const newGame = new HorseRacingGame(userId, bet, horseNumber);
         newGame.race();
 
+        // Apply holiday bonus to profit
+        const baseProfit = newGame.getProfit();
+        const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+        const adjustedWinnings = bet + adjustedProfit;
+
         // Award winnings
-        if (newGame.winnings > 0) {
+        if (adjustedWinnings > 0) {
             const currentMoney = await getUserMoney(userId);
-            await setUserMoney(userId, currentMoney + newGame.winnings);
+            await setUserMoney(userId, currentMoney + adjustedWinnings);
         }
 
         // Record result
-        const gameResult = newGame.getProfit() > 0 ? 'win' : 'lose';
-        await recordGameResult(userId, 'horserace', bet, newGame.getProfit(), gameResult, {
+        const gameResult = adjustedProfit > 0 ? 'win' : 'lose';
+        await recordGameResult(userId, 'horserace', bet, adjustedProfit, gameResult, {
             horseNumber: newGame.betOnHorse,
             winnerNumber: newGame.winner.number,
             horseName: newGame.getBetHorse().name,
@@ -1491,15 +1531,20 @@ async function handleHorseRaceButtons(interaction, activeGames, userId, client) 
     const game = new HorseRacingGame(userId, bet, horseNumber);
     game.race();
 
+    // Apply holiday bonus to profit
+    const baseProfit = game.getProfit();
+    const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+    const adjustedWinnings = bet + adjustedProfit;
+
     // Award winnings
-    if (game.winnings > 0) {
+    if (adjustedWinnings > 0) {
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + game.winnings);
+        await setUserMoney(userId, currentMoney + adjustedWinnings);
     }
 
     // Record result
-    const gameResult = game.getProfit() > 0 ? 'win' : 'lose';
-    await recordGameResult(userId, 'horserace', bet, game.getProfit(), gameResult, {
+    const gameResult = adjustedProfit > 0 ? 'win' : 'lose';
+    await recordGameResult(userId, 'horserace', bet, adjustedProfit, gameResult, {
         horseNumber: game.betOnHorse,
         winnerNumber: game.winner.number,
         horseName: game.getBetHorse().name,
@@ -1571,11 +1616,16 @@ async function handleCrashButtons(interaction, activeGames, userId, client) {
 
         // If game just completed (crashed), record result
         if (game.gameComplete) {
+            // Apply holiday bonus to profit
+            const baseProfit = game.totalWinnings - game.betAmount;
+            const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+            const adjustedTotalWinnings = game.betAmount + adjustedProfit;
+
             const currentMoney = await getUserMoney(userId);
-            await setUserMoney(userId, currentMoney + game.totalWinnings);
+            await setUserMoney(userId, currentMoney + adjustedTotalWinnings);
 
             const gameResult = game.result === 'win' ? 'win' : 'lose';
-            await recordGameResult(userId, 'crash', game.betAmount, game.totalWinnings - game.betAmount, gameResult, {
+            await recordGameResult(userId, 'crash', game.betAmount, adjustedProfit, gameResult, {
                 crashMultiplier: game.crashMultiplier,
                 cashedOutAt: game.result === 'win' ? game.currentMultiplier : null
             });
@@ -1588,12 +1638,17 @@ async function handleCrashButtons(interaction, activeGames, userId, client) {
         // Cash out at current multiplier
         game.cashOut();
 
+        // Apply holiday bonus to profit
+        const baseProfit = game.totalWinnings - game.betAmount;
+        const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+        const adjustedTotalWinnings = game.betAmount + adjustedProfit;
+
         // Award winnings
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + game.totalWinnings);
+        await setUserMoney(userId, currentMoney + adjustedTotalWinnings);
 
         // Record result
-        await recordGameResult(userId, 'crash', game.betAmount, game.totalWinnings - game.betAmount, 'win', {
+        await recordGameResult(userId, 'crash', game.betAmount, adjustedProfit, 'win', {
             crashMultiplier: game.crashMultiplier,
             cashedOutAt: game.currentMultiplier
         });

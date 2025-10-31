@@ -1,6 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { openMysteryBox, getAllBoxTiers } = require('../utils/mysterybox');
 const { getUserMoney } = require('../utils/data');
+const { isGamblingBanned, getGamblingBanTime } = require('../database/queries');
 
 module.exports = {
     data: {
@@ -25,6 +26,20 @@ module.exports = {
         try {
             const userId = interaction.user.id;
             const tierId = interaction.options.getString('tier');
+
+            // Check if user is gambling banned
+            const isBanned = await isGamblingBanned(userId);
+            if (isBanned) {
+                const banUntil = await getGamblingBanTime(userId);
+                const timeLeft = banUntil - Date.now();
+                const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
+                const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
+
+                return await interaction.reply({
+                    content: `🚫 You're banned from gambling after a failed heist!\nBan expires in: ${hoursLeft}h ${minutesLeft}m`,
+                    ephemeral: true
+                });
+            }
 
             // Show opening animation
             await interaction.deferReply();

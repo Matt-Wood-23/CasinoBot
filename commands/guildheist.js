@@ -20,7 +20,7 @@ module.exports = {
             const userId = interaction.user.id;
 
             // Check if user is in a guild
-            const guild = getUserGuild(userId);
+            const guild = await getUserGuild(userId);
             if (!guild) {
                 return interaction.reply({
                     content: '❌ You must be in a guild to start a guild heist!\n\nUse `/guild join` or `/guild create` to get started.',
@@ -38,7 +38,7 @@ module.exports = {
             }
 
             // Start the guild heist
-            const result = startGuildHeist(guild.id, userId);
+            const result = await startGuildHeist(guild.guildId, userId);
 
             if (!result.success) {
                 return interaction.reply({
@@ -50,7 +50,7 @@ module.exports = {
             // Show signup embed
             const signupEmbed = new EmbedBuilder()
                 .setColor('#FFA500')
-                .setTitle(`🎭 ${guild.name} - Guild Heist Starting!`)
+                .setTitle(`🎭 ${guild.guildName} - Guild Heist Starting!`)
                 .setDescription(`💼 **${interaction.user.username}** is organizing a heist!\n\n` +
                     `Guild members have **60 seconds** to join!\n\n` +
                     `**How It Works:**\n` +
@@ -66,7 +66,7 @@ module.exports = {
             const joinButton = new ActionRowBuilder()
                 .addComponents(
                     new ButtonBuilder()
-                        .setCustomId(`guildheist_join_${guild.id}`)
+                        .setCustomId(`guildheist_join_${guild.guildId}`)
                         .setLabel('Join Heist')
                         .setStyle(ButtonStyle.Primary)
                         .setEmoji('🎭')
@@ -78,7 +78,7 @@ module.exports = {
             await new Promise(resolve => setTimeout(resolve, 60000));
 
             // Get updated heist data
-            const heist = getActiveGuildHeist(guild.id);
+            const heist = getActiveGuildHeist(guild.guildId);
 
             if (!heist) {
                 const cancelledEmbed = new EmbedBuilder()
@@ -115,7 +115,7 @@ module.exports = {
             // Show planning phase
             const planningEmbed = new EmbedBuilder()
                 .setColor('#808080')
-                .setTitle(`🎭 ${guild.name} - Guild Heist`)
+                .setTitle(`🎭 ${guild.guildName} - Guild Heist`)
                 .setDescription(`💼 Planning the heist...\n\n👥 ${heist.participants.length} members ready\n\n🗺️ Studying the blueprints...`)
                 .setTimestamp();
 
@@ -127,7 +127,7 @@ module.exports = {
             // Show preparation
             const prepEmbed = new EmbedBuilder()
                 .setColor('#FFA500')
-                .setTitle(`🎭 ${guild.name} - Guild Heist`)
+                .setTitle(`🎭 ${guild.guildName} - Guild Heist`)
                 .setDescription(`👥 Crew assembled: ${heist.participants.length} members\n\n🔫 Loading equipment...\n\n🚗 Vehicles ready!`)
                 .setTimestamp();
 
@@ -139,7 +139,7 @@ module.exports = {
             // Show infiltration
             const infiltrateEmbed = new EmbedBuilder()
                 .setColor('#FF0000')
-                .setTitle(`🎭 ${guild.name} - Guild Heist IN PROGRESS`)
+                .setTitle(`🎭 ${guild.guildName} - Guild Heist IN PROGRESS`)
                 .setDescription(`🚨 Infiltrating the casino...\n\n⏰ Bypassing security systems...\n\n💰 Approaching the vault...`)
                 .setFooter({ text: 'No turning back now!' })
                 .setTimestamp();
@@ -150,7 +150,7 @@ module.exports = {
             await new Promise(resolve => setTimeout(resolve, 2500));
 
             // Execute the heist
-            const heistResult = await executeGuildHeist(guild.id);
+            const heistResult = await executeGuildHeist(guild.guildId);
 
             if (!heistResult.success) {
                 const errorEmbed = new EmbedBuilder()
@@ -167,7 +167,7 @@ module.exports = {
                 const successEmbed = new EmbedBuilder()
                     .setColor('#00FF00')
                     .setTitle('✅ GUILD HEIST SUCCESSFUL!')
-                    .setDescription(`🎉 **${guild.name}** pulled it off! The crew escaped with the loot!\n\n💰 **THE SCORE**`)
+                    .setDescription(`🎉 **${guild.guildName}** pulled it off! The crew escaped with the loot!\n\n💰 **THE SCORE**`)
                     .addFields(
                         {
                             name: '👥 Participants',
@@ -210,7 +210,7 @@ module.exports = {
                 const failureEmbed = new EmbedBuilder()
                     .setColor('#FF0000')
                     .setTitle('🚨 GUILD HEIST FAILED!')
-                    .setDescription(`❌ **${guild.name}** got caught! Security caught the crew!\n\n⚠️ **CONSEQUENCES FOR ALL PARTICIPANTS**`)
+                    .setDescription(`❌ **${guild.guildName}** got caught! Security caught the crew!\n\n⚠️ **CONSEQUENCES FOR ALL PARTICIPANTS**`)
                     .addFields(
                         {
                             name: '👥 Participants',

@@ -1,4 +1,6 @@
 const { getUserMoney, setUserMoney } = require('../utils/data');
+const { isGamblingBanned, getGamblingBanTime } = require('../database/queries');
+const { validateBet } = require('../utils/vip');
 const WarGame = require('../gameLogic/warGame');
 const { createGameEmbed } = require('../utils/embeds');
 const { createButtons } = require('../utils/buttons');
@@ -10,11 +12,11 @@ module.exports = {
         options: [
             {
                 name: 'bet',
-                description: 'Amount to bet (10-10,000)',
+                description: 'Amount to bet (VIP gets higher limits!)',
                 type: 4,
                 required: true,
                 min_value: 10,
-                max_value: 10000
+                max_value: 20000
             }
         ]
     },
@@ -23,6 +25,29 @@ module.exports = {
         try {
             const bet = interaction.options.getInteger('bet');
             const userId = interaction.user.id;
+
+            // Validate bet against VIP limits
+            const betValidation = await validateBet(userId, bet, 10, 10000);
+            if (!betValidation.valid) {
+                return await interaction.reply({
+                    content: betValidation.message,
+                    ephemeral: true
+                });
+            }
+
+            // Check if user is gambling banned
+            const isBanned = await isGamblingBanned(userId);
+            if (isBanned) {
+                const banUntil = await getGamblingBanTime(userId);
+                const timeLeft = banUntil - Date.now();
+                const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
+                const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
+
+                return await interaction.reply({
+                    content: `🚫 You're banned from gambling after a failed heist!\nBan expires in: ${hoursLeft}h ${minutesLeft}m`,
+                    ephemeral: true
+                });
+            }
 
             // Check if user has enough money
             const userMoney = await getUserMoney(userId);

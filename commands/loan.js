@@ -83,7 +83,7 @@ async function handleLoanRequest(interaction, userId) {
     }
 
     // Check if can get loan
-    const { canLoan, reason } = canGetLoan(userId);
+    const { canLoan, reason } = await canGetLoan(userId);
     if (!canLoan) {
         return interaction.reply({
             content: `❌ ${reason}`,

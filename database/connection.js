@@ -47,7 +47,7 @@ async function query(text, params) {
 
 // Get a client from the pool (for transactions)
 async function getClient() {
-    return await pool.query();
+    return await pool.connect();
 }
 
 // Close pool (for graceful shutdown)

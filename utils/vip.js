@@ -228,6 +228,45 @@ async function getVIPBettingLimit(userId) {
     return tier ? tier.perks.bettingLimit : 1.0;
 }
 
+// Calculate max bet allowed for user based on VIP tier
+async function getMaxBetForUser(userId, baseMaxBet) {
+    const multiplier = await getVIPBettingLimit(userId);
+    return Math.floor(baseMaxBet * multiplier);
+}
+
+// Validate bet amount against VIP limits
+async function validateBet(userId, bet, baseMinBet, baseMaxBet) {
+    const tier = await getUserVIPTier(userId);
+    const maxAllowed = await getMaxBetForUser(userId, baseMaxBet);
+
+    if (bet < baseMinBet) {
+        return {
+            valid: false,
+            message: `❌ Minimum bet is $${baseMinBet.toLocaleString()}!`
+        };
+    }
+
+    if (bet > maxAllowed) {
+        if (tier) {
+            return {
+                valid: false,
+                message: `❌ Your ${tier.emoji} ${tier.name} max bet is $${maxAllowed.toLocaleString()}!`
+            };
+        } else {
+            return {
+                valid: false,
+                message: `❌ Maximum bet is $${baseMaxBet.toLocaleString()}! Upgrade VIP for higher limits:\n` +
+                        `🥉 Bronze: $${Math.floor(baseMaxBet * 1.10).toLocaleString()}\n` +
+                        `🥈 Silver: $${Math.floor(baseMaxBet * 1.25).toLocaleString()}\n` +
+                        `🥇 Gold: $${Math.floor(baseMaxBet * 1.50).toLocaleString()}\n` +
+                        `💎 Platinum: $${Math.floor(baseMaxBet * 2.00).toLocaleString()}`
+            };
+        }
+    }
+
+    return { valid: true };
+}
+
 // Get VIP loan rate discount
 async function getVIPLoanDiscount(userId) {
     const tier = await getUserVIPTier(userId);
@@ -316,6 +355,8 @@ module.exports = {
     getVIPWorkBonus,
     getVIPDailyBonus,
     getVIPBettingLimit,
+    getMaxBetForUser,
+    validateBet,
     getVIPLoanDiscount,
     claimWeeklyBonus,
     checkExpiredVIP,
