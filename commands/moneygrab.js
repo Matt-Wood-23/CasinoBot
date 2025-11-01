@@ -31,7 +31,7 @@ module.exports = {
             const amount = interaction.options.getInteger('amount') || 1000;
 
             // Get all registered users and create mention string
-            const allUserData = getAllUserData();
+            const allUserData = await getAllUserData();
             const userIds = Object.keys(allUserData);
 
             // Split mentions into chunks to avoid message length limits (Discord has 2000 char limit)

@@ -1,7 +1,7 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { getUserData } = require('./data');
 
-function createButtons(game, userId, client, options = {}) {
+async function createButtons(game, userId, client, options = {}) {
     // Three Card Poker buttons
     if (game.constructor.name === 'ThreeCardPokerGame') {
         return createPokerButtons(game);
@@ -14,7 +14,7 @@ function createButtons(game, userId, client, options = {}) {
 
     // Blackjack buttons
     if (game.constructor.name === 'BlackjackGame') {
-        return createBlackjackButtons(game, userId, client, options);
+        return await createBlackjackButtons(game, userId, client, options);
     }
 
     // Craps buttons
@@ -122,7 +122,7 @@ function createSlotsButtons(game) {
         );
 }
 
-function createBlackjackButtons(game, userId, client, options = {}) {
+async function createBlackjackButtons(game, userId, client, options = {}) {
     // Betting phase buttons
     if (game.bettingPhase) {
         return createBettingPhaseButtons(game, userId, client, options);
@@ -134,7 +134,7 @@ function createBlackjackButtons(game, userId, client, options = {}) {
     }
     
     // Main game buttons
-    return createMainGameButtons(game, userId, client);
+    return await createMainGameButtons(game, userId, client);
 }
 
 function createBettingPhaseButtons(game, userId, client, options = {}) {
@@ -235,7 +235,7 @@ function createGameOverButtons(game, userId) {
     }
 }
 
-function createMainGameButtons(game, userId, client) {
+async function createMainGameButtons(game, userId, client) {
     let targetPlayerId;
     
     if (game.isMultiPlayer) {
@@ -287,7 +287,7 @@ function createMainGameButtons(game, userId, client) {
     }
 
     const currentHand = player.hands[player.currentHandIndex];
-    const userData = getUserData(targetPlayerId);
+    const userData = await getUserData(targetPlayerId);
     const userMoney = userData ? userData.money : 500;
     const currentScore = game.getHandScore(targetPlayerId, player.currentHandIndex);
 

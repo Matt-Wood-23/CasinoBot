@@ -1,5 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const { getUserMoney } = require('../utils/data');
+const { isGamblingBanned, getGamblingBanTime } = require('../database/queries');
 
 module.exports = {
     data: {
@@ -44,6 +45,20 @@ async function handleBuyTicket(interaction) {
         const LotteryGame = require('../gameLogic/lotteryGame');
 
         const quantity = interaction.options.getInteger('quantity') || 1;
+
+        // Check if user is gambling banned
+        const isBanned = await isGamblingBanned(interaction.user.id);
+        if (isBanned) {
+            const banUntil = await getGamblingBanTime(interaction.user.id);
+            const timeLeft = banUntil - Date.now();
+            const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
+            const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
+
+            return await interaction.reply({
+                content: `🚫 You're banned from gambling after a failed heist!\nBan expires in: ${hoursLeft}h ${minutesLeft}m`,
+                ephemeral: true
+            });
+        }
 
         // Validate quantity
         if (quantity < 1 || quantity > 10) {
@@ -148,11 +163,18 @@ async function handleBuyTicket(interaction) {
         await interaction.reply({ embeds: [embed] });
 
     } catch (error) {
-        console.error('Error in lottery buy:', error);
-        await interaction.reply({
-            content: '❌ An error occurred while buying a lottery ticket. Please try again.',
-            ephemeral: true
-        });
+            console.error('Error in lottery buy:', error);
+
+            const errorMessage = {
+                content: '❌ An error occurred while buying a lottery ticket. Please try again.',
+                ephemeral: true
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
     }
 }
 
@@ -275,10 +297,17 @@ async function handleStatus(interaction) {
         await interaction.reply({ embeds: [embed] });
 
     } catch (error) {
-        console.error('Error in lottery status:', error);
-        await interaction.reply({
-            content: '❌ An error occurred while checking lottery status. Please try again.',
-            ephemeral: true
-        });
+            console.error('Error in lottery status:', error);
+
+            const errorMessage = {
+                content: '❌ An error occurred while checking lottery status. Please try again.',
+                ephemeral: true
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
     }
 }

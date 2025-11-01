@@ -1,6 +1,8 @@
 const { getUserMoney, setUserMoney } = require('../utils/data');
+const { isGamblingBanned, getGamblingBanTime } = require('../database/queries');
 const { createGameEmbed } = require('../utils/embeds');
 const { createButtons } = require('../utils/buttons');
+const { validateBet } = require('../utils/vip');
 const CrashGame = require('../gameLogic/crashGame');
 
 module.exports = {
@@ -11,10 +13,10 @@ module.exports = {
             {
                 name: 'bet',
                 type: 4, // INTEGER
-                description: 'Amount to bet ($10 - $10,000)',
+                description: 'Amount to bet (VIP gets higher limits!)',
                 required: true,
                 min_value: 10,
-                max_value: 10000
+                max_value: 20000
             }
         ]
     },
@@ -23,6 +25,29 @@ module.exports = {
         try {
             const betAmount = interaction.options.getInteger('bet');
             const userId = interaction.user.id;
+
+            // Validate bet against VIP limits
+            const betValidation = await validateBet(userId, betAmount, 10, 10000);
+            if (!betValidation.valid) {
+                return await interaction.reply({
+                    content: betValidation.message,
+                    ephemeral: true
+                });
+            }
+
+            // Check if user is gambling banned
+            const isBanned = await isGamblingBanned(userId);
+            if (isBanned) {
+                const banUntil = await getGamblingBanTime(userId);
+                const timeLeft = banUntil - Date.now();
+                const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
+                const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
+
+                return await interaction.reply({
+                    content: `🚫 You're banned from gambling after a failed heist!\nBan expires in: ${hoursLeft}h ${minutesLeft}m`,
+                    ephemeral: true
+                });
+            }
 
             // Check user has enough money
             const userMoney = await getUserMoney(userId);
@@ -42,7 +67,7 @@ module.exports = {
 
             // Send initial embed
             const embed = await createGameEmbed(crashGame, userId, interaction.client);
-            const buttons = createButtons(crashGame, userId, interaction.client);
+            const buttons = await createButtons(crashGame, userId, interaction.client);
 
             await interaction.reply({
                 embeds: [embed],
@@ -51,10 +76,17 @@ module.exports = {
 
         } catch (error) {
             console.error('Error in crash command:', error);
-            await interaction.reply({
+
+            const errorMessage = {
                 content: '❌ An error occurred while starting the game. Please try again.',
                 ephemeral: true
-            });
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
         }
     }
 };

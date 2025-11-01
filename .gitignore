@@ -4,3 +4,4 @@ blackjack_data.json
 blackjack_data.json
 *.md
 utils/CLAUDE.md
+.env

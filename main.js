@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Import utilities
-const { loadUserData } = require('./utils/data');
+const { loadUserData } = require('./database/queries');
 const { createGameEmbed } = require('./utils/embeds');
 const { createButtons } = require('./utils/buttons');
 
@@ -56,7 +56,7 @@ for (const file of commandFiles) {
 
 // Helper functions
 async function dealCardsWithDelay(interaction, message, game, userId, delay = 1000) {
-    const { getUserMoney, setUserMoney, recordGameResult } = require('./utils/data');
+    const { getUserMoney, setUserMoney, recordGameResult } = require('./database/queries');
 
     // Prevent concurrent dealing for the same game
     if (game.isDealing) {
@@ -71,7 +71,7 @@ async function dealCardsWithDelay(interaction, message, game, userId, delay = 10
         game.dealNextCard();
         
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
         
         let components = [];
         if (buttons) {
@@ -111,39 +111,75 @@ async function dealCardsWithDelay(interaction, message, game, userId, delay = 10
                 for (const [playerId] of game.players) {
                     const winnings = game.getWinnings(playerId);
                     const currentMoney = await getUserMoney(playerId);
-                    await setUserMoney(playerId, currentMoney + game.getTotalBet(playerId) + winnings);
-                    
+                    const totalBet = game.getTotalBet(playerId);
+                    const newMoney = currentMoney + totalBet + winnings;
+
+                    await setUserMoney(playerId, newMoney);
+
                     const results = game.getResult(playerId);
-                    const result = Array.isArray(results) ? 
-                        (results.includes('blackjack') ? 'blackjack' : 
-                         (results.includes('win') ? 'win' : 
+                    const result = Array.isArray(results) ?
+                        (results.includes('blackjack') ? 'blackjack' :
+                         (results.includes('win') ? 'win' :
                           (results.includes('lose') ? 'lose' : 'push'))) : results;
-                    
+
                     const bet = game.getTotalBet(playerId);
                     await recordGameResult(playerId, 'blackjack', bet, winnings, result, {
                         handsPlayed: game.players.get(playerId).hands.length
                     });
                 }
             } else {
-                const winnings = game.getWinnings(userId);
+                let winnings = game.getWinnings(userId);
                 const currentMoney = await getUserMoney(userId);
-                await setUserMoney(userId, currentMoney + game.getTotalBet(userId) + winnings);
-                
+                const totalBet = game.getTotalBet(userId);
+
                 const results = game.getResult(userId);
-                const result = Array.isArray(results) ? 
-                    (results.includes('blackjack') ? 'blackjack' : 
-                     (results.includes('win') ? 'win' : 
+                const result = Array.isArray(results) ?
+                    (results.includes('blackjack') ? 'blackjack' :
+                     (results.includes('win') ? 'win' :
                       (results.includes('lose') ? 'lose' : 'push'))) : results;
-                
+
+                // Check for jackpot win on natural blackjack (0.03% chance)
+                let jackpotAmount = 0;
+                if (result === 'blackjack' && game.serverId) {
+                    const { getServerJackpot, resetJackpot } = require('./database/queries');
+                    const jackpotChance = Math.random();
+                    const wonJackpot = jackpotChance < 0.0003; // 0.03% chance
+
+                    if (wonJackpot) {
+                        const jackpotData = await getServerJackpot(game.serverId);
+                        if (jackpotData && jackpotData.currentAmount > 0) {
+                            jackpotAmount = jackpotData.currentAmount;
+                            await resetJackpot(game.serverId, userId, jackpotAmount);
+                            winnings += jackpotAmount;
+                            game.jackpotWon = jackpotAmount; // Store on game object for embed
+                        }
+                    }
+                }
+
+                const newMoney = currentMoney + totalBet + winnings;
+                await setUserMoney(userId, newMoney);
+
                 const bet = game.getTotalBet(userId);
                 await recordGameResult(userId, 'blackjack', bet, winnings, result, {
                     handsPlayed: game.players.get(userId).hands.length
                 });
+
+                // Announce jackpot win in channel
+                if (jackpotAmount > 0) {
+                    try {
+                        const channel = await client.channels.fetch(game.channelId);
+                        await channel.send({
+                            content: `🎉🎉🎉 **JACKPOT ALERT!** 🎉🎉🎉\n<@${userId}> just won the **$${jackpotAmount.toLocaleString()}** Progressive Jackpot with a Natural Blackjack! 💎🃏`
+                        });
+                    } catch (error) {
+                        console.error('Error sending jackpot announcement:', error);
+                    }
+                }
             }
         }
 
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
         
         let components = [];
         if (buttons) {
@@ -186,9 +222,21 @@ function cleanupStaleGames() {
 client.once('ready', async () => {
     console.log(`${client.user.tag} is online!`);
     await loadUserData();
-    
-    // Set activity
-    client.user.setActivity("Blackjack, Poker & Slots 🎰", { type: "PLAYING" });
+
+    // Check for active holiday event
+    const { getCurrentHoliday, getHolidayMessage } = require('./utils/holidayEvents');
+    const currentHoliday = getCurrentHoliday();
+    if (currentHoliday) {
+        console.log(`🎉 ${currentHoliday.name} event is currently active!`);
+        const welcomeMessage = getHolidayMessage('welcome', currentHoliday.id);
+        console.log(welcomeMessage);
+
+        // Update bot activity to reflect event
+        client.user.setActivity(`${currentHoliday.emoji} ${currentHoliday.name} Event! 🎰`, { type: "PLAYING" });
+    } else {
+        // Set normal activity
+        client.user.setActivity("Blackjack, Poker & Slots 🎰", { type: "PLAYING" });
+    }
 
     // Register slash commands
     const commands = client.commands.map(command => command.data);
@@ -228,8 +276,20 @@ client.on('interactionCreate', async interaction => {
             // Check loan restrictions for game commands
             const gameCommands = ['blackjack', 'slots', 'poker', 'roulette', 'craps', 'war', 'coinflip', 'horserace', 'crash', 'bingo', 'hilo', 'pokertournament', 'plinko'];
             if (gameCommands.includes(interaction.commandName)) {
+                // Check gambling ban from failed heist - TEMPORARILY DISABLED
+                // const { isGamblingBanned } = require('./utils/heist');
+                // const banCheck = await isGamblingBanned(interaction.user.id);
+
+                // if (banCheck.isBanned) {
+                //     return interaction.reply({
+                //         content: banCheck.reason,
+                //         ephemeral: true
+                //     });
+                // }
+
+                // Check loan restrictions
                 const { canPlayGames } = require('./utils/loanSystem');
-                const { canPlay, reason } = canPlayGames(interaction.user.id);
+                const { canPlay, reason } = await canPlayGames(interaction.user.id);
 
                 if (!canPlay) {
                     return interaction.reply({
@@ -307,15 +367,15 @@ client.on('messageCreate', async message => {
    
 });
 
-const { saveUserData: forceSaveUserData } = require('./utils/data');
+const { closePool } = require('./database/connection');
 
 // Graceful shutdown handling
 async function gracefulShutdown(signal) {
-    console.log(`\n${signal} received. Saving all data before shutdown...`);
+    console.log(`\n${signal} received. Closing database connections before shutdown...`);
 
     try {
-        await forceSaveUserData();
-        console.log('Data saved successfully. Shutting down...');
+        await closePool();
+        console.log('Database closed successfully. Shutting down...');
         process.exit(0);
     } catch (error) {
         console.error('Error during shutdown:', error);
@@ -350,6 +410,43 @@ setInterval(async () => {
         }
     }
 }, 24 * 60 * 60 * 1000); // Every 24 hours
+
+// Daily challenge reset checker - runs every hour
+setInterval(async () => {
+    const { resetAllChallenges } = require('./utils/challenges');
+    await resetAllChallenges('daily');
+    console.log('Checked for daily challenge resets');
+}, 60 * 60 * 1000); // Every hour
+
+// Weekly challenge reset checker - runs every 6 hours
+setInterval(async () => {
+    const { resetAllChallenges } = require('./utils/challenges');
+    await resetAllChallenges('weekly');
+    console.log('Checked for weekly challenge resets');
+}, 6 * 60 * 60 * 1000); // Every 6 hours
+
+// VIP expiry checker - runs every 6 hours
+setInterval(async () => {
+    const { checkExpiredVIP } = require('./utils/vip');
+    const expiredUsers = await checkExpiredVIP();
+
+    if (expiredUsers.length > 0) {
+        console.log(`Checked VIP: ${expiredUsers.length} users' VIP expired`);
+
+        // Try to DM users about expired VIP
+        for (const { userId, tier } of expiredUsers) {
+            try {
+                const user = await client.users.fetch(userId);
+                await user.send({
+                    content: `⚠️ **VIP EXPIRED**\n\nYour **${tier}** VIP membership has expired!\n` +
+                        `Use \`/vip shop\` to renew your membership and keep enjoying exclusive perks!`
+                });
+            } catch (error) {
+                console.log(`Could not DM user ${userId} about expired VIP`);
+            }
+        }
+    }
+}, 6 * 60 * 60 * 1000); // Every 6 hours
 
 // Start the bot
 client.login(token);

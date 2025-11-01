@@ -1,6 +1,9 @@
 const { getUserMoney, setUserMoney, recordGameResult } = require('../utils/data');
+const { isGamblingBanned, getGamblingBanTime } = require('../database/queries');
 const { createGameEmbed } = require('../utils/embeds');
 const { createButtons, createJoinTableButton } = require('../utils/buttons');
+const { validateBet } = require('../utils/vip');
+const { applyHolidayWinningsBonus } = require('../utils/holidayEvents');
 const BlackjackGame = require('../gameLogic/blackjackGame');
 const RouletteGame = require('../gameLogic/rouletteGame');
 const CrapsGame = require('../gameLogic/crapsGame');
@@ -90,9 +93,11 @@ async function handleRouletteModal(interaction, activeGames, client) {
             });
         }
 
-        if (totalBetAmount > 500000) {
+        // Validate total bet against VIP limits (base max for roulette: 100,000)
+        const betValidation = await validateBet(userId, totalBetAmount, 1, 100000);
+        if (!betValidation.valid) {
             return interaction.reply({
-                content: '❌ Maximum total bet is 500,000!',
+                content: betValidation.message,
                 ephemeral: true
             });
         }
@@ -112,14 +117,17 @@ async function handleRouletteModal(interaction, activeGames, client) {
         // Create and play the game
         const rouletteGame = new RouletteGame(userId, bets);
 
-        // Award winnings
+        // Award winnings with holiday bonus applied to profit
+        const baseProfit = rouletteGame.totalWinnings - totalBetAmount;
+        const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+        const adjustedTotalWinnings = totalBetAmount + adjustedProfit;
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + rouletteGame.totalWinnings);
+        await setUserMoney(userId, currentMoney + adjustedTotalWinnings);
 
         // Record game result
-        const gameResult = rouletteGame.totalWinnings > totalBetAmount ? 'win' :
-            rouletteGame.totalWinnings === totalBetAmount ? 'push' : 'lose';
-        await recordGameResult(userId, 'roulette', totalBetAmount, rouletteGame.totalWinnings, gameResult, {
+        const gameResult = adjustedTotalWinnings > totalBetAmount ? 'win' :
+            adjustedTotalWinnings === totalBetAmount ? 'push' : 'lose';
+        await recordGameResult(userId, 'roulette', totalBetAmount, adjustedTotalWinnings, gameResult, {
             winningNumber: rouletteGame.winningNumber,
             betsPlaced: Object.keys(bets).length
         });
@@ -129,7 +137,7 @@ async function handleRouletteModal(interaction, activeGames, client) {
 
         // Create and send response
         const embed = await createGameEmbed(rouletteGame, userId, client);
-        const buttons = createButtons(rouletteGame, userId, client);
+        const buttons = await createButtons(rouletteGame, userId, client);
 
         await interaction.reply({
             embeds: [embed],
@@ -147,6 +155,20 @@ async function handleRouletteModal(interaction, activeGames, client) {
 
 
 async function handleJoinTableSubmission(interaction, activeGames, client) {
+    // Check if user is gambling banned
+    const isBanned = await isGamblingBanned(interaction.user.id);
+    if (isBanned) {
+        const banUntil = await getGamblingBanTime(interaction.user.id);
+        const timeLeft = banUntil - Date.now();
+        const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
+        const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
+
+        return await interaction.reply({
+            content: `🚫 You're banned from gambling after a failed heist!\nBan expires in: ${hoursLeft}h ${minutesLeft}m`,
+            ephemeral: true
+        });
+    }
+
     const game = activeGames.get(interaction.channelId);
     if (!game || !game.isMultiPlayer) {
         return interaction.reply({ content: '❌ No active table found!', ephemeral: true });
@@ -256,7 +278,7 @@ async function handleAdjustedBetSubmission(interaction, activeGames, client, dea
     } else {
         // Not all players ready yet - just update the display
         const embed = await createGameEmbed(game, interaction.user.id, client);
-        const buttons = createButtons(game, interaction.user.id, client);
+        const buttons = await createButtons(game, interaction.user.id, client);
         let components = [];
         if (buttons) {
             if (Array.isArray(buttons)) {
@@ -543,9 +565,11 @@ async function handleCrapsModal(interaction, activeGames, client) {
             });
         }
 
-        if (totalBet > 10000) {
+        // Validate bet against VIP limits
+        const betValidation = await validateBet(userId, totalBet, 10, 10000);
+        if (!betValidation.valid) {
             return interaction.reply({
-                content: '❌ Maximum total bet is $10,000!',
+                content: betValidation.message,
                 ephemeral: true
             });
         }
@@ -568,7 +592,7 @@ async function handleCrapsModal(interaction, activeGames, client) {
 
         // Send game display
         const embed = await createGameEmbed(crapsGame, userId, client);
-        const buttons = createButtons(crapsGame, userId, client);
+        const buttons = await createButtons(crapsGame, userId, client);
 
         await interaction.reply({
             embeds: [embed],
@@ -674,7 +698,7 @@ async function handleTournamentRaise(interaction, activeGames, client) {
         const { createButtons } = require('../utils/buttons');
 
         const embed = await createGameEmbed(tournament, userId, client);
-        const buttons = createButtons(tournament, userId, client);
+        const buttons = await createButtons(tournament, userId, client);
 
         await interaction.message.edit({
             embeds: [embed],
@@ -697,9 +721,18 @@ async function handleHiLoModal(interaction, activeGames, client) {
 
         // Parse bet amount
         const betAmount = parseInt(betInput);
-        if (isNaN(betAmount) || betAmount < 10 || betAmount > 10000) {
+        if (isNaN(betAmount) || betAmount < 10) {
             return interaction.reply({
-                content: '❌ Bet amount must be between $10 and $10,000!',
+                content: '❌ Bet amount must be at least $10!',
+                ephemeral: true
+            });
+        }
+
+        // Validate bet against VIP limits
+        const betValidation = await validateBet(userId, betAmount, 10, 10000);
+        if (!betValidation.valid) {
+            return interaction.reply({
+                content: betValidation.message,
                 ephemeral: true
             });
         }
@@ -722,7 +755,7 @@ async function handleHiLoModal(interaction, activeGames, client) {
 
         // Send initial embed
         const embed = await createGameEmbed(hiLoGame, userId, client);
-        const buttons = createButtons(hiLoGame, userId, client);
+        const buttons = await createButtons(hiLoGame, userId, client);
 
         await interaction.reply({
             embeds: [embed],

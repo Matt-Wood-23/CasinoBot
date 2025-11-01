@@ -1,4 +1,5 @@
 const { getUserMoney, setUserMoney } = require('../utils/data');
+const { isGamblingBanned, getGamblingBanTime } = require('../database/queries');
 const { createGameEmbed } = require('../utils/embeds');
 const { createJoinTableButton } = require('../utils/buttons');
 const BlackjackGame = require('../gameLogic/blackjackGame');
@@ -24,6 +25,20 @@ module.exports = {
             const bet = interaction.options.getInteger('bet');
             const userMoney = await getUserMoney(interaction.user.id);
 
+            // Check if user is gambling banned
+            const isBanned = await isGamblingBanned(interaction.user.id);
+            if (isBanned) {
+                const banUntil = await getGamblingBanTime(interaction.user.id);
+                const timeLeft = banUntil - Date.now();
+                const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
+                const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
+
+                return await interaction.reply({
+                    content: `🚫 You're banned from gambling after a failed heist!\nBan expires in: ${hoursLeft}h ${minutesLeft}m`,
+                    ephemeral: true
+                });
+            }
+
             // Clean up any existing table
             if (activeGames.has(interaction.channelId)) {
                 activeGames.delete(interaction.channelId);
@@ -31,9 +46,9 @@ module.exports = {
 
             // Check if user has enough money
             if (userMoney < bet) {
-                return await interaction.reply({ 
-                    content: `❌ You don't have enough money! You have ${userMoney.toLocaleString()}.`, 
-                    ephemeral: true 
+                return await interaction.reply({
+                    content: `❌ You don't have enough money! You have ${userMoney.toLocaleString()}.`,
+                    ephemeral: true
                 });
             }
 
@@ -69,7 +84,7 @@ module.exports = {
                         
                         const embed = await createGameEmbed(game, interaction.user.id, interaction.client);
                         const { createButtons } = require('../utils/buttons');
-                        const buttons = createButtons(game, interaction.user.id, interaction.client);
+                        const buttons = await createButtons(game, interaction.user.id, interaction.client);
                         
                         let components = [];
                         if (buttons) {
@@ -114,10 +129,17 @@ module.exports = {
             
         } catch (error) {
             console.error('Error in starttable command:', error);
-            await interaction.reply({
+
+            const errorMessage = {
                 content: '❌ An error occurred while starting the blackjack table. Please try again.',
                 ephemeral: true
-            });
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
         }
     }
 };

@@ -18,7 +18,7 @@ module.exports = {
                 type: 4,
                 required: true,
                 min_value: 1,
-                max_value: 10000
+                max_value: 100000000
             }
         ]
     },
@@ -58,10 +58,17 @@ module.exports = {
             
         } catch (error) {
             console.error('Error in givemoney command:', error);
-            await interaction.reply({
+
+            const errorMessage = {
                 content: '❌ An error occurred while giving money. Please try again.',
                 ephemeral: true
-            });
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage);
+            } else {
+                await interaction.reply(errorMessage);
+            }
         }
     }
 };

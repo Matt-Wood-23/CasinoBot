@@ -1,6 +1,7 @@
 const { getUserMoney, setUserMoney, recordGameResult } = require('../utils/data');
 const { createGameEmbed, sendPlayerCardsDM } = require('../utils/embeds');
 const { createButtons } = require('../utils/buttons');
+const { applyHolidayWinningsBonus } = require('../utils/holidayEvents');
 const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const SlotsGame = require('../gameLogic/slotsGame');
 const ThreeCardPokerGame = require('../gameLogic/threeCardPokerGame');
@@ -85,6 +86,42 @@ async function handleButtonInteraction(interaction, activeGames, client, dealCar
         return;
     }
 
+    // Handle challenge reward claims
+    if (customId === 'claim_challenge_rewards') {
+        await handleClaimChallengeRewards(interaction, user.id);
+        return;
+    }
+
+    // Handle shop purchase buttons
+    if (customId.startsWith('shop_buy_')) {
+        await handleShopPurchase(interaction, user.id);
+        return;
+    }
+
+    // Handle property purchase buttons
+    if (customId.startsWith('property_buy_')) {
+        await handlePropertyPurchase(interaction, user.id);
+        return;
+    }
+
+    // Handle inventory use buttons
+    if (customId.startsWith('use_item_')) {
+        await handleUseItem(interaction, user.id);
+        return;
+    }
+
+    // Handle VIP purchase buttons
+    if (customId.startsWith('vip_buy_')) {
+        await handleVIPPurchase(interaction, user.id);
+        return;
+    }
+
+    // Handle guild heist join buttons
+    if (customId.startsWith('guildheist_join_')) {
+        await handleGuildHeistJoin(interaction, user.id);
+        return;
+    }
+
     // Handle blackjack buttons
     if (['hit', 'stand', 'double', 'split', 'play_again_single', 'continue_playing'].includes(customId)) {
         await handleBlackjackButtons(interaction, activeGames, client, dealCardsWithDelay);
@@ -135,19 +172,20 @@ async function handlePokerButtons(interaction, activeGames, customId, userId, cl
         await setUserMoney(userId, userMoney - game.anteBet);
         game.makeDecision('play');
 
-        const winnings = game.calculateWinnings();
-        console.log('Winnings total:', winnings.total);
-        console.log('Winnings breakdown:', winnings.breakdown);
+        const baseWinnings = game.calculateWinnings();
+        const adjustedWinnings = applyHolidayWinningsBonus(baseWinnings.total);
+        console.log('Winnings total:', baseWinnings.total);
+        console.log('Winnings breakdown:', baseWinnings.breakdown);
         console.log('Game phase:', game.gamePhase);
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + game.anteBet + game.playBet + winnings.total);
+        await setUserMoney(userId, currentMoney + game.anteBet + game.playBet + adjustedWinnings);
 
         const totalBet = game.anteBet + game.playBet + game.pairPlusBet;
-        await recordGameResult(userId, 'three_card_poker', totalBet, winnings.total, winnings.total >= 0 ? 'win' : 'lose');
+        await recordGameResult(userId, 'three_card_poker', totalBet, adjustedWinnings, adjustedWinnings >= 0 ? 'win' : 'lose');
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -161,16 +199,17 @@ async function handlePokerButtons(interaction, activeGames, customId, userId, cl
 
         game.makeDecision('fold');
 
-        const winnings = game.calculateWinnings();
+        const baseWinnings = game.calculateWinnings();
+        const adjustedWinnings = applyHolidayWinningsBonus(baseWinnings.total);
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + winnings.total);
+        await setUserMoney(userId, currentMoney + adjustedWinnings);
 
         const totalBet = game.anteBet + game.pairPlusBet;
-        await recordGameResult(userId, 'three_card_poker', totalBet, winnings.total, 'lose');
+        await recordGameResult(userId, 'three_card_poker', totalBet, adjustedWinnings, 'lose');
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -200,7 +239,7 @@ async function handlePokerButtons(interaction, activeGames, customId, userId, cl
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(newGame, userId, client);
-        const buttons = createButtons(newGame, userId, client);
+        const buttons = await createButtons(newGame, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -341,14 +380,17 @@ async function handleRouletteButtons(interaction, activeGames, userId, client, r
         // Create and play the game
         const rouletteGame = new RouletteGame(userId, session.bets);
 
-        // Award winnings
+        // Award winnings with holiday bonus applied to profit
+        const baseProfit = rouletteGame.totalWinnings - session.totalBet;
+        const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+        const adjustedTotalWinnings = session.totalBet + adjustedProfit;
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + rouletteGame.totalWinnings);
+        await setUserMoney(userId, currentMoney + adjustedTotalWinnings);
 
         // Record game result
-        const gameResult = rouletteGame.totalWinnings > session.totalBet ? 'win' :
-            rouletteGame.totalWinnings === session.totalBet ? 'push' : 'lose';
-        await recordGameResult(userId, 'roulette', session.totalBet, rouletteGame.totalWinnings, gameResult, {
+        const gameResult = adjustedTotalWinnings > session.totalBet ? 'win' :
+            adjustedTotalWinnings === session.totalBet ? 'push' : 'lose';
+        await recordGameResult(userId, 'roulette', session.totalBet, adjustedTotalWinnings, gameResult, {
             winningNumber: rouletteGame.winningNumber,
             betsPlaced: Object.keys(session.bets).length
         });
@@ -362,7 +404,7 @@ async function handleRouletteButtons(interaction, activeGames, userId, client, r
         // Create and send response
         await interaction.deferUpdate();
         const embed = await createGameEmbed(rouletteGame, userId, client);
-        const buttons = createButtons(rouletteGame, userId, client);
+        const buttons = await createButtons(rouletteGame, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -394,14 +436,17 @@ async function handleRouletteButtons(interaction, activeGames, userId, client, r
         // Create new game with same bets
         const newGame = new RouletteGame(userId, game.bets);
 
-        // Award winnings
+        // Award winnings with holiday bonus applied to profit
+        const baseProfit = newGame.totalWinnings - totalBet;
+        const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+        const adjustedTotalWinnings = totalBet + adjustedProfit;
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + newGame.totalWinnings);
+        await setUserMoney(userId, currentMoney + adjustedTotalWinnings);
 
         // Record game result
-        const gameResult = newGame.totalWinnings > totalBet ? 'win' :
-            newGame.totalWinnings === totalBet ? 'push' : 'lose';
-        await recordGameResult(userId, 'roulette', totalBet, newGame.totalWinnings, gameResult, {
+        const gameResult = adjustedTotalWinnings > totalBet ? 'win' :
+            adjustedTotalWinnings === totalBet ? 'push' : 'lose';
+        await recordGameResult(userId, 'roulette', totalBet, adjustedTotalWinnings, gameResult, {
             winningNumber: newGame.winningNumber,
             betsPlaced: Object.keys(newGame.bets).length
         });
@@ -412,7 +457,7 @@ async function handleRouletteButtons(interaction, activeGames, userId, client, r
         // Update the message
         await interaction.deferUpdate();
         const embed = await createGameEmbed(newGame, userId, client);
-        const buttons = createButtons(newGame, userId, client);
+        const buttons = await createButtons(newGame, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -592,11 +637,12 @@ async function handleSlotsSpinAgain(interaction, userId, client) {
 
     await setUserMoney(userId, userMoney - bet);
     const slotsGame = new SlotsGame(userId, bet);
-    await setUserMoney(userId, userMoney - bet + slotsGame.winnings);
-    await recordGameResult(userId, 'slots', bet, slotsGame.winnings, slotsGame.winnings > 0 ? 'win' : 'lose');
+    const adjustedWinnings = applyHolidayWinningsBonus(slotsGame.winnings);
+    await setUserMoney(userId, userMoney - bet + adjustedWinnings);
+    await recordGameResult(userId, 'slots', bet, adjustedWinnings, adjustedWinnings > 0 ? 'win' : 'lose');
 
     const embed = await createGameEmbed(slotsGame, userId, client);
-    const buttons = createButtons(slotsGame, userId, client);
+    const buttons = await createButtons(slotsGame, userId, client);
 
     await interaction.update({
         embeds: [embed],
@@ -878,9 +924,13 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
         // Handle game completion
         if (actionSuccess && game.gameOver) {
             if (!isMultiPlayer) {
-                const winnings = game.getWinnings(user.id);
+                const baseWinnings = game.getWinnings(user.id);
+                const winnings = applyHolidayWinningsBonus(baseWinnings);
                 const currentMoney = await getUserMoney(user.id);
-                await setUserMoney(user.id, currentMoney + game.getTotalBet(user.id) + winnings);
+                const totalBet = game.getTotalBet(user.id);
+                const newMoney = currentMoney + totalBet + winnings;
+
+                await setUserMoney(user.id, newMoney);
                 const results = game.getResult(user.id);
                 const result = Array.isArray(results) ?
                     (results.includes('blackjack') ? 'blackjack' :
@@ -892,9 +942,13 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
                 });
             } else {
                 for (const [playerId] of game.players) {
-                    const winnings = game.getWinnings(playerId);
+                    const baseWinnings = game.getWinnings(playerId);
+                    const winnings = applyHolidayWinningsBonus(baseWinnings);
                     const currentMoney = await getUserMoney(playerId);
-                    await setUserMoney(playerId, currentMoney + game.getTotalBet(playerId) + winnings);
+                    const totalBet = game.getTotalBet(playerId);
+                    const newMoney = currentMoney + totalBet + winnings;
+
+                    await setUserMoney(playerId, newMoney);
                     const results = game.getResult(playerId);
                     const result = Array.isArray(results) ?
                         (results.includes('blackjack') ? 'blackjack' :
@@ -910,7 +964,7 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
 
         // Update the game display
         const embed = await createGameEmbed(game, user.id, client);
-        const buttons = createButtons(game, user.id, client);
+        const buttons = await createButtons(game, user.id, client);
         let components = [];
         if (buttons) {
             if (Array.isArray(buttons)) {
@@ -943,7 +997,7 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
 async function updateBettingDisplay(game, interaction, client, options = {}) {
     try {
         const embed = await createGameEmbed(game, interaction.user.id, client);
-        const buttons = createButtons(game, interaction.user.id, client, options);
+        const buttons = await createButtons(game, interaction.user.id, client, options);
         let components = [];
         if (buttons) {
             if (Array.isArray(buttons)) {
@@ -980,7 +1034,8 @@ function startTurnTimer(game, interaction, activeGames, client, dealCardsWithDel
 
         if (game.gameOver) {
             for (const [playerId] of game.players) {
-                const winnings = game.getWinnings(playerId);
+                const baseWinnings = game.getWinnings(playerId);
+                const winnings = applyHolidayWinningsBonus(baseWinnings);
                 const currentMoney = await getUserMoney(playerId);
                 await setUserMoney(playerId, currentMoney + game.getTotalBet(playerId) + winnings);
                 const results = game.getResult(playerId);
@@ -999,7 +1054,7 @@ function startTurnTimer(game, interaction, activeGames, client, dealCardsWithDel
 
         try {
             const embed = await createGameEmbed(game, currentPlayerId, client);
-            const buttons = createButtons(game, currentPlayerId, client);
+            const buttons = await createButtons(game, currentPlayerId, client);
             let components = [];
             if (buttons) {
                 if (Array.isArray(buttons)) {
@@ -1026,17 +1081,30 @@ function startTurnTimer(game, interaction, activeGames, client, dealCardsWithDel
 // Animate dealer drawing cards one at a time
 async function animateDealerDrawing(game, interaction, userId, client) {
     const delay = 1000; // 1 second between each dealer card
+    const currentGameId = game.gameId; // Store gameId to detect if game is replaced
 
     while (game.shouldDealerContinue()) {
+        // Check if game was replaced during animation
+        if (game.gameId !== currentGameId) {
+            console.log(`Game ${currentGameId} was replaced during dealer animation, stopping`);
+            return;
+        }
+
         // Wait before drawing next card
         await new Promise(resolve => setTimeout(resolve, delay));
+
+        // Check again after delay in case game was replaced while waiting
+        if (game.gameId !== currentGameId) {
+            console.log(`Game ${currentGameId} was replaced during dealer animation, stopping`);
+            return;
+        }
 
         // Draw one card
         game.dealerPlay();
 
         // Update display
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
         let components = [];
         if (buttons) {
             if (Array.isArray(buttons)) {
@@ -1056,10 +1124,17 @@ async function animateDealerDrawing(game, interaction, userId, client) {
             break;
         }
     }
+
+    // Check if game was replaced before final update
+    if (game.gameId !== currentGameId) {
+        console.log(`Game ${currentGameId} was replaced during dealer animation, stopping`);
+        return;
+    }
+
     // Final update after dealer is done to show game over buttons
     if (game.gameOver) {
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
         let components = [];
         if (buttons) {
             if (Array.isArray(buttons)) {
@@ -1095,15 +1170,17 @@ async function handleCrapsButtons(interaction, activeGames, userId, client) {
         // Roll the dice
         game.play();
 
-        const winnings = game.totalWinnings;
-        const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + winnings);
-
         const totalBet = game.getTotalBet();
-        const gameResult = winnings > totalBet ? 'win' : (winnings === totalBet ? 'push' : 'lose');
+        const baseProfit = game.totalWinnings - totalBet;
+        const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+        const adjustedWinnings = totalBet + adjustedProfit;
+        const currentMoney = await getUserMoney(userId);
+        await setUserMoney(userId, currentMoney + adjustedWinnings);
+
+        const gameResult = adjustedWinnings > totalBet ? 'win' : (adjustedWinnings === totalBet ? 'push' : 'lose');
 
         if (game.gameComplete) {
-            await recordGameResult(userId, 'craps', totalBet, winnings - totalBet, gameResult, {
+            await recordGameResult(userId, 'craps', totalBet, adjustedProfit, gameResult, {
                 point: game.point,
                 rolls: game.rollHistory.length
             });
@@ -1111,7 +1188,7 @@ async function handleCrapsButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1135,7 +1212,7 @@ async function handleCrapsButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(newGame, userId, client);
-        const buttons = createButtons(newGame, userId, client);
+        const buttons = await createButtons(newGame, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1159,14 +1236,19 @@ async function handleWarButtons(interaction, activeGames, userId, client) {
         // Surrender - get half bet back
         game.surrender();
 
-        const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + game.winnings);
+        // Apply holiday bonus (surrender gives back half bet, so profit is negative)
+        const baseProfit = game.getProfit();
+        const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+        const adjustedWinnings = game.bet + adjustedProfit;
 
-        await recordGameResult(userId, 'war', game.bet, game.getProfit(), 'surrender');
+        const currentMoney = await getUserMoney(userId);
+        await setUserMoney(userId, currentMoney + adjustedWinnings);
+
+        await recordGameResult(userId, 'war', game.bet, adjustedProfit, 'surrender');
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1188,18 +1270,23 @@ async function handleWarButtons(interaction, activeGames, userId, client) {
         // Go to war
         game.goToWar();
 
+        // Apply holiday bonus to profit
+        const baseProfit = game.getProfit();
+        const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+        const adjustedWinnings = game.getTotalBet() + adjustedProfit;
+
         // Award winnings if any
-        if (game.winnings > 0) {
+        if (adjustedWinnings > 0) {
             const newMoney = await getUserMoney(userId);
-            await setUserMoney(userId, newMoney + game.winnings);
+            await setUserMoney(userId, newMoney + adjustedWinnings);
         }
 
         const gameResult = game.result.includes('win') ? 'win' : 'lose';
-        await recordGameResult(userId, 'war', game.getTotalBet(), game.getProfit(), gameResult);
+        await recordGameResult(userId, 'war', game.getTotalBet(), adjustedProfit, gameResult);
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1223,7 +1310,7 @@ async function handleWarButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(newGame, userId, client);
-        const buttons = createButtons(newGame, userId, client);
+        const buttons = await createButtons(newGame, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1262,15 +1349,20 @@ async function handleCoinFlipButtons(interaction, activeGames, userId, client) {
         await setUserMoney(userId, userMoney - bet);
         const newGame = new CoinFlipGame(userId, bet, game.choice);
 
+        // Apply holiday bonus to profit
+        const baseProfit = newGame.winnings - bet;
+        const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+        const adjustedWinnings = bet + adjustedProfit;
+
         // Award winnings
-        if (newGame.winnings > 0) {
+        if (adjustedWinnings > 0) {
             const currentMoney = await getUserMoney(userId);
-            await setUserMoney(userId, currentMoney + newGame.winnings);
+            await setUserMoney(userId, currentMoney + adjustedWinnings);
         }
 
         // Record result
         const gameResult = newGame.won ? 'win' : 'lose';
-        await recordGameResult(userId, 'coinflip', bet, newGame.winnings - bet, gameResult, {
+        await recordGameResult(userId, 'coinflip', bet, adjustedProfit, gameResult, {
             choice: newGame.choice,
             result: newGame.result
         });
@@ -1280,7 +1372,7 @@ async function handleCoinFlipButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(newGame, userId, client);
-        const buttons = createButtons(newGame, userId, client);
+        const buttons = await createButtons(newGame, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1308,15 +1400,20 @@ async function handleCoinFlipButtons(interaction, activeGames, userId, client) {
     // Play game
     const game = new CoinFlipGame(userId, bet, choice);
 
+    // Apply holiday bonus to profit
+    const baseProfit = game.winnings - bet;
+    const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+    const adjustedWinnings = bet + adjustedProfit;
+
     // Award winnings
-    if (game.winnings > 0) {
+    if (adjustedWinnings > 0) {
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + game.winnings);
+        await setUserMoney(userId, currentMoney + adjustedWinnings);
     }
 
     // Record result
     const gameResult = game.won ? 'win' : 'lose';
-    await recordGameResult(userId, 'coinflip', bet, game.winnings - bet, gameResult, {
+    await recordGameResult(userId, 'coinflip', bet, adjustedProfit, gameResult, {
         choice: game.choice,
         result: game.result
     });
@@ -1327,7 +1424,7 @@ async function handleCoinFlipButtons(interaction, activeGames, userId, client) {
     // Create result embed
     await interaction.deferUpdate();
     const embed = await createGameEmbed(game, userId, client);
-    const buttons = createButtons(game, userId, client);
+    const buttons = await createButtons(game, userId, client);
 
     await interaction.editReply({
         embeds: [embed],
@@ -1367,15 +1464,20 @@ async function handleHorseRaceButtons(interaction, activeGames, userId, client) 
         const newGame = new HorseRacingGame(userId, bet, horseNumber);
         newGame.race();
 
+        // Apply holiday bonus to profit
+        const baseProfit = newGame.getProfit();
+        const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+        const adjustedWinnings = bet + adjustedProfit;
+
         // Award winnings
-        if (newGame.winnings > 0) {
+        if (adjustedWinnings > 0) {
             const currentMoney = await getUserMoney(userId);
-            await setUserMoney(userId, currentMoney + newGame.winnings);
+            await setUserMoney(userId, currentMoney + adjustedWinnings);
         }
 
         // Record result
-        const gameResult = newGame.getProfit() > 0 ? 'win' : 'lose';
-        await recordGameResult(userId, 'horserace', bet, newGame.getProfit(), gameResult, {
+        const gameResult = adjustedProfit > 0 ? 'win' : 'lose';
+        await recordGameResult(userId, 'horserace', bet, adjustedProfit, gameResult, {
             horseNumber: newGame.betOnHorse,
             winnerNumber: newGame.winner.number,
             horseName: newGame.getBetHorse().name,
@@ -1400,7 +1502,7 @@ async function handleHorseRaceButtons(interaction, activeGames, userId, client) 
 
         // Show final result with buttons
         const finalEmbed = await createGameEmbed(newGame, userId, client);
-        const buttons = createButtons(newGame, userId, client);
+        const buttons = await createButtons(newGame, userId, client);
 
         await interaction.editReply({
             embeds: [finalEmbed],
@@ -1429,15 +1531,20 @@ async function handleHorseRaceButtons(interaction, activeGames, userId, client) 
     const game = new HorseRacingGame(userId, bet, horseNumber);
     game.race();
 
+    // Apply holiday bonus to profit
+    const baseProfit = game.getProfit();
+    const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+    const adjustedWinnings = bet + adjustedProfit;
+
     // Award winnings
-    if (game.winnings > 0) {
+    if (adjustedWinnings > 0) {
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + game.winnings);
+        await setUserMoney(userId, currentMoney + adjustedWinnings);
     }
 
     // Record result
-    const gameResult = game.getProfit() > 0 ? 'win' : 'lose';
-    await recordGameResult(userId, 'horserace', bet, game.getProfit(), gameResult, {
+    const gameResult = adjustedProfit > 0 ? 'win' : 'lose';
+    await recordGameResult(userId, 'horserace', bet, adjustedProfit, gameResult, {
         horseNumber: game.betOnHorse,
         winnerNumber: game.winner.number,
         horseName: game.getBetHorse().name,
@@ -1462,7 +1569,7 @@ async function handleHorseRaceButtons(interaction, activeGames, userId, client) 
 
     // Show final result with buttons
     const finalEmbed = await createGameEmbed(game, userId, client);
-    const buttons = createButtons(game, userId, client);
+    const buttons = await createButtons(game, userId, client);
 
     await interaction.editReply({
         embeds: [finalEmbed],
@@ -1500,7 +1607,7 @@ async function handleCrashButtons(interaction, activeGames, userId, client) {
         // Update the display
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1509,11 +1616,16 @@ async function handleCrashButtons(interaction, activeGames, userId, client) {
 
         // If game just completed (crashed), record result
         if (game.gameComplete) {
+            // Apply holiday bonus to profit
+            const baseProfit = game.totalWinnings - game.betAmount;
+            const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+            const adjustedTotalWinnings = game.betAmount + adjustedProfit;
+
             const currentMoney = await getUserMoney(userId);
-            await setUserMoney(userId, currentMoney + game.totalWinnings);
+            await setUserMoney(userId, currentMoney + adjustedTotalWinnings);
 
             const gameResult = game.result === 'win' ? 'win' : 'lose';
-            await recordGameResult(userId, 'crash', game.betAmount, game.totalWinnings - game.betAmount, gameResult, {
+            await recordGameResult(userId, 'crash', game.betAmount, adjustedProfit, gameResult, {
                 crashMultiplier: game.crashMultiplier,
                 cashedOutAt: game.result === 'win' ? game.currentMultiplier : null
             });
@@ -1526,12 +1638,17 @@ async function handleCrashButtons(interaction, activeGames, userId, client) {
         // Cash out at current multiplier
         game.cashOut();
 
+        // Apply holiday bonus to profit
+        const baseProfit = game.totalWinnings - game.betAmount;
+        const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
+        const adjustedTotalWinnings = game.betAmount + adjustedProfit;
+
         // Award winnings
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + game.totalWinnings);
+        await setUserMoney(userId, currentMoney + adjustedTotalWinnings);
 
         // Record result
-        await recordGameResult(userId, 'crash', game.betAmount, game.totalWinnings - game.betAmount, 'win', {
+        await recordGameResult(userId, 'crash', game.betAmount, adjustedProfit, 'win', {
             crashMultiplier: game.crashMultiplier,
             cashedOutAt: game.currentMultiplier
         });
@@ -1539,7 +1656,7 @@ async function handleCrashButtons(interaction, activeGames, userId, client) {
         // Update the display
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1563,7 +1680,7 @@ async function handleCrashButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(newGame, userId, client);
-        const buttons = createButtons(newGame, userId, client);
+        const buttons = await createButtons(newGame, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1655,7 +1772,7 @@ async function handleBingoButtons(interaction, activeGames, userId, client) {
 
         // Start the game
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1717,7 +1834,7 @@ async function handleBingoButtons(interaction, activeGames, userId, client) {
 
         // Update main display
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1871,7 +1988,7 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
 
         // Start the tournament
         const embed = await createGameEmbed(tournament, userId, client);
-        const buttons = createButtons(tournament, userId, client);
+        const buttons = await createButtons(tournament, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1887,7 +2004,7 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(tournament, userId, client);
-        const buttons = createButtons(tournament, userId, client);
+        const buttons = await createButtons(tournament, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1904,7 +2021,7 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
                 await sendPlayerCardsDM(tournament, client);
 
                 const newEmbed = await createGameEmbed(tournament, userId, client);
-                const newButtons = createButtons(tournament, userId, client);
+                const newButtons = await createButtons(tournament, userId, client);
 
                 await interaction.message.edit({
                     embeds: [newEmbed],
@@ -1957,7 +2074,7 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(tournament, userId, client);
-        const buttons = createButtons(tournament, userId, client);
+        const buttons = await createButtons(tournament, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -1974,7 +2091,7 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
                 await sendPlayerCardsDM(tournament, client);
 
                 const newEmbed = await createGameEmbed(tournament, userId, client);
-                const newButtons = createButtons(tournament, userId, client);
+                const newButtons = await createButtons(tournament, userId, client);
 
                 await interaction.message.edit({
                     embeds: [newEmbed],
@@ -2040,7 +2157,7 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
         await sendPlayerCardsDM(tournament, client);
 
         const embed = await createGameEmbed(tournament, userId, client);
-        const buttons = createButtons(tournament, userId, client);
+        const buttons = await createButtons(tournament, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -2121,7 +2238,7 @@ async function handleHiLoButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -2145,7 +2262,7 @@ async function handleHiLoButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -2182,7 +2299,7 @@ async function handleHiLoButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
-        const buttons = createButtons(game, userId, client);
+        const buttons = await createButtons(game, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -2207,7 +2324,7 @@ async function handleHiLoButtons(interaction, activeGames, userId, client) {
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(newGame, userId, client);
-        const buttons = createButtons(newGame, userId, client);
+        const buttons = await createButtons(newGame, userId, client);
 
         await interaction.editReply({
             embeds: [embed],
@@ -2216,4 +2333,338 @@ async function handleHiLoButtons(interaction, activeGames, userId, client) {
     }
 }
 
-module.exports = { handleButtonInteraction, handleBlackjackButtons, handleTableButtons, updateBettingDisplay, startTurnTimer, handleRouletteButtons, animateDealerDrawing, handleCrapsButtons, handleWarButtons, handleCoinFlipButtons, handleHorseRaceButtons, handleCrashButtons, handleBingoButtons, handleTournamentButtons, handleHiLoButtons };
+async function handleClaimChallengeRewards(interaction, userId) {
+    const { getUserChallenges, awardChallengeReward } = require('../utils/challenges');
+    const { markChallengeClaimedDB } = require('../utils/data');
+
+    try {
+        const challenges = await getUserChallenges(userId);
+        if (!challenges) {
+            return interaction.reply({
+                content: '❌ Unable to load your challenges.',
+                ephemeral: true
+            });
+        }
+
+        // Find all completed but not yet claimed challenges
+        const completedChallenges = [...challenges.daily, ...challenges.weekly].filter(c => c.completed && !c.claimed);
+
+        if (completedChallenges.length === 0) {
+            return interaction.reply({
+                content: '❌ You have no completed challenges to claim!',
+                ephemeral: true
+            });
+        }
+
+        // Award all rewards
+        let totalReward = 0;
+        const claimedChallenges = [];
+
+        for (const challenge of completedChallenges) {
+            const reward = await awardChallengeReward(userId, challenge);
+            totalReward += reward;
+            claimedChallenges.push(`${challenge.emoji} **${challenge.name}** - $${reward.toLocaleString()}`);
+
+            // Mark challenge as claimed in the database
+            await markChallengeClaimedDB(userId, challenge.id);
+        }
+
+        // Challenges remain in DB as "completed & claimed" until reset period expires
+
+        const embed = new EmbedBuilder()
+            .setColor('#00FF00')
+            .setTitle('🎉 Challenge Rewards Claimed!')
+            .setDescription(`You've earned a total of **$${totalReward.toLocaleString()}**!`)
+            .addFields({
+                name: 'Completed Challenges',
+                value: claimedChallenges.join('\n'),
+                inline: false
+            })
+            .setTimestamp();
+
+        await interaction.reply({ embeds: [embed] });
+
+    } catch (error) {
+        console.error('Error claiming challenge rewards:', error);
+        await interaction.reply({
+            content: '❌ An error occurred while claiming your rewards. Please try again.',
+            ephemeral: true
+        });
+    }
+}
+
+async function handleShopPurchase(interaction, userId) {
+    const { purchaseItem, getShopItem } = require('../utils/shop');
+
+    try {
+        const itemId = interaction.customId.replace('shop_buy_', '');
+        const result = await purchaseItem(userId, itemId);
+
+        if (!result.success) {
+            return interaction.reply({
+                content: `❌ ${result.message}`,
+                ephemeral: true
+            });
+        }
+
+        const item = getShopItem(itemId);
+        const embed = new EmbedBuilder()
+            .setColor('#00FF00')
+            .setTitle('✅ Purchase Successful!')
+            .setDescription(result.message)
+            .addFields(
+                { name: 'Item', value: item.name, inline: true },
+                { name: 'Effect', value: item.description, inline: false }
+            )
+            .setFooter({ text: 'Use /inventory to view your items' })
+            .setTimestamp();
+
+        await interaction.reply({ embeds: [embed] });
+
+    } catch (error) {
+        console.error('Error handling shop purchase:', error);
+        await interaction.reply({
+            content: '❌ An error occurred while processing your purchase. Please try again.',
+            ephemeral: true
+        });
+    }
+}
+
+async function handlePropertyPurchase(interaction, userId) {
+    const { purchaseProperty } = require('../utils/properties');
+    const { getUserMoney } = require('../utils/data');
+
+    try {
+        await interaction.deferReply();
+
+        const propertyId = interaction.customId.replace('property_buy_', '');
+        const result = await purchaseProperty(userId, propertyId);
+
+        if (!result.success) {
+            const errorEmbed = new EmbedBuilder()
+                .setColor('#FF0000')
+                .setTitle('❌ Purchase Failed')
+                .setDescription(result.message)
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [errorEmbed] });
+        }
+
+        const property = result.property;
+        const currentMoney = await getUserMoney(userId);
+
+        const embed = new EmbedBuilder()
+            .setColor('#00FF00')
+            .setTitle('✅ Property Purchased!')
+            .setDescription(`${property.emoji} **${property.name}**\n*${property.description}*`)
+            .addFields(
+                {
+                    name: '💰 Purchase Price',
+                    value: `$${property.purchasePrice.toLocaleString()}`,
+                    inline: true
+                },
+                {
+                    name: '💵 Daily Income',
+                    value: `$${property.baseIncome.toLocaleString()}`,
+                    inline: true
+                },
+                {
+                    name: '🔧 Daily Maintenance',
+                    value: `$${property.baseMaintenance.toLocaleString()}`,
+                    inline: true
+                },
+                {
+                    name: '📊 Net Daily Profit',
+                    value: `$${(property.baseIncome - property.baseMaintenance).toLocaleString()}`,
+                    inline: false
+                },
+                {
+                    name: '💳 New Balance',
+                    value: `$${currentMoney.toLocaleString()}`,
+                    inline: true
+                }
+            )
+            .setFooter({ text: 'Use /collect to claim daily income!' })
+            .setTimestamp();
+
+        await interaction.editReply({ embeds: [embed] });
+
+    } catch (error) {
+        console.error('Error handling property purchase:', error);
+
+        const errorMessage = {
+            content: '❌ An error occurred while processing your property purchase. Please try again.',
+            ephemeral: true
+        };
+
+        if (interaction.deferred) {
+            await interaction.editReply(errorMessage);
+        } else {
+            await interaction.reply(errorMessage);
+        }
+    }
+}
+
+async function handleUseItem(interaction, userId) {
+    const { useItem, getUserInventory, SHOP_ITEMS } = require('../utils/shop');
+
+    try {
+        const itemType = interaction.customId.replace('use_item_', '');
+        const inventory = getUserInventory(userId);
+
+        // Find the first item of this type
+        const item = inventory.find(invItem => {
+            const invItemType = invItem.id.split('_')[0] + '_' + invItem.id.split('_')[1];
+            return invItemType === itemType;
+        });
+
+        if (!item) {
+            return interaction.reply({
+                content: '❌ Item not found in your inventory!',
+                ephemeral: true
+            });
+        }
+
+        const result = await useItem(userId, item.id);
+
+        if (!result.success) {
+            return interaction.reply({
+                content: `❌ ${result.message}`,
+                ephemeral: true
+            });
+        }
+
+        const shopItem = SHOP_ITEMS[itemType];
+        const embed = new EmbedBuilder()
+            .setColor('#00FF00')
+            .setTitle('✅ Item Activated!')
+            .setDescription(result.message)
+            .addFields(
+                { name: 'Effect', value: shopItem.description, inline: false },
+                { name: 'Status', value: '⚡ Active - Will be consumed on your next applicable action', inline: false }
+            )
+            .setTimestamp();
+
+        await interaction.reply({ embeds: [embed] });
+
+    } catch (error) {
+        console.error('Error handling item use:', error);
+        await interaction.reply({
+            content: '❌ An error occurred while using the item. Please try again.',
+            ephemeral: true
+        });
+    }
+}
+
+async function handleVIPPurchase(interaction, userId) {
+    const { purchaseVIP, getVIPTierById } = require('../utils/vip');
+    const { getUserMoney } = require('../utils/data');
+
+    try {
+        const tierId = interaction.customId.replace('vip_buy_', '');
+
+        await interaction.deferReply();
+
+        const result = await purchaseVIP(userId, tierId);
+
+        if (!result.success) {
+            const errorEmbed = new EmbedBuilder()
+                .setColor('#FF0000')
+                .setTitle('❌ Purchase Failed')
+                .setDescription(result.message)
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [errorEmbed] });
+        }
+
+        const tier = result.tier;
+        const actionType = result.isUpgrade ? 'Upgraded' : (result.isRenewal ? 'Renewed' : 'Purchased');
+
+        const embed = new EmbedBuilder()
+            .setColor(tier.color)
+            .setTitle(`✅ VIP ${actionType}!`)
+            .setDescription(`${tier.emoji} **${tier.name}**`)
+            .addFields(
+                {
+                    name: '💰 Cost',
+                    value: `$${tier.price.toLocaleString()}`,
+                    inline: true
+                },
+                {
+                    name: '⏰ Duration',
+                    value: '30 days',
+                    inline: true
+                },
+                {
+                    name: '✨ Your Perks',
+                    value: tier.perks.description.join('\n'),
+                    inline: false
+                }
+            )
+            .setTimestamp();
+
+        const expiryDate = new Date(result.expiresAt);
+        embed.setFooter({ text: `Expires on ${expiryDate.toLocaleDateString()}` });
+
+        const currentMoney = await getUserMoney(userId);
+        embed.addFields({
+            name: '💵 New Balance',
+            value: `$${currentMoney.toLocaleString()}`,
+            inline: true
+        });
+
+        await interaction.editReply({ embeds: [embed] });
+
+    } catch (error) {
+        console.error('Error handling VIP purchase:', error);
+        await interaction.reply({
+            content: '❌ An error occurred while processing your VIP purchase. Please try again.',
+            ephemeral: true
+        });
+    }
+}
+
+async function handleGuildHeistJoin(interaction, userId) {
+    const { joinGuildHeist, getActiveGuildHeist } = require('../utils/heist');
+
+    try {
+        const guildId = interaction.customId.replace('guildheist_join_', '');
+
+        const result = await joinGuildHeist(guildId, userId);
+
+        if (!result.success) {
+            return interaction.reply({
+                content: `❌ ${result.message}`,
+                ephemeral: true
+            });
+        }
+
+        // Update the message to show new participant count
+        const heist = getActiveGuildHeist(guildId);
+
+        if (heist) {
+            const originalEmbed = interaction.message.embeds[0];
+            const updatedEmbed = new EmbedBuilder(originalEmbed.data)
+                .setDescription(originalEmbed.description.replace(
+                    /\*\*Current Participants:\*\* \d+/,
+                    `**Current Participants:** ${heist.participants.length}`
+                ));
+
+            await interaction.message.edit({ embeds: [updatedEmbed] });
+        }
+
+        await interaction.reply({
+            content: `✅ You've joined the guild heist! **${result.participantCount}** members are now participating.`,
+            ephemeral: true
+        });
+
+    } catch (error) {
+        console.error('Error handling guild heist join:', error);
+        await interaction.reply({
+            content: '❌ An error occurred while joining the heist. Please try again.',
+            ephemeral: true
+        });
+    }
+}
+
+module.exports = { handleButtonInteraction, handleBlackjackButtons, handleTableButtons, updateBettingDisplay, startTurnTimer, handleRouletteButtons, animateDealerDrawing, handleCrapsButtons, handleWarButtons, handleCoinFlipButtons, handleHorseRaceButtons, handleCrashButtons, handleBingoButtons, handleTournamentButtons, handleHiLoButtons, handleClaimChallengeRewards, handleShopPurchase, handlePropertyPurchase, handleUseItem, handleVIPPurchase, handleGuildHeistJoin };

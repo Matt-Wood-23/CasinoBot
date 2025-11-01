@@ -1,5 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const { getUserData } = require('./data');
+const { applyHolidayTheme, getCurrentHoliday, applyHolidayWinningsBonus } = require('./holidayEvents');
 
 async function createGameEmbed(game, userId, client, options = {}) {
     let embed;
@@ -37,7 +38,7 @@ async function createGameEmbed(game, userId, client, options = {}) {
 }
 
 async function createPokerEmbed(game, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
 
     const embed = new EmbedBuilder()
@@ -98,7 +99,8 @@ async function createPokerEmbed(game, userId) {
     } else if (game.gamePhase === 'showdown') {
         embed.setDescription('**Showdown!** Cards revealed, calculating results...');
     } else if (game.gamePhase === 'complete') {
-        const winnings = game.calculateWinnings();
+        const baseWinnings = game.calculateWinnings();
+        const adjustedTotal = applyHolidayWinningsBonus(baseWinnings.total);
         let resultText = '';
 
         if (game.playerDecision === 'fold') {
@@ -114,21 +116,21 @@ async function createPokerEmbed(game, userId) {
             }
         }
 
-        // Breakdown
-        if (winnings.breakdown.anteBonus) {
-            resultText += `🌟 Ante Bonus: +${winnings.breakdown.anteBonus}\n`;
+        // Breakdown - show base amounts (holiday bonus is applied to total only)
+        if (baseWinnings.breakdown.anteBonus) {
+            resultText += `🌟 Ante Bonus: +${baseWinnings.breakdown.anteBonus}\n`;
         }
-        if (winnings.breakdown.ante !== undefined) {
-            resultText += `💰 Ante: ${winnings.breakdown.ante >= 0 ? '+' : ''}${winnings.breakdown.ante}\n`;
+        if (baseWinnings.breakdown.ante !== undefined) {
+            resultText += `💰 Ante: ${baseWinnings.breakdown.ante >= 0 ? '+' : ''}${baseWinnings.breakdown.ante}\n`;
         }
-        if (winnings.breakdown.play !== undefined) {
-            resultText += `🎲 Play: ${winnings.breakdown.play >= 0 ? '+' : ''}${winnings.breakdown.play}\n`;
+        if (baseWinnings.breakdown.play !== undefined) {
+            resultText += `🎲 Play: ${baseWinnings.breakdown.play >= 0 ? '+' : ''}${baseWinnings.breakdown.play}\n`;
         }
-        if (winnings.breakdown.pairPlus !== undefined && winnings.breakdown.pairPlus !== 0) {
-            resultText += `🎯 Pair Plus: ${winnings.breakdown.pairPlus >= 0 ? '+' : ''}${winnings.breakdown.pairPlus}\n`;
+        if (baseWinnings.breakdown.pairPlus !== undefined && baseWinnings.breakdown.pairPlus !== 0) {
+            resultText += `🎯 Pair Plus: ${baseWinnings.breakdown.pairPlus >= 0 ? '+' : ''}${baseWinnings.breakdown.pairPlus}\n`;
         }
 
-        resultText += `\n**Total: ${winnings.total >= 0 ? '+' : ''}${winnings.total}**`;
+        resultText += `\n**Total: ${adjustedTotal >= 0 ? '+' : ''}${adjustedTotal}**`;
 
         embed.addFields({
             name: '📊 Result',
@@ -141,20 +143,23 @@ async function createPokerEmbed(game, userId) {
 }
 
 async function createSlotsEmbed(game, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
+
+    // Apply holiday bonus to winnings display
+    const adjustedWinnings = applyHolidayWinningsBonus(game.winnings);
 
     const embed = new EmbedBuilder()
         .setTitle('🎰 Slot Machine')
-        .setColor(game.winnings > 0 ? '#00FF00' : '#FF0000')
-        .setDescription(`**Bet: ${game.bet}**\n${game.getGrid()}\n**Winnings: ${game.winnings > 0 ? '+' : ''}${game.winnings}**`)
+        .setColor(adjustedWinnings > 0 ? '#00FF00' : '#FF0000')
+        .setDescription(`**Bet: ${game.bet}**\n${game.getGrid()}\n**Winnings: ${adjustedWinnings > 0 ? '+' : ''}${adjustedWinnings}**`)
         .addFields({
             name: '💵 Your Money',
             value: `${userMoney.toLocaleString()}`,
             inline: true
         });
 
-    if (game.winnings > 0) {
+    if (adjustedWinnings > 0) {
         const winningLinesDesc = game.getWinningLinesDescription();
         embed.addFields({
             name: '🎉 Win!',
@@ -169,11 +174,17 @@ async function createSlotsEmbed(game, userId) {
         });
     }
 
+    // Apply holiday theme if active
+    const currentHoliday = getCurrentHoliday();
+    if (currentHoliday) {
+        applyHolidayTheme(embed, currentHoliday.id);
+    }
+
     return embed;
 }
 
 async function createBlackjackEmbed(game, userId, client) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
 
     let embed;
@@ -304,23 +315,45 @@ async function createMultiPlayerGameEmbed(game, userId, client) {
             }
 
             const results = game.getResult(playerId);
-            const totalWinnings = game.getWinnings(playerId);
+            const baseWinnings = game.getWinnings(playerId);
+            const totalWinnings = applyHolidayWinningsBonus(baseWinnings);
 
             resultText += `${username}:\n`;
+            let handWinningsTotal = 0;
             for (let i = 0; i < results.length; i++) {
                 const handBet = player.hands[i].bet;
                 const result = results[i];
                 let handResult = '';
+                let handWinnings = 0;
 
                 switch (result) {
                     case 'blackjack':
-                        handResult = `Won ${Math.floor(handBet * 1.5)}`;
+                        handWinnings = Math.floor(handBet * 1.5);
                         break;
                     case 'win':
-                        handResult = `Won ${handBet}`;
+                        handWinnings = handBet;
                         break;
                     case 'lose':
-                        handResult = `Lost ${handBet}`;
+                        handWinnings = -handBet;
+                        break;
+                    case 'push':
+                        handWinnings = 0;
+                        break;
+                }
+
+                // Apply holiday bonus to this hand's winnings
+                const adjustedHandWinnings = applyHolidayWinningsBonus(handWinnings);
+                handWinningsTotal += adjustedHandWinnings;
+
+                switch (result) {
+                    case 'blackjack':
+                        handResult = `Won ${adjustedHandWinnings}`;
+                        break;
+                    case 'win':
+                        handResult = `Won ${adjustedHandWinnings}`;
+                        break;
+                    case 'lose':
+                        handResult = `Lost ${Math.abs(adjustedHandWinnings)}`;
                         break;
                     case 'push':
                         handResult = `Push`;
@@ -361,7 +394,7 @@ async function createMultiPlayerGameEmbed(game, userId, client) {
 }
 
 async function createRouletteEmbed(game, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
     
     const embed = new EmbedBuilder()
@@ -557,7 +590,7 @@ function getBetTypeDisplayName(betType) {
 }
 
 async function createSinglePlayerGameEmbed(game, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
     const player = game.players.get(userId);
 
@@ -637,7 +670,8 @@ async function createSinglePlayerGameEmbed(game, userId) {
     // Game results
     if (game.gameOver) {
         embed.setDescription('Game over! Results displayed below.');
-        const totalWinnings = game.getWinnings(userId);
+        const baseWinnings = game.getWinnings(userId);
+        const totalWinnings = applyHolidayWinningsBonus(baseWinnings);
         let resultText = '';
         const results = game.getResult(userId);
 
@@ -662,21 +696,43 @@ async function createSinglePlayerGameEmbed(game, userId) {
                 }
             }
         } else {
+            // For multiple hands, apply holiday bonus to each hand's winnings
             resultText = 'Results:\n';
+            let handWinningsTotal = 0;
             for (let i = 0; i < results.length; i++) {
                 const handBet = player.hands[i].bet;
                 const result = results[i];
                 let handResult = '';
+                let handWinnings = 0;
 
                 switch (result) {
                     case 'blackjack':
-                        handResult = `Won ${Math.floor(handBet * 1.5).toLocaleString()}`;
+                        handWinnings = Math.floor(handBet * 1.5);
                         break;
                     case 'win':
-                        handResult = `Won ${handBet.toLocaleString()}`;
+                        handWinnings = handBet;
                         break;
                     case 'lose':
-                        handResult = `Lost ${handBet.toLocaleString()}`;
+                        handWinnings = -handBet;
+                        break;
+                    case 'push':
+                        handWinnings = 0;
+                        break;
+                }
+
+                // Apply holiday bonus to this hand's winnings
+                const adjustedHandWinnings = applyHolidayWinningsBonus(handWinnings);
+                handWinningsTotal += adjustedHandWinnings;
+
+                switch (result) {
+                    case 'blackjack':
+                        handResult = `Won ${adjustedHandWinnings.toLocaleString()}`;
+                        break;
+                    case 'win':
+                        handResult = `Won ${adjustedHandWinnings.toLocaleString()}`;
+                        break;
+                    case 'lose':
+                        handResult = `Lost ${Math.abs(adjustedHandWinnings).toLocaleString()}`;
                         break;
                     case 'push':
                         handResult = `Push`;
@@ -684,10 +740,42 @@ async function createSinglePlayerGameEmbed(game, userId) {
                 }
                 resultText += `Hand ${i + 1}: ${handResult}\n`;
             }
-            resultText += `**Total: ${totalWinnings >= 0 ? '+' : ''}${totalWinnings.toLocaleString()}**`;
+            resultText += `**Total: ${handWinningsTotal >= 0 ? '+' : ''}${handWinningsTotal.toLocaleString()}**`;
         }
 
         embed.addFields({ name: '📊 Result', value: resultText, inline: false });
+
+        // Add jackpot win display if applicable
+        if (game.jackpotWon && game.jackpotWon > 0) {
+            embed.setColor('#FFD700');
+            embed.setTitle('💎🃏 JACKPOT WINNER! 🃏💎');
+            embed.addFields({
+                name: '🎉 PROGRESSIVE JACKPOT WON!',
+                value: `**$${game.jackpotWon.toLocaleString()}**\n🏆 Congratulations on hitting the jackpot! 🏆`,
+                inline: false
+            });
+        }
+    } else if (game.serverId) {
+        // Show jackpot info during game
+        const { getServerJackpot } = require('../database/queries');
+        try {
+            const jackpotData = await getServerJackpot(game.serverId);
+            if (jackpotData && jackpotData.currentAmount > 0) {
+                embed.addFields({
+                    name: '💎 Progressive Jackpot',
+                    value: `Current: $${jackpotData.currentAmount.toLocaleString()}\nWin on natural blackjack!`,
+                    inline: false
+                });
+            }
+        } catch (error) {
+            // Silent fail - jackpot display is not critical
+        }
+    }
+
+    // Apply holiday theme if active
+    const currentHoliday = getCurrentHoliday();
+    if (currentHoliday) {
+        applyHolidayTheme(embed, currentHoliday.id);
     }
 
     return embed;
@@ -720,7 +808,7 @@ function createInfoEmbed(title, description) {
 
 async function createLeaderboardEmbed(client) {
     const { getAllUserData } = require('./data');
-    const userData = getAllUserData() || {}; // Ensure userData is an object
+    const userData = await getAllUserData() || {}; // Ensure userData is an object
 
     const sortedUsers = Object.entries(userData)
         .filter(([_, data]) => data && typeof data === 'object' && 'money' in data)
@@ -761,29 +849,28 @@ async function createLeaderboardEmbed(client) {
 }
 
 async function createStatsEmbed(targetUser, client) {
-    const { getUserData } = require('./data');
-    const userData = getUserData(targetUser.id);
+    const { getUserData, getAllUserData } = require('./data');
+    const { calculate7DayTrend, calculatePerGameStats, calculateServerAverages, getTrendEmoji, formatROI, getRankText } = require('./statisticsCalculator');
+
+    const userData = await getUserData(targetUser.id);
 
     if (!userData) {
         return createErrorEmbed('No Data', 'No statistics found for this user.');
     }
 
     const stats = userData.statistics;
+    const gameHistory = userData.gameHistory || [];
 
-    // Calculate win rates
+    // Calculate enhanced statistics
+    const weekTrend = calculate7DayTrend(gameHistory);
+    const perGameStats = calculatePerGameStats(stats, gameHistory);
+    const allUserData = await getAllUserData();
+    const serverAvg = calculateServerAverages(allUserData);
+
+    // Calculate overall metrics
     const winRate = stats.gamesPlayed > 0 ? ((stats.gamesWon / stats.gamesPlayed) * 100).toFixed(1) : 0;
-    const slotsWinRate = stats.slotsSpins > 0 ? ((stats.slotsWins / stats.slotsSpins) * 100).toFixed(1) : 0;
-    const pokerWinRate = stats.threeCardPokerGames > 0 ? ((stats.threeCardPokerWins / stats.threeCardPokerGames) * 100).toFixed(1) : 0;
-    const rouletteWinRate = stats.rouletteSpins > 0 ? ((stats.rouletteWins / stats.rouletteSpins) * 100).toFixed(1) : 0;
-    const crapsWinRate = stats.crapsGames > 0 ? ((stats.crapsWins / stats.crapsGames) * 100).toFixed(1) : 0;
-    const warWinRate = stats.warGames > 0 ? ((stats.warWins / stats.warGames) * 100).toFixed(1) : 0;
-    const coinflipWinRate = stats.coinflipGames > 0 ? ((stats.coinflipWins / stats.coinflipGames) * 100).toFixed(1) : 0;
-    const horseraceWinRate = stats.horseraceGames > 0 ? ((stats.horseraceWins / stats.horseraceGames) * 100).toFixed(1) : 0;
-    const crashWinRate = stats.crashGames > 0 ? ((stats.crashWins / stats.crashGames) * 100).toFixed(1) : 0;
-    const hiloWinRate = stats.hiloGames > 0 ? ((stats.hiloWins / stats.hiloGames) * 100).toFixed(1) : 0;
-    const bingoWinRate = stats.bingoGames > 0 ? ((stats.bingoWins / stats.bingoGames) * 100).toFixed(1) : 0;
-
     const profitLoss = stats.totalWinnings - stats.totalWagered;
+    const roi = stats.totalWagered > 0 ? ((profitLoss / stats.totalWagered) * 100).toFixed(1) : 0;
 
     const embed = new EmbedBuilder()
         .setTitle(`📊 ${targetUser.username}'s Casino Statistics`)
@@ -793,35 +880,386 @@ async function createStatsEmbed(targetUser, client) {
             `**Overall Performance**\n` +
             `🎮 Games: ${(stats.gamesPlayed || 0).toLocaleString()} | ` +
             `🏆 Won: ${(stats.gamesWon || 0).toLocaleString()} (${winRate}%)\n` +
-            `💰 Wagered: ${(stats.totalWagered || 0).toLocaleString()} | ` +
-            `💵 Winnings: ${(stats.totalWinnings || 0).toLocaleString()}\n` +
-            `📊 Net: ${profitLoss >= 0 ? '+' : ''}${(profitLoss || 0).toLocaleString()} | ` +
-            `💳 Balance: ${(userData.money || 0).toLocaleString()}\n` +
-            `🌟 Best Win: ${(stats.biggestWin || 0).toLocaleString()} | ` +
-            `💔 Worst Loss: ${(stats.biggestLoss || 0).toLocaleString()}`
+            `💰 Wagered: $${(stats.totalWagered || 0).toLocaleString()} | ` +
+            `💵 Winnings: $${(stats.totalWinnings || 0).toLocaleString()}\n` +
+            `📊 Net P/L: ${profitLoss >= 0 ? '+' : ''}$${(profitLoss || 0).toLocaleString()} | ` +
+            `📈 ROI: ${formatROI(roi)}\n` +
+            `💳 Balance: $${(userData.money || 0).toLocaleString()} | ` +
+            `🌟 Best Win: $${(stats.biggestWin || 0).toLocaleString()}`
+        );
+
+    // 7-Day Performance Trend
+    if (weekTrend.totalGames > 0) {
+        embed.addFields({
+            name: `${getTrendEmoji(weekTrend.trend)} Last 7 Days Performance`,
+            value: `🎮 ${weekTrend.totalGames} games | ` +
+                   `🏆 ${weekTrend.wins}W-${weekTrend.losses}L (${weekTrend.winRate}%)\n` +
+                   `💰 Net: ${weekTrend.netProfit >= 0 ? '+' : ''}$${weekTrend.netProfit.toLocaleString()} ${getTrendEmoji(weekTrend.trend)}`,
+            inline: false
+        });
+    }
+
+    // Per-Game Performance (Top 5 most played)
+    if (perGameStats.length > 0) {
+        const topGames = perGameStats.slice(0, 5);
+        let perGameText = '';
+        for (const game of topGames) {
+            perGameText += `**${game.name}**: ${game.gamesPlayed} games | ` +
+                          `${game.winRate}% WR | ROI: ${formatROI(game.roi)}\n` +
+                          `  Net: ${game.netProfit >= 0 ? '+' : ''}$${game.netProfit.toLocaleString()}\n`;
+        }
+        embed.addFields({
+            name: '🎯 Top Games (By Activity)',
+            value: perGameText || 'No games played yet',
+            inline: false
+        });
+    }
+
+    // Server Comparison
+    if (serverAvg.avgGamesPlayed > 0) {
+        const balanceRank = getRankText(userData.money || 0, serverAvg.avgBalance);
+        const gamesRank = getRankText(stats.gamesPlayed || 0, serverAvg.avgGamesPlayed);
+
+        embed.addFields({
+            name: '🌍 Server Comparison',
+            value: `💰 Balance: $${(userData.money || 0).toLocaleString()} vs avg $${serverAvg.avgBalance.toLocaleString()} ${balanceRank}\n` +
+                   `🎮 Games: ${(stats.gamesPlayed || 0).toLocaleString()} vs avg ${serverAvg.avgGamesPlayed} ${gamesRank}\n` +
+                   `📊 Win Rate: ${winRate}% vs avg ${serverAvg.avgWinRate}% | ROI: ${roi}% vs avg ${serverAvg.avgROI}%`,
+            inline: false
+        });
+    }
+
+    // Quick Stats Grid
+    embed.addFields(
+        { name: '🃏 Blackjack', value: `${(stats.handsPlayed || 0).toLocaleString()} hands\n⚡ ${(stats.blackjacks || 0)} blackjacks`, inline: true },
+        { name: '🎰 Slots', value: `${(stats.slotsSpins || 0).toLocaleString()} spins\n${(stats.slotsWins || 0)} wins`, inline: true },
+        { name: '🎲 Roulette', value: `${(stats.rouletteSpins || 0).toLocaleString()} spins\n${(stats.rouletteWins || 0)} wins`, inline: true }
+    );
+
+    embed.setFooter({ text: 'Use /stats progression for achievements & challenges' });
+    embed.setTimestamp();
+
+    return embed;
+}
+
+async function createEconomyStatsEmbed(targetUser, client) {
+    const { getUserData } = require('./data');
+    const { getUserProperties } = require('./properties');
+    const { getUserVIPTier } = require('./vip');
+
+    const userData = await getUserData(targetUser.id);
+
+    if (!userData) {
+        return createErrorEmbed('No Data', 'No statistics found for this user.');
+    }
+
+    const stats = userData.statistics;
+    const properties = await getUserProperties(targetUser.id);
+    const vipTier = await getUserVIPTier(targetUser.id);
+
+    // Calculate property values
+    let totalDailyIncome = 0;
+    let totalDailyMaintenance = 0;
+    for (const prop of properties) {
+        totalDailyIncome += prop.dailyIncome;
+        totalDailyMaintenance += prop.dailyMaintenance;
+    }
+    const netDailyIncome = totalDailyIncome - totalDailyMaintenance;
+
+    const embed = new EmbedBuilder()
+        .setTitle(`💼 ${targetUser.username}'s Economy Stats`)
+        .setColor('#00D9FF')
+        .setThumbnail(targetUser.displayAvatarURL())
+        .setDescription(
+            `**Financial Overview**\n` +
+            `💳 Current Balance: $${(userData.money || 0).toLocaleString()}\n` +
+            `📊 Net Worth: $${((userData.money || 0) + (stats.totalPropertyValue || 0)).toLocaleString()}\n` +
+            `⚖️ Credit Score: ${userData.creditScore || 500}/1000`
         )
         .addFields(
-            { name: '🃏 Blackjack', value: `${(stats.handsPlayed || 0).toLocaleString()} hands\n⚡ ${(stats.blackjacks || 0)} blackjacks`, inline: true },
-            { name: '🎴 3-Card Poker', value: `${(stats.threeCardPokerGames || 0).toLocaleString()} games\n${(stats.threeCardPokerWins || 0)} wins (${pokerWinRate}%)`, inline: true },
-            { name: '⚔️ War', value: `${(stats.warGames || 0).toLocaleString()} games\n${(stats.warWins || 0)} wins (${warWinRate}%)`, inline: true },
-            { name: '🎰 Slots', value: `${(stats.slotsSpins || 0).toLocaleString()} spins\n${(stats.slotsWins || 0)} wins (${slotsWinRate}%)`, inline: true },
-            { name: '🎲 Roulette', value: `${(stats.rouletteSpins || 0).toLocaleString()} spins\n${(stats.rouletteWins || 0)} wins (${rouletteWinRate}%)`, inline: true },
-            { name: '🎲 Craps', value: `${(stats.crapsGames || 0).toLocaleString()} games\n${(stats.crapsWins || 0)} wins (${crapsWinRate}%)`, inline: true },
-            { name: '🪙 Coin Flip', value: `${(stats.coinflipGames || 0).toLocaleString()} flips\n${(stats.coinflipWins || 0)} wins (${coinflipWinRate}%)`, inline: true },
-            { name: '🏇 Horse Race', value: `${(stats.horseraceGames || 0).toLocaleString()} races\n${(stats.horseraceWins || 0)} wins (${horseraceWinRate}%)`, inline: true },
-            { name: '🚀 Crash', value: `${(stats.crashGames || 0).toLocaleString()} games\n${(stats.crashWins || 0)} wins (${crashWinRate}%)`, inline: true },
-            { name: '🎴 Hi-Lo', value: `${(stats.hiloGames || 0).toLocaleString()} games\n${(stats.hiloWins || 0)} wins\n🔥 Max: ${(stats.hiloMaxStreak || 0)}`, inline: true },
-            { name: '🎱 Bingo', value: `${(stats.bingoGames || 0).toLocaleString()} games\n${(stats.bingoWins || 0)} wins (${bingoWinRate}%)`, inline: true },
-            { name: '🎁 Social', value: `📤 Sent: ${(userData.giftsSent || 0).toLocaleString()}\n📥 Received: ${(userData.giftsReceived || 0).toLocaleString()}`, inline: true }
+            {
+                name: '🏢 Properties',
+                value: `Owned: ${stats.totalPropertiesOwned || 0}\n` +
+                       `Portfolio Value: $${(stats.totalPropertyValue || 0).toLocaleString()}\n` +
+                       `Total Income Collected: $${(stats.totalPropertyIncomeCollected || 0).toLocaleString()}\n` +
+                       `Daily Net Income: $${netDailyIncome.toLocaleString()}/day`,
+                inline: true
+            },
+            {
+                name: '💼 Work',
+                value: `Sessions: ${stats.totalWorkSessions || 0}\n` +
+                       `Total Earned: $${(stats.totalWorkEarnings || 0).toLocaleString()}\n` +
+                       `Avg per Session: $${stats.totalWorkSessions > 0 ? Math.floor((stats.totalWorkEarnings || 0) / stats.totalWorkSessions).toLocaleString() : '0'}`,
+                inline: true
+            },
+            {
+                name: '🏪 Shopping',
+                value: `Items Purchased: ${stats.totalItemsPurchased || 0}\n` +
+                       `Boosts Used: ${stats.totalBoostsUsed || 0}\n` +
+                       `Total Spent: $${(stats.totalSpentOnShop || 0).toLocaleString()}`,
+                inline: true
+            },
+            {
+                name: '✨ VIP Status',
+                value: vipTier
+                    ? `${vipTier.emoji} **${vipTier.name}**\n` +
+                      `Work Bonus: +${vipTier.perks.workMultiplier * 100}%\n` +
+                      `Daily Bonus: $${vipTier.perks.dailyBonus.toLocaleString()}`
+                    : 'No VIP Membership\nUse `/vip shop` to upgrade!',
+                inline: true
+            },
+            {
+                name: '💸 Loans',
+                value: userData.activeLoan
+                    ? `Active Loan: $${(userData.activeLoan.totalOwed - userData.activeLoan.amountPaid).toLocaleString()}\n` +
+                      `Loans Taken: ${userData.loanHistory?.length || 0}`
+                    : `No Active Loan\nLoans Taken: ${userData.loanHistory?.length || 0}`,
+                inline: true
+            },
+            {
+                name: '🎁 Gifts',
+                value: `Sent: ${userData.giftsSent || 0} ($${(userData.totalGiftsSent || 0).toLocaleString()})\n` +
+                       `Received: ${userData.giftsReceived || 0} ($${(userData.totalGiftsReceived || 0).toLocaleString()})`,
+                inline: true
+            }
         )
         .setTimestamp();
 
     return embed;
 }
 
+async function createHeistStatsEmbed(targetUser, client) {
+    const { getUserData } = require('./data');
+    const { getUserHeistStats, getHeistDebt, isGamblingBanned } = require('../database/queries');
+
+    const userData = await getUserData(targetUser.id);
+    const heistData = await getUserHeistStats(targetUser.id);
+    const heistDebt = await getHeistDebt(targetUser.id);
+
+    if (!userData || !heistData) {
+        return createErrorEmbed('No Data', 'No heist statistics found for this user.');
+    }
+
+    const stats = userData.statistics;
+    const soloSuccessRate = heistData.totalHeists > 0
+        ? ((heistData.successfulHeists / heistData.totalHeists) * 100).toFixed(1)
+        : '0.0';
+
+    const guildSuccessRate = stats.guildHeistsParticipated > 0
+        ? ((stats.guildHeistsWon / stats.guildHeistsParticipated) * 100).toFixed(1)
+        : '0.0';
+
+    const netProfit = (heistData.totalEarned || 0) - (heistData.totalLost || 0);
+    const isBanned = await isGamblingBanned(targetUser.id);
+    const banCheck = { isBanned, reason: isBanned ? '🚫 You are currently banned from gambling.' : '' };
+
+    const embed = new EmbedBuilder()
+        .setTitle(`🎭 ${targetUser.username}'s Heist Stats`)
+        .setColor(banCheck.isBanned ? '#FF0000' : '#FF6600')
+        .setThumbnail(targetUser.displayAvatarURL())
+        .setDescription(
+            banCheck.isBanned
+                ? `🚫 **CURRENTLY GAMBLING BANNED**\n${banCheck.reason}\n\n`
+                : `**Heist Overview**\n`
+        )
+        .addFields(
+            {
+                name: '🎭 Solo Heists',
+                value: `Total Attempts: ${heistData.totalHeists || 0}\n` +
+                       `Successful: ${heistData.successfulHeists || 0} (${soloSuccessRate}%)\n` +
+                       `Failed: ${(heistData.totalHeists || 0) - (heistData.successfulHeists || 0)}\n` +
+                       `Biggest Score: $${(heistData.biggestScore || 0).toLocaleString()}`,
+                inline: true
+            },
+            {
+                name: '👥 Guild Heists',
+                value: `Participated: ${stats.guildHeistsParticipated || 0}\n` +
+                       `Won: ${stats.guildHeistsWon || 0} (${guildSuccessRate}%)\n` +
+                       `Failed: ${(stats.guildHeistsParticipated || 0) - (stats.guildHeistsWon || 0)}`,
+                inline: true
+            },
+            {
+                name: '💰 Earnings',
+                value: `Total Earned: $${(heistData.totalEarned || 0).toLocaleString()}\n` +
+                       `Total Lost: $${(heistData.totalLost || 0).toLocaleString()}\n` +
+                       `Net Profit: ${netProfit >= 0 ? '+' : ''}$${netProfit.toLocaleString()}`,
+                inline: true
+            },
+            {
+                name: '📊 Overall Stats',
+                value: `Combined Heists: ${(heistData.totalHeists || 0) + (stats.guildHeistsParticipated || 0)}\n` +
+                       `Combined Success: ${(heistData.successfulHeists || 0) + (stats.guildHeistsWon || 0)}\n` +
+                       `Heist Debt: $${(heistDebt || 0).toLocaleString()}`,
+                inline: false
+            }
+        )
+        .setTimestamp();
+
+    // Add cooldown info if applicable
+    const now = Date.now();
+    if (heistData.cooldownUntil > now) {
+        const timeLeft = heistData.cooldownUntil - now;
+        const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
+        const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
+
+        embed.setFooter({ text: `Next heist available in: ${hoursLeft}h ${minutesLeft}m` });
+    } else {
+        embed.setFooter({ text: 'Ready for another heist!' });
+    }
+
+    return embed;
+}
+
+async function createProgressionStatsEmbed(targetUser, client) {
+    const { getUserData } = require('./data');
+    const { getUserAchievements } = require('./achievements');
+    const { getUserChallenges } = require('./challenges');
+
+    const userData = await getUserData(targetUser.id);
+
+    if (!userData) {
+        return createErrorEmbed('No Data', 'No progression data found for this user.');
+    }
+
+    const stats = userData.statistics;
+    const achievements = await getUserAchievements(targetUser.id);
+    const challenges = await getUserChallenges(targetUser.id);
+
+    // Calculate challenge completion
+    const dailyCompleted = challenges?.daily.filter(c => c.progress >= c.target).length || 0;
+    const weeklyCompleted = challenges?.weekly.filter(c => c.progress >= c.target).length || 0;
+
+    const embed = new EmbedBuilder()
+        .setTitle(`🏆 ${targetUser.username}'s Progression`)
+        .setColor('#FFD700')
+        .setThumbnail(targetUser.displayAvatarURL())
+        .setDescription(`**Achievement & Challenge Progress**`)
+        .addFields(
+            {
+                name: '🏅 Achievements',
+                value: `Unlocked: ${achievements?.unlocked.length || 0}/${Object.keys(achievements?.unlocked || {}).length + (achievements?.locked.length || 0)}\n` +
+                       `Total Unlocked: ${stats.totalAchievementsUnlocked || 0}\n` +
+                       `Completion: ${achievements?.unlocked.length > 0 ? ((achievements.unlocked.length / (achievements.unlocked.length + achievements.locked.length)) * 100).toFixed(1) : '0'}%`,
+                inline: true
+            },
+            {
+                name: '🎯 Challenges',
+                value: `Daily: ${dailyCompleted}/${challenges?.daily.length || 0} completed\n` +
+                       `Weekly: ${weeklyCompleted}/${challenges?.weekly.length || 0} completed\n` +
+                       `Total Completed: ${stats.totalChallengesCompleted || 0}`,
+                inline: true
+            },
+            {
+                name: '💎 Rewards Earned',
+                value: `Challenge Rewards: $${(stats.totalChallengeRewardsEarned || 0).toLocaleString()}\n` +
+                       `Achievement Points: ${(achievements?.totalPoints || 0).toLocaleString()}`,
+                inline: true
+            }
+        )
+        .setTimestamp();
+
+    // Show recent achievements
+    if (achievements && achievements.unlocked.length > 0) {
+        const recentAchievements = achievements.unlocked
+            .sort((a, b) => (b.unlockedAt || 0) - (a.unlockedAt || 0))
+            .slice(0, 3)
+            .map(a => `${a.emoji} **${a.name}**`)
+            .join('\n');
+
+        embed.addFields({
+            name: '⭐ Recent Achievements',
+            value: recentAchievements || 'None yet',
+            inline: false
+        });
+    }
+
+    embed.setFooter({ text: 'Use /achievements and /challenges for details' });
+
+    return embed;
+}
+
+async function createGuildStatsEmbed(targetUser, client) {
+    const { getUserData } = require('./data');
+    const { getUserGuild } = require('./guilds');
+
+    const userData = await getUserData(targetUser.id);
+    const guild = await getUserGuild(targetUser.id);
+
+    if (!userData) {
+        return createErrorEmbed('No Data', 'No guild statistics found for this user.');
+    }
+
+    const stats = userData.statistics;
+
+    if (!guild) {
+        return createInfoEmbed(
+            '🏰 No Guild',
+            `**${targetUser.username}** is not in a guild!\n\n` +
+            `Use \`/guild create\` to start your own guild, or\n` +
+            `Use \`/guild join\` to join an existing guild.`
+        );
+    }
+
+    const isOwner = guild.ownerId === targetUser.id;
+    const memberCount = guild.members.length;
+
+    // Get user's member data
+    const memberData = guild.members.find(m => m.userId === targetUser.id);
+    const joinedDate = memberData ? new Date(memberData.joinedAt) : null;
+    const daysInGuild = joinedDate ? Math.floor((Date.now() - joinedDate.getTime()) / (24 * 60 * 60 * 1000)) : 0;
+
+    const embed = new EmbedBuilder()
+        .setTitle(`🏰 ${targetUser.username}'s Guild Stats`)
+        .setColor('#9B59B6')
+        .setThumbnail(targetUser.displayAvatarURL())
+        .setDescription(`**Guild: ${guild.name}**\n${isOwner ? '👑 Owner' : '👤 Member'}`)
+        .addFields(
+            {
+                name: '📊 Guild Info',
+                value: `Members: ${memberCount}/10\n` +
+                       `Treasury: $${guild.treasury.toLocaleString()}\n` +
+                       `Created: ${new Date(guild.createdAt).toLocaleDateString()}`,
+                inline: true
+            },
+            {
+                name: '🎭 Your Contributions',
+                value: `Total Donated: $${(userData.guild?.contributedTotal || 0).toLocaleString()}\n` +
+                       `Guild Stats: $${(stats.totalGuildContributions || 0).toLocaleString()}\n` +
+                       `Days in Guild: ${daysInGuild}`,
+                inline: true
+            },
+            {
+                name: '🏴‍☠️ Guild Heists',
+                value: `Participated: ${stats.guildHeistsParticipated || 0}\n` +
+                       `Won: ${stats.guildHeistsWon || 0}\n` +
+                       `Success Rate: ${stats.guildHeistsParticipated > 0 ? ((stats.guildHeistsWon / stats.guildHeistsParticipated) * 100).toFixed(1) : '0'}%`,
+                inline: true
+            }
+        )
+        .setTimestamp();
+
+    // Check if guild heist is on cooldown
+    if (userData.guild?.guildHeistData) {
+        const now = Date.now();
+        const cooldownUntil = userData.guild.guildHeistData.cooldownUntil;
+
+        if (cooldownUntil > now) {
+            const timeLeft = cooldownUntil - now;
+            const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
+            const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
+
+            embed.setFooter({ text: `Next guild heist in: ${hoursLeft}h ${minutesLeft}m` });
+        } else {
+            embed.setFooter({ text: 'Guild heist available! Use /guildheist' });
+        }
+    }
+
+    return embed;
+}
+
 async function createHistoryEmbed(user, gamesToShow = 10) {
     const { getUserData } = require('./data');
-    const userData = getUserData(user.id);
+    const userData = await getUserData(user.id);
 
     if (!userData || !userData.gameHistory || userData.gameHistory.length === 0) {
         return createInfoEmbed('No History', 'You have no game history yet! Play some games first.');
@@ -851,7 +1289,7 @@ async function createHistoryEmbed(user, gamesToShow = 10) {
 }
 
 async function createCrapsEmbed(game, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
 
     const embed = new EmbedBuilder()
@@ -926,7 +1364,7 @@ async function createCrapsEmbed(game, userId) {
 }
 
 async function createWarEmbed(game, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
 
     const embed = new EmbedBuilder()
@@ -983,7 +1421,7 @@ async function createWarEmbed(game, userId) {
 }
 
 async function createCoinFlipEmbed(game, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
 
     const embed = new EmbedBuilder()
@@ -1012,7 +1450,7 @@ async function createCoinFlipEmbed(game, userId) {
 }
 
 async function createHorseRaceEmbed(game, userId, options = {}) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
 
     const { frame } = options;
@@ -1053,7 +1491,7 @@ async function createHorseRaceEmbed(game, userId, options = {}) {
 }
 
 async function createCrashEmbed(game, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
 
     const color = game.gameComplete ? (game.result === 'win' ? '#00FF00' : '#FF0000') : '#FFD700';
@@ -1274,7 +1712,7 @@ async function createTournamentEmbed(tournament, userId, client) {
 }
 
 async function createHiLoEmbed(game, userId) {
-    const userData = getUserData(userId);
+    const userData = await getUserData(userId);
     const userMoney = userData ? userData.money : 500;
 
     const color = game.gameComplete ? (game.result === 'win' ? '#00FF00' : '#FF0000') : '#FFD700';
@@ -1332,6 +1770,10 @@ module.exports = {
     createInfoEmbed,
     createLeaderboardEmbed,
     createStatsEmbed,
+    createEconomyStatsEmbed,
+    createHeistStatsEmbed,
+    createProgressionStatsEmbed,
+    createGuildStatsEmbed,
     createHistoryEmbed,
     sendPlayerCardsDM
 };
