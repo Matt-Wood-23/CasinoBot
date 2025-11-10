@@ -55,8 +55,26 @@ for (const file of commandFiles) {
 }
 
 // Helper functions
+// Check if a hand is a natural blackjack (Ace + 10-value card with exactly 2 cards)
+function isNaturalBlackjack(hand) {
+    if (!hand || !hand.cards || hand.cards.length !== 2) return false;
+
+    const score = hand.cards.reduce((sum, card) => {
+        if (!card) return sum;
+        return sum + card.getBlackjackValue();
+    }, 0);
+
+    if (score !== 21) return false;
+
+    // Check for Ace and 10-value card
+    const hasAce = hand.cards.some(card => card && card.value === 14);
+    const hasTen = hand.cards.some(card => card && card.getBlackjackValue() === 10);
+
+    return hasAce && hasTen;
+}
+
 async function dealCardsWithDelay(interaction, message, game, userId, delay = 1000) {
-    const { getUserMoney, setUserMoney, recordGameResult } = require('./database/queries');
+    const { getUserMoney, setUserMoney, recordGameResult, getServerJackpot, resetJackpot } = require('./database/queries');
 
     // Prevent concurrent dealing for the same game
     if (game.isDealing) {
@@ -89,6 +107,23 @@ async function dealCardsWithDelay(interaction, message, game, userId, delay = 10
             });
         } catch (error) {
             console.error('Error updating game message during dealing:', error);
+
+            // Refund the bet if message update fails
+            try {
+                const totalBet = game.getTotalBet(userId);
+                const currentMoney = await getUserMoney(userId);
+                await setUserMoney(userId, currentMoney + totalBet);
+                console.log(`Refunded ${totalBet} to user ${userId} due to dealing error`);
+
+                // Try to notify user via followUp
+                await interaction.followUp({
+                    content: `❌ Game failed to load properly. Your bet of ${totalBet.toLocaleString()} has been refunded.`,
+                    ephemeral: true
+                });
+            } catch (refundError) {
+                console.error('Error refunding bet:', refundError);
+            }
+
             game.isDealing = false;
             return;
         }
@@ -108,13 +143,16 @@ async function dealCardsWithDelay(interaction, message, game, userId, delay = 10
 
         if (game.gameOver) {
             if (game.isMultiPlayer) {
+                let jackpotAwarded = false; // Track if jackpot was already awarded
+                game.loanDeductions = game.loanDeductions || new Map(); // Store loan deductions per player
+
                 for (const [playerId] of game.players) {
                     const winnings = game.getWinnings(playerId);
                     const currentMoney = await getUserMoney(playerId);
                     const totalBet = game.getTotalBet(playerId);
                     const newMoney = currentMoney + totalBet + winnings;
 
-                    await setUserMoney(playerId, newMoney);
+                    const loanInfo = await setUserMoney(playerId, newMoney);
 
                     const results = game.getResult(playerId);
                     const result = Array.isArray(results) ?
@@ -122,9 +160,40 @@ async function dealCardsWithDelay(interaction, message, game, userId, delay = 10
                          (results.includes('win') ? 'win' :
                           (results.includes('lose') ? 'lose' : 'push'))) : results;
 
+                    // Award progressive jackpot on natural blackjack (only once per game)
+                    // Check if player has natural blackjack regardless of result (even if push)
+                    let jackpotWon = 0;
+                    const player = game.players.get(playerId);
+                    const hasNaturalBJ = player.hands.some(hand => isNaturalBlackjack(hand));
+
+                    if (hasNaturalBJ && game.serverId && !jackpotAwarded) {
+                        try {
+                            const jackpotData = await getServerJackpot(game.serverId);
+                            if (jackpotData && jackpotData.currentAmount > 0) {
+                                jackpotWon = jackpotData.currentAmount;
+                                const jackpotLoanInfo = await setUserMoney(playerId, newMoney + jackpotWon);
+                                // Update loan info to include jackpot
+                                if (jackpotLoanInfo) {
+                                    game.loanDeductions.set(playerId, jackpotLoanInfo);
+                                }
+                                await resetJackpot(game.serverId, playerId, jackpotWon);
+                                jackpotAwarded = true;
+                                // Store jackpot info for embed display
+                                game.jackpotWinner = playerId;
+                                game.jackpotAmount = jackpotWon;
+                            }
+                        } catch (error) {
+                            console.error('Error awarding blackjack jackpot on initial deal:', error);
+                        }
+                    } else if (loanInfo) {
+                        // Store loan info for non-jackpot winners
+                        game.loanDeductions.set(playerId, loanInfo);
+                    }
+
                     const bet = game.getTotalBet(playerId);
                     await recordGameResult(playerId, 'blackjack', bet, winnings, result, {
-                        handsPlayed: game.players.get(playerId).hands.length
+                        handsPlayed: game.players.get(playerId).hands.length,
+                        jackpotWon: jackpotWon
                     });
                 }
             } else {
@@ -138,43 +207,46 @@ async function dealCardsWithDelay(interaction, message, game, userId, delay = 10
                      (results.includes('win') ? 'win' :
                       (results.includes('lose') ? 'lose' : 'push'))) : results;
 
-                // Check for jackpot win on natural blackjack (0.03% chance)
-                let jackpotAmount = 0;
-                if (result === 'blackjack' && game.serverId) {
-                    const { getServerJackpot, resetJackpot } = require('./database/queries');
-                    const jackpotChance = Math.random();
-                    const wonJackpot = jackpotChance < 0.0003; // 0.03% chance
+                // Award progressive jackpot on natural blackjack
+                // Check if player has natural blackjack regardless of result (even if push)
+                let jackpotWon = 0;
+                const player = game.players.get(userId);
+                const hasNaturalBJ = player.hands.some(hand => isNaturalBlackjack(hand));
 
-                    if (wonJackpot) {
+                let loanInfo = null;
+                if (hasNaturalBJ && game.serverId) {
+                    try {
                         const jackpotData = await getServerJackpot(game.serverId);
                         if (jackpotData && jackpotData.currentAmount > 0) {
-                            jackpotAmount = jackpotData.currentAmount;
-                            await resetJackpot(game.serverId, userId, jackpotAmount);
-                            winnings += jackpotAmount;
-                            game.jackpotWon = jackpotAmount; // Store on game object for embed
+                            jackpotWon = jackpotData.currentAmount;
+                            const newMoney = currentMoney + totalBet + winnings + jackpotWon;
+                            loanInfo = await setUserMoney(userId, newMoney);
+                            await resetJackpot(game.serverId, userId, jackpotWon);
+                            // Store jackpot info for embed display
+                            game.jackpotWinner = userId;
+                            game.jackpotAmount = jackpotWon;
                         }
+                    } catch (error) {
+                        console.error('Error awarding blackjack jackpot on initial deal:', error);
                     }
                 }
 
-                const newMoney = currentMoney + totalBet + winnings;
-                await setUserMoney(userId, newMoney);
+                // Only set money if jackpot wasn't awarded (to avoid double setting)
+                if (jackpotWon === 0) {
+                    const newMoney = currentMoney + totalBet + winnings;
+                    loanInfo = await setUserMoney(userId, newMoney);
+                }
+
+                // Store loan deduction info for display
+                if (loanInfo) {
+                    game.loanDeduction = loanInfo;
+                }
 
                 const bet = game.getTotalBet(userId);
                 await recordGameResult(userId, 'blackjack', bet, winnings, result, {
-                    handsPlayed: game.players.get(userId).hands.length
+                    handsPlayed: game.players.get(userId).hands.length,
+                    jackpotWon: jackpotWon
                 });
-
-                // Announce jackpot win in channel
-                if (jackpotAmount > 0) {
-                    try {
-                        const channel = await client.channels.fetch(game.channelId);
-                        await channel.send({
-                            content: `🎉🎉🎉 **JACKPOT ALERT!** 🎉🎉🎉\n<@${userId}> just won the **$${jackpotAmount.toLocaleString()}** Progressive Jackpot with a Natural Blackjack! 💎🃏`
-                        });
-                    } catch (error) {
-                        console.error('Error sending jackpot announcement:', error);
-                    }
-                }
             }
         }
 
@@ -447,6 +519,64 @@ setInterval(async () => {
         }
     }
 }, 6 * 60 * 60 * 1000); // Every 6 hours
+
+// Guild challenge cleanup - runs every 24 hours
+setInterval(async () => {
+    try {
+        const { deleteOldGuildChallenges } = require('./database/queries');
+        const twoWeeksAgo = Date.now() - (14 * 24 * 60 * 60 * 1000);
+        const deletedCount = await deleteOldGuildChallenges(twoWeeksAgo);
+
+        if (deletedCount > 0) {
+            console.log(`Guild challenge cleanup: Deleted ${deletedCount} old challenge records`);
+        }
+    } catch (error) {
+        console.error('Error cleaning up old guild challenges:', error);
+    }
+}, 24 * 60 * 60 * 1000); // Every 24 hours
+
+// Guild shop item expiry cleanup - runs every hour
+setInterval(async () => {
+    try {
+        const { deactivateExpiredItems } = require('./database/queries');
+        const deactivatedCount = await deactivateExpiredItems();
+
+        if (deactivatedCount > 0) {
+            console.log(`Guild shop cleanup: Deactivated ${deactivatedCount} expired items`);
+        }
+    } catch (error) {
+        console.error('Error deactivating expired shop items:', error);
+    }
+}, 60 * 60 * 1000); // Every hour
+
+// Weekly guild rewards - runs every Sunday at midnight
+const scheduleWeeklyRewards = () => {
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0 = Sunday
+    const hour = now.getHours();
+
+    // Check if it's Sunday between 00:00 and 01:00
+    if (dayOfWeek === 0 && hour === 0) {
+        const { distributeWeeklyRewards } = require('./utils/guildRewards');
+
+        distributeWeeklyRewards()
+            .then(result => {
+                if (result.success) {
+                    console.log(`Weekly rewards distributed to ${result.distributions.length} guilds`);
+                } else {
+                    console.error('Failed to distribute weekly rewards:', result.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error distributing weekly rewards:', error);
+            });
+    }
+};
+
+// Check for weekly rewards every hour
+setInterval(scheduleWeeklyRewards, 60 * 60 * 1000);
+// Also check immediately on startup
+setTimeout(scheduleWeeklyRewards, 5000);
 
 // Start the bot
 client.login(token);

@@ -4,6 +4,7 @@ const { createGameEmbed } = require('../utils/embeds');
 const { createButtons } = require('../utils/buttons');
 const { validateBet } = require('../utils/vip');
 const ThreeCardPokerGame = require('../gameLogic/threeCardPokerGame');
+const { recordGameToEvents, getEventNotifications } = require('../utils/eventIntegration');
 
 module.exports = {
     data: {

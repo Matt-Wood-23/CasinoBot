@@ -2,7 +2,9 @@ const { getUserMoney, setUserMoney, recordGameResult } = require('../utils/data'
 const { createGameEmbed, sendPlayerCardsDM } = require('../utils/embeds');
 const { createButtons } = require('../utils/buttons');
 const { applyHolidayWinningsBonus } = require('../utils/holidayEvents');
+const { getServerJackpot, resetJackpot } = require('../database/queries');
 const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { awardGameXP, awardWagerXP } = require('../utils/guildXP');
 const SlotsGame = require('../gameLogic/slotsGame');
 const ThreeCardPokerGame = require('../gameLogic/threeCardPokerGame');
 const BlackjackGame = require('../gameLogic/blackjackGame');
@@ -16,6 +18,25 @@ const BingoGame = require('../gameLogic/bingoGame');
 const PokerTournament = require('../gameLogic/pokerTournament');
 const HiLoGame = require('../gameLogic/hiLoGame');
 const { startNewRoundFromBetting } = require('./modalHandler');
+const { recordGameToEvents, getEventNotifications } = require('../utils/eventIntegration');
+
+// Helper function to check if a hand is a natural blackjack (Ace + 10-value card with exactly 2 cards)
+function isNaturalBlackjack(hand) {
+    if (!hand || !hand.cards || hand.cards.length !== 2) return false;
+
+    const score = hand.cards.reduce((sum, card) => {
+        if (!card) return sum;
+        return sum + card.getBlackjackValue();
+    }, 0);
+
+    if (score !== 21) return false;
+
+    // Check for Ace and 10-value card
+    const hasAce = hand.cards.some(card => card && card.value === 14);
+    const hasTen = hand.cards.some(card => card && card.getBlackjackValue() === 10);
+
+    return hasAce && hasTen;
+}
 
 async function handleButtonInteraction(interaction, activeGames, client, dealCardsWithDelay, rouletteSessions) {
     const { customId, user } = interaction;
@@ -183,6 +204,20 @@ async function handlePokerButtons(interaction, activeGames, customId, userId, cl
         const totalBet = game.anteBet + game.playBet + game.pairPlusBet;
         await recordGameResult(userId, 'three_card_poker', totalBet, adjustedWinnings, adjustedWinnings >= 0 ? 'win' : 'lose');
 
+        // Award guild XP (async, don't wait)
+        awardWagerXP(userId, totalBet, 'Three Card Poker').catch(err =>
+            console.error('Error awarding wager XP:', err)
+        );
+        const won = adjustedWinnings >= 0;
+        awardGameXP(userId, 'Three Card Poker', won).catch(err =>
+            console.error('Error awarding game XP:', err)
+        );
+
+        // Record to active guild events (async, don't wait)
+        recordGameToEvents(userId, 'Three Card Poker', totalBet, adjustedWinnings > 0 ? adjustedWinnings : 0).catch(err =>
+            console.error('Error recording game to events:', err)
+        );
+
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
         const buttons = await createButtons(game, userId, client);
@@ -206,6 +241,19 @@ async function handlePokerButtons(interaction, activeGames, customId, userId, cl
 
         const totalBet = game.anteBet + game.pairPlusBet;
         await recordGameResult(userId, 'three_card_poker', totalBet, adjustedWinnings, 'lose');
+
+        // Award guild XP (async, don't wait)
+        awardWagerXP(userId, totalBet, 'Three Card Poker').catch(err =>
+            console.error('Error awarding wager XP:', err)
+        );
+        awardGameXP(userId, 'Three Card Poker', false).catch(err =>
+            console.error('Error awarding game XP:', err)
+        );
+
+        // Record to active guild events (async, don't wait)
+        recordGameToEvents(userId, 'Three Card Poker', totalBet, adjustedWinnings > 0 ? adjustedWinnings : 0).catch(err =>
+            console.error('Error recording game to events:', err)
+        );
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
@@ -395,6 +443,21 @@ async function handleRouletteButtons(interaction, activeGames, userId, client, r
             betsPlaced: Object.keys(session.bets).length
         });
 
+        // Award guild XP (async, don't wait)
+        awardWagerXP(userId, session.totalBet, 'Roulette').catch(err =>
+            console.error('Error awarding wager XP:', err)
+        );
+        const won = gameResult === 'win';
+        awardGameXP(userId, 'Roulette', won).catch(err =>
+            console.error('Error awarding game XP:', err)
+        );
+
+        // Record to active guild events (async, don't wait)
+        const winningsAmount = gameResult === 'win' ? adjustedTotalWinnings - session.totalBet : 0;
+        recordGameToEvents(userId, 'Roulette', session.totalBet, winningsAmount).catch(err =>
+            console.error('Error recording game to events:', err)
+        );
+
         // Store game for play again functionality
         activeGames.set(`roulette_${userId}`, rouletteGame);
 
@@ -405,6 +468,18 @@ async function handleRouletteButtons(interaction, activeGames, userId, client, r
         await interaction.deferUpdate();
         const embed = await createGameEmbed(rouletteGame, userId, client);
         const buttons = await createButtons(rouletteGame, userId, client);
+        
+        // Add event notifications to embed
+            if (eventResults) {
+                const notifications = getEventNotifications(eventResults);
+                if (notifications.length > 0) {
+                    embed.addFields({
+                        name: '🎉 Guild Event Progress',
+                        value: notifications.join('\n'),
+                        inline: false
+                    });
+                }
+            }
 
         await interaction.editReply({
             embeds: [embed],
@@ -450,6 +525,21 @@ async function handleRouletteButtons(interaction, activeGames, userId, client, r
             winningNumber: newGame.winningNumber,
             betsPlaced: Object.keys(newGame.bets).length
         });
+
+        // Award guild XP (async, don't wait)
+        awardWagerXP(userId, totalBet, 'Roulette').catch(err =>
+            console.error('Error awarding wager XP:', err)
+        );
+        const won = gameResult === 'win';
+        awardGameXP(userId, 'Roulette', won).catch(err =>
+            console.error('Error awarding game XP:', err)
+        );
+
+        // Record to active guild events (async, don't wait)
+        const winningsAmount = gameResult === 'win' ? adjustedTotalWinnings - totalBet : 0;
+        recordGameToEvents(userId, 'Roulette', totalBet, winningsAmount).catch(err =>
+            console.error('Error recording game to events:', err)
+        );
 
         // Update stored game
         activeGames.set(`roulette_${userId}`, newGame);
@@ -640,6 +730,20 @@ async function handleSlotsSpinAgain(interaction, userId, client) {
     const adjustedWinnings = applyHolidayWinningsBonus(slotsGame.winnings);
     await setUserMoney(userId, userMoney - bet + adjustedWinnings);
     await recordGameResult(userId, 'slots', bet, adjustedWinnings, adjustedWinnings > 0 ? 'win' : 'lose');
+
+    // Award guild XP (async, don't wait)
+    awardWagerXP(userId, bet, 'Slots').catch(err =>
+        console.error('Error awarding wager XP:', err)
+    );
+    const won = adjustedWinnings > 0;
+    awardGameXP(userId, 'Slots', won).catch(err =>
+        console.error('Error awarding game XP:', err)
+    );
+
+    // Record to active guild events (async, don't wait)
+    recordGameToEvents(userId, 'Slots', bet, adjustedWinnings > 0 ? adjustedWinnings : 0).catch(err =>
+        console.error('Error recording game to events:', err)
+    );
 
     const embed = await createGameEmbed(slotsGame, userId, client);
     const buttons = await createButtons(slotsGame, userId, client);
@@ -893,13 +997,15 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
             if (!currentHand) {
                 return interaction.followUp({ content: '❌ No active hand found!', ephemeral: true });
             }
+            const originalBet = currentHand.bet; // Save original bet before doubling
             const userMoney = await getUserMoney(user.id);
-            if (userMoney < currentHand.bet) {
+            if (userMoney < originalBet) {
                 return interaction.followUp({ content: '❌ Not enough money to double!', ephemeral: true });
             }
-            actionSuccess = game.double(user.id);
+            actionSuccess = game.double(user.id); // This doubles the bet internally
             if (actionSuccess) {
-                await setUserMoney(user.id, userMoney - currentHand.bet);
+                // Only deduct the ADDITIONAL bet amount, not the full doubled amount
+                await setUserMoney(user.id, userMoney - originalBet);
             } else {
                 return interaction.followUp({ content: '❌ Cannot double this hand!', ephemeral: true });
             }
@@ -930,17 +1036,67 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
                 const totalBet = game.getTotalBet(user.id);
                 const newMoney = currentMoney + totalBet + winnings;
 
-                await setUserMoney(user.id, newMoney);
+                let loanInfo = await setUserMoney(user.id, newMoney);
                 const results = game.getResult(user.id);
                 const result = Array.isArray(results) ?
                     (results.includes('blackjack') ? 'blackjack' :
                         (results.includes('win') ? 'win' :
                             (results.includes('lose') ? 'lose' : 'push'))) : results;
+
+                // Award progressive jackpot on natural blackjack
+                // Check if player has natural blackjack regardless of result (even if push)
+                let jackpotWon = 0;
+                const player = game.players.get(user.id);
+                const hasNaturalBJ = player.hands.some(hand => isNaturalBlackjack(hand));
+
+                if (hasNaturalBJ && game.serverId) {
+                    try {
+                        const jackpotData = await getServerJackpot(game.serverId);
+                        if (jackpotData && jackpotData.currentAmount > 0) {
+                            jackpotWon = jackpotData.currentAmount;
+                            const jackpotLoanInfo = await setUserMoney(user.id, newMoney + jackpotWon);
+                            // Update loan info if jackpot was awarded
+                            if (jackpotLoanInfo) {
+                                loanInfo = jackpotLoanInfo;
+                            }
+                            await resetJackpot(game.serverId, user.id, jackpotWon);
+                            // Store jackpot info for embed display
+                            game.jackpotWinner = user.id;
+                            game.jackpotAmount = jackpotWon;
+                        }
+                    } catch (error) {
+                        console.error('Error awarding blackjack jackpot:', error);
+                    }
+                }
+
+                // Store loan deduction info for display
+                if (loanInfo) {
+                    game.loanDeduction = loanInfo;
+                }
+
                 const bet = game.getTotalBet(user.id);
                 await recordGameResult(user.id, 'blackjack', bet, winnings, result, {
-                    handsPlayed: game.players.get(user.id).hands.length
+                    handsPlayed: game.players.get(user.id).hands.length,
+                    jackpotWon: jackpotWon
                 });
+
+                // Award guild XP (async, don't wait)
+                awardWagerXP(user.id, bet, 'Blackjack').catch(err =>
+                    console.error('Error awarding wager XP:', err)
+                );
+                const won = result === 'win' || result === 'blackjack';
+                awardGameXP(user.id, 'Blackjack', won).catch(err =>
+                    console.error('Error awarding game XP:', err)
+                );
+
+                // Record to active guild events (async, don't wait)
+                recordGameToEvents(user.id, 'Blackjack', bet, winnings > 0 ? winnings : 0).catch(err =>
+                    console.error('Error recording game to events:', err)
+                );
             } else {
+                let jackpotAwarded = false; // Track if jackpot was already awarded in this game
+                game.loanDeductions = game.loanDeductions || new Map(); // Store loan deductions per player
+
                 for (const [playerId] of game.players) {
                     const baseWinnings = game.getWinnings(playerId);
                     const winnings = applyHolidayWinningsBonus(baseWinnings);
@@ -948,16 +1104,62 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
                     const totalBet = game.getTotalBet(playerId);
                     const newMoney = currentMoney + totalBet + winnings;
 
-                    await setUserMoney(playerId, newMoney);
+                    const loanInfo = await setUserMoney(playerId, newMoney);
                     const results = game.getResult(playerId);
                     const result = Array.isArray(results) ?
                         (results.includes('blackjack') ? 'blackjack' :
                             (results.includes('win') ? 'win' :
                                 (results.includes('lose') ? 'lose' : 'push'))) : results;
+
+                    // Award progressive jackpot on natural blackjack (only once per game)
+                    // Check if player has natural blackjack regardless of result (even if push)
+                    let jackpotWon = 0;
+                    const player = game.players.get(playerId);
+                    const hasNaturalBJ = player.hands.some(hand => isNaturalBlackjack(hand));
+
+                    if (hasNaturalBJ && game.serverId && !jackpotAwarded) {
+                        try {
+                            const jackpotData = await getServerJackpot(game.serverId);
+                            if (jackpotData && jackpotData.currentAmount > 0) {
+                                jackpotWon = jackpotData.currentAmount;
+                                const jackpotLoanInfo = await setUserMoney(playerId, newMoney + jackpotWon);
+                                // Update loan info to include jackpot
+                                if (jackpotLoanInfo) {
+                                    game.loanDeductions.set(playerId, jackpotLoanInfo);
+                                }
+                                await resetJackpot(game.serverId, playerId, jackpotWon);
+                                jackpotAwarded = true;
+                                // Store jackpot info for embed display
+                                game.jackpotWinner = playerId;
+                                game.jackpotAmount = jackpotWon;
+                            }
+                        } catch (error) {
+                            console.error('Error awarding blackjack jackpot:', error);
+                        }
+                    } else if (loanInfo) {
+                        // Store loan info for non-jackpot winners
+                        game.loanDeductions.set(playerId, loanInfo);
+                    }
+
                     const bet = game.getTotalBet(playerId);
                     await recordGameResult(playerId, 'blackjack', bet, winnings, result, {
-                        handsPlayed: game.players.get(playerId).hands.length
+                        handsPlayed: game.players.get(playerId).hands.length,
+                        jackpotWon: jackpotWon
                     });
+
+                    // Award guild XP (async, don't wait)
+                    awardWagerXP(playerId, bet, 'Blackjack').catch(err =>
+                        console.error('Error awarding wager XP:', err)
+                    );
+                    const won = result === 'win' || result === 'blackjack';
+                    awardGameXP(playerId, 'Blackjack', won).catch(err =>
+                        console.error('Error awarding game XP:', err)
+                    );
+
+                    // Record to active guild events (async, don't wait)
+                    recordGameToEvents(playerId, 'Blackjack', bet, winnings > 0 ? winnings : 0).catch(err =>
+                        console.error('Error recording game to events:', err)
+                    );
                 }
             }
         }
@@ -1033,20 +1235,71 @@ function startTurnTimer(game, interaction, activeGames, client, dealCardsWithDel
         game.stand(currentPlayerId);
 
         if (game.gameOver) {
+            let jackpotAwarded = false; // Track if jackpot was already awarded in this game
+            game.loanDeductions = game.loanDeductions || new Map(); // Store loan deductions per player
+
             for (const [playerId] of game.players) {
                 const baseWinnings = game.getWinnings(playerId);
                 const winnings = applyHolidayWinningsBonus(baseWinnings);
                 const currentMoney = await getUserMoney(playerId);
-                await setUserMoney(playerId, currentMoney + game.getTotalBet(playerId) + winnings);
+                const totalBet = game.getTotalBet(playerId);
+                const newMoney = currentMoney + totalBet + winnings;
+                const loanInfo = await setUserMoney(playerId, newMoney);
                 const results = game.getResult(playerId);
                 const result = Array.isArray(results) ?
                     (results.includes('blackjack') ? 'blackjack' :
                         (results.includes('win') ? 'win' :
                             (results.includes('lose') ? 'lose' : 'push'))) : results;
+
+                // Award progressive jackpot on natural blackjack (only once per game)
+                // Check if player has natural blackjack regardless of result (even if push)
+                let jackpotWon = 0;
+                const player = game.players.get(playerId);
+                const hasNaturalBJ = player.hands.some(hand => isNaturalBlackjack(hand));
+
+                if (hasNaturalBJ && game.serverId && !jackpotAwarded) {
+                    try {
+                        const jackpotData = await getServerJackpot(game.serverId);
+                        if (jackpotData && jackpotData.currentAmount > 0) {
+                            jackpotWon = jackpotData.currentAmount;
+                            const jackpotLoanInfo = await setUserMoney(playerId, newMoney + jackpotWon);
+                            // Update loan info to include jackpot
+                            if (jackpotLoanInfo) {
+                                game.loanDeductions.set(playerId, jackpotLoanInfo);
+                            }
+                            await resetJackpot(game.serverId, playerId, jackpotWon);
+                            jackpotAwarded = true;
+                            // Store jackpot info for embed display
+                            game.jackpotWinner = playerId;
+                            game.jackpotAmount = jackpotWon;
+                        }
+                    } catch (error) {
+                        console.error('Error awarding blackjack jackpot:', error);
+                    }
+                } else if (loanInfo) {
+                    // Store loan info for non-jackpot winners
+                    game.loanDeductions.set(playerId, loanInfo);
+                }
+
                 const bet = game.getTotalBet(playerId);
                 await recordGameResult(playerId, 'blackjack', bet, winnings, result, {
-                    handsPlayed: game.players.get(playerId).hands.length
+                    handsPlayed: game.players.get(playerId).hands.length,
+                    jackpotWon: jackpotWon
                 });
+
+                // Award guild XP (async, don't wait)
+                awardWagerXP(playerId, bet, 'Blackjack').catch(err =>
+                    console.error('Error awarding wager XP:', err)
+                );
+                const won = result === 'win' || result === 'blackjack';
+                awardGameXP(playerId, 'Blackjack', won).catch(err =>
+                    console.error('Error awarding game XP:', err)
+                );
+
+                // Record to active guild events (async, don't wait)
+                recordGameToEvents(playerId, 'Blackjack', bet, winnings > 0 ? winnings : 0).catch(err =>
+                    console.error('Error recording game to events:', err)
+                );
             }
         } else {
             game.checkAllPlayersDone();
@@ -1184,6 +1437,20 @@ async function handleCrapsButtons(interaction, activeGames, userId, client) {
                 point: game.point,
                 rolls: game.rollHistory.length
             });
+
+            // Award guild XP (async, don't wait)
+            awardWagerXP(userId, totalBet, 'Craps').catch(err =>
+                console.error('Error awarding wager XP:', err)
+            );
+            const won = gameResult === 'win';
+            awardGameXP(userId, 'Craps', won).catch(err =>
+                console.error('Error awarding game XP:', err)
+            );
+
+            // Record to active guild events (async, don't wait)
+            recordGameToEvents(userId, 'Craps', totalBet, adjustedProfit > 0 ? adjustedProfit : 0).catch(err =>
+                console.error('Error recording game to events:', err)
+            );
         }
 
         await interaction.deferUpdate();
@@ -1246,6 +1513,19 @@ async function handleWarButtons(interaction, activeGames, userId, client) {
 
         await recordGameResult(userId, 'war', game.bet, adjustedProfit, 'surrender');
 
+        // Award guild XP (async, don't wait)
+        awardWagerXP(userId, game.bet, 'War').catch(err =>
+            console.error('Error awarding wager XP:', err)
+        );
+        awardGameXP(userId, 'War', false).catch(err =>
+            console.error('Error awarding game XP:', err)
+        );
+
+        // Record to active guild events (async, don't wait)
+        recordGameToEvents(userId, 'War', game.bet, 0).catch(err =>
+            console.error('Error recording game to events:', err)
+        );
+
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
         const buttons = await createButtons(game, userId, client);
@@ -1283,6 +1563,20 @@ async function handleWarButtons(interaction, activeGames, userId, client) {
 
         const gameResult = game.result.includes('win') ? 'win' : 'lose';
         await recordGameResult(userId, 'war', game.getTotalBet(), adjustedProfit, gameResult);
+
+        // Award guild XP (async, don't wait)
+        awardWagerXP(userId, game.getTotalBet(), 'War').catch(err =>
+            console.error('Error awarding wager XP:', err)
+        );
+        const won = gameResult === 'win';
+        awardGameXP(userId, 'War', won).catch(err =>
+            console.error('Error awarding game XP:', err)
+        );
+
+        // Record to active guild events (async, don't wait)
+        recordGameToEvents(userId, 'War', game.getTotalBet(), adjustedProfit > 0 ? adjustedProfit : 0).catch(err =>
+            console.error('Error recording game to events:', err)
+        );
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);
@@ -1367,6 +1661,19 @@ async function handleCoinFlipButtons(interaction, activeGames, userId, client) {
             result: newGame.result
         });
 
+        // Award guild XP (async, don't wait)
+        awardWagerXP(userId, bet, 'Coinflip').catch(err =>
+            console.error('Error awarding wager XP:', err)
+        );
+        awardGameXP(userId, 'Coinflip', newGame.won).catch(err =>
+            console.error('Error awarding game XP:', err)
+        );
+
+        // Record to active guild events (async, don't wait)
+        recordGameToEvents(userId, 'Coinflip', bet, adjustedProfit > 0 ? adjustedProfit : 0).catch(err =>
+            console.error('Error recording game to events:', err)
+        );
+
         // Update stored game
         activeGames.set(`coinflip_${userId}`, newGame);
 
@@ -1417,6 +1724,19 @@ async function handleCoinFlipButtons(interaction, activeGames, userId, client) {
         choice: game.choice,
         result: game.result
     });
+
+    // Award guild XP (async, don't wait)
+    awardWagerXP(userId, bet, 'Coinflip').catch(err =>
+        console.error('Error awarding wager XP:', err)
+    );
+    awardGameXP(userId, 'Coinflip', game.won).catch(err =>
+        console.error('Error awarding game XP:', err)
+    );
+
+    // Record to active guild events (async, don't wait)
+    recordGameToEvents(userId, 'Coinflip', bet, adjustedProfit > 0 ? adjustedProfit : 0).catch(err =>
+        console.error('Error recording game to events:', err)
+    );
 
     // Store game for play again
     activeGames.set(`coinflip_${userId}`, game);
@@ -1484,6 +1804,20 @@ async function handleHorseRaceButtons(interaction, activeGames, userId, client) 
             winnerName: newGame.winner.name
         });
 
+        // Award guild XP (async, don't wait)
+        awardWagerXP(userId, bet, 'Horse Race').catch(err =>
+            console.error('Error awarding wager XP:', err)
+        );
+        const won = adjustedProfit > 0;
+        awardGameXP(userId, 'Horse Race', won).catch(err =>
+            console.error('Error awarding game XP:', err)
+        );
+
+        // Record to active guild events (async, don't wait)
+        recordGameToEvents(userId, 'Horse Race', bet, adjustedProfit > 0 ? adjustedProfit : 0).catch(err =>
+            console.error('Error recording game to events:', err)
+        );
+
         // Update stored game
         activeGames.set(`race_${userId}`, newGame);
 
@@ -1550,6 +1884,20 @@ async function handleHorseRaceButtons(interaction, activeGames, userId, client) 
         horseName: game.getBetHorse().name,
         winnerName: game.winner.name
     });
+
+    // Award guild XP (async, don't wait)
+    awardWagerXP(userId, bet, 'Horse Race').catch(err =>
+        console.error('Error awarding wager XP:', err)
+    );
+    const won = adjustedProfit > 0;
+    awardGameXP(userId, 'Horse Race', won).catch(err =>
+        console.error('Error awarding game XP:', err)
+    );
+
+    // Record to active guild events (async, don't wait)
+    recordGameToEvents(userId, 'Horse Race', bet, adjustedProfit > 0 ? adjustedProfit : 0).catch(err =>
+        console.error('Error recording game to events:', err)
+    );
 
     // Store game for race again
     activeGames.set(`race_${userId}`, game);
@@ -1629,6 +1977,20 @@ async function handleCrashButtons(interaction, activeGames, userId, client) {
                 crashMultiplier: game.crashMultiplier,
                 cashedOutAt: game.result === 'win' ? game.currentMultiplier : null
             });
+
+            // Award guild XP (async, don't wait)
+            awardWagerXP(userId, game.betAmount, 'Crash').catch(err =>
+                console.error('Error awarding wager XP:', err)
+            );
+            const won = game.result === 'win';
+            awardGameXP(userId, 'Crash', won).catch(err =>
+                console.error('Error awarding game XP:', err)
+            );
+
+            // Record to active guild events (async, don't wait)
+            recordGameToEvents(userId, 'Crash', game.betAmount, adjustedProfit > 0 ? adjustedProfit : 0).catch(err =>
+                console.error('Error recording game to events:', err)
+            );
         }
     } else if (interaction.customId === 'crash_cashout') {
         if (!game.canContinue()) {
@@ -1652,6 +2014,19 @@ async function handleCrashButtons(interaction, activeGames, userId, client) {
             crashMultiplier: game.crashMultiplier,
             cashedOutAt: game.currentMultiplier
         });
+
+        // Award guild XP (async, don't wait)
+        awardWagerXP(userId, game.betAmount, 'Crash').catch(err =>
+            console.error('Error awarding wager XP:', err)
+        );
+        awardGameXP(userId, 'Crash', true).catch(err =>
+            console.error('Error awarding game XP:', err)
+        );
+
+        // Record to active guild events (async, don't wait)
+        recordGameToEvents(userId, 'Crash', game.betAmount, adjustedProfit > 0 ? adjustedProfit : 0).catch(err =>
+            console.error('Error recording game to events:', err)
+        );
 
         // Update the display
         await interaction.deferUpdate();
@@ -1853,6 +2228,20 @@ async function handleBingoButtons(interaction, activeGames, userId, client) {
                     place: prize.place,
                     prizePool: game.prizePool
                 });
+
+                // Award guild XP (async, don't wait)
+                awardWagerXP(prize.userId, game.entryFee, 'Bingo').catch(err =>
+                    console.error('Error awarding wager XP:', err)
+                );
+                awardGameXP(prize.userId, 'Bingo', true).catch(err =>
+                    console.error('Error awarding game XP:', err)
+                );
+
+                // Record to active guild events (async, don't wait)
+                const winningsAmount = prize.prize - game.entryFee;
+                recordGameToEvents(prize.userId, 'Bingo', game.entryFee, winningsAmount > 0 ? winningsAmount : 0).catch(err =>
+                    console.error('Error recording game to events:', err)
+                );
             }
 
             // Record losses for non-winners
@@ -1862,6 +2251,19 @@ async function handleBingoButtons(interaction, activeGames, userId, client) {
                     await recordGameResult(playerId, 'bingo', game.entryFee, -game.entryFee, 'lose', {
                         prizePool: game.prizePool
                     });
+
+                    // Award guild XP (async, don't wait)
+                    awardWagerXP(playerId, game.entryFee, 'Bingo').catch(err =>
+                        console.error('Error awarding wager XP:', err)
+                    );
+                    awardGameXP(playerId, 'Bingo', false).catch(err =>
+                        console.error('Error awarding game XP:', err)
+                    );
+
+                    // Record to active guild events (async, don't wait)
+                    recordGameToEvents(playerId, 'Bingo', game.entryFee, 0).catch(err =>
+                        console.error('Error recording game to events:', err)
+                    );
                 }
             }
         }
@@ -2039,6 +2441,20 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
                     place: prize.place,
                     prizePool: tournament.prizePool
                 });
+
+                // Award guild XP (async, don't wait)
+                awardWagerXP(prize.userId, tournament.buyIn, 'Poker Tournament').catch(err =>
+                    console.error('Error awarding wager XP:', err)
+                );
+                awardGameXP(prize.userId, 'Poker Tournament', true).catch(err =>
+                    console.error('Error awarding game XP:', err)
+                );
+
+                // Record to active guild events (async, don't wait)
+                const winningsAmount = prize.prize - tournament.buyIn;
+                recordGameToEvents(prize.userId, 'Poker Tournament', tournament.buyIn, winningsAmount > 0 ? winningsAmount : 0).catch(err =>
+                    console.error('Error recording game to events:', err)
+                );
             }
 
             // Record losses for non-winners
@@ -2048,6 +2464,19 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
                     await recordGameResult(playerId, 'poker_tournament', tournament.buyIn, -tournament.buyIn, 'lose', {
                         prizePool: tournament.prizePool
                     });
+
+                    // Award guild XP (async, don't wait)
+                    awardWagerXP(playerId, tournament.buyIn, 'Poker Tournament').catch(err =>
+                        console.error('Error awarding wager XP:', err)
+                    );
+                    awardGameXP(playerId, 'Poker Tournament', false).catch(err =>
+                        console.error('Error awarding game XP:', err)
+                    );
+
+                    // Record to active guild events (async, don't wait)
+                    recordGameToEvents(playerId, 'Poker Tournament', tournament.buyIn, 0).catch(err =>
+                        console.error('Error recording game to events:', err)
+                    );
                 }
             }
         }
@@ -2109,6 +2538,20 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
                     place: prize.place,
                     prizePool: tournament.prizePool
                 });
+
+                // Award guild XP (async, don't wait)
+                awardWagerXP(prize.userId, tournament.buyIn, 'Poker Tournament').catch(err =>
+                    console.error('Error awarding wager XP:', err)
+                );
+                awardGameXP(prize.userId, 'Poker Tournament', true).catch(err =>
+                    console.error('Error awarding game XP:', err)
+                );
+
+                // Record to active guild events (async, don't wait)
+                const winningsAmount = prize.prize - tournament.buyIn;
+                recordGameToEvents(prize.userId, 'Poker Tournament', tournament.buyIn, winningsAmount > 0 ? winningsAmount : 0).catch(err =>
+                    console.error('Error recording game to events:', err)
+                );
             }
 
             // Record losses for non-winners
@@ -2118,6 +2561,14 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
                     await recordGameResult(playerId, 'poker_tournament', tournament.buyIn, -tournament.buyIn, 'lose', {
                         prizePool: tournament.prizePool
                     });
+
+                    // Award guild XP (async, don't wait)
+                    awardWagerXP(playerId, tournament.buyIn, 'Poker Tournament').catch(err =>
+                        console.error('Error awarding wager XP:', err)
+                    );
+                    awardGameXP(playerId, 'Poker Tournament', false).catch(err =>
+                        console.error('Error awarding game XP:', err)
+                    );
                 }
             }
         }
@@ -2255,6 +2706,21 @@ async function handleHiLoButtons(interaction, activeGames, userId, client) {
                 streak: game.streak,
                 multiplier: game.multiplier
             });
+
+            // Award guild XP (async, don't wait)
+            awardWagerXP(userId, game.initialBet, 'HiLo').catch(err =>
+                console.error('Error awarding wager XP:', err)
+            );
+            const won = game.result === 'win';
+            awardGameXP(userId, 'HiLo', won).catch(err =>
+                console.error('Error awarding game XP:', err)
+            );
+
+            // Record to active guild events (async, don't wait)
+            const winningsAmount = game.currentWinnings - game.initialBet;
+            recordGameToEvents(userId, 'HiLo', game.initialBet, winningsAmount > 0 ? winningsAmount : 0).catch(err =>
+                console.error('Error recording game to events:', err)
+            );
         }
 
     } else if (interaction.customId === 'hilo_lower') {
@@ -2279,6 +2745,21 @@ async function handleHiLoButtons(interaction, activeGames, userId, client) {
                 streak: game.streak,
                 multiplier: game.multiplier
             });
+
+            // Award guild XP (async, don't wait)
+            awardWagerXP(userId, game.initialBet, 'HiLo').catch(err =>
+                console.error('Error awarding wager XP:', err)
+            );
+            const won = game.result === 'win';
+            awardGameXP(userId, 'HiLo', won).catch(err =>
+                console.error('Error awarding game XP:', err)
+            );
+
+            // Record to active guild events (async, don't wait)
+            const winningsAmount = game.currentWinnings - game.initialBet;
+            recordGameToEvents(userId, 'HiLo', game.initialBet, winningsAmount > 0 ? winningsAmount : 0).catch(err =>
+                console.error('Error recording game to events:', err)
+            );
         }
 
     } else if (interaction.customId === 'hilo_cashout') {
@@ -2296,6 +2777,20 @@ async function handleHiLoButtons(interaction, activeGames, userId, client) {
             streak: game.streak,
             multiplier: game.multiplier
         });
+
+        // Award guild XP (async, don't wait)
+        awardWagerXP(userId, game.initialBet, 'HiLo').catch(err =>
+            console.error('Error awarding wager XP:', err)
+        );
+        awardGameXP(userId, 'HiLo', true).catch(err =>
+            console.error('Error awarding game XP:', err)
+        );
+
+        // Record to active guild events (async, don't wait)
+        const winningsAmount = game.currentWinnings - game.initialBet;
+        recordGameToEvents(userId, 'HiLo', game.initialBet, winningsAmount > 0 ? winningsAmount : 0).catch(err =>
+            console.error('Error recording game to events:', err)
+        );
 
         await interaction.deferUpdate();
         const embed = await createGameEmbed(game, userId, client);

@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { getUserMoney } = require('../utils/data');
 const { isGamblingBanned, getGamblingBanTime } = require('../database/queries');
+const { recordGameToEvents, getEventNotifications } = require('../utils/eventIntegration');
 
 module.exports = {
     data: {

@@ -7,6 +7,7 @@ const {
     getVIPTierById
 } = require('../utils/vip');
 const { getUserMoney } = require('../utils/data');
+const { recordGameToEvents, getEventNotifications } = require('../utils/eventIntegration');
 
 module.exports = {
     data: {

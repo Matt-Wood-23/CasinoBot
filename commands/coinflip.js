@@ -2,6 +2,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const { getUserMoney } = require('../utils/data');
 const { isGamblingBanned, getGamblingBanTime } = require('../database/queries');
 const { validateBet } = require('../utils/vip');
+const { recordGameToEvents, getEventNotifications } = require('../utils/eventIntegration');
 
 module.exports = {
     data: {

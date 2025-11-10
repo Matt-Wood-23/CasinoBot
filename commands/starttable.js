@@ -3,6 +3,7 @@ const { isGamblingBanned, getGamblingBanTime } = require('../database/queries');
 const { createGameEmbed } = require('../utils/embeds');
 const { createJoinTableButton } = require('../utils/buttons');
 const BlackjackGame = require('../gameLogic/blackjackGame');
+const { recordGameToEvents, getEventNotifications } = require('../utils/eventIntegration');
 
 module.exports = {
     data: {

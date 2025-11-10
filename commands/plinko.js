@@ -3,6 +3,8 @@ const { getUserMoney, setUserMoney, recordGameResult } = require('../utils/data'
 const { isGamblingBanned, getGamblingBanTime } = require('../database/queries');
 const { validateBet } = require('../utils/vip');
 const PlinkoGame = require('../gameLogic/plinkoGame');
+const { awardGameXP, awardWagerXP } = require('../utils/guildXP');
+const { recordGameToEvents, getEventNotifications } = require('../utils/eventIntegration');
 
 module.exports = {
     data: {
@@ -107,6 +109,15 @@ module.exports = {
                 bet,
                 game.winnings,
                 game.winnings >= bet ? 'win' : 'lose'
+            );
+
+            // Award guild XP (async, don't wait)
+            awardWagerXP(userId, bet, 'Plinko').catch(err =>
+                console.error('Error awarding wager XP:', err)
+            );
+            const won = game.winnings >= bet;
+            awardGameXP(userId, 'Plinko', won).catch(err =>
+                console.error('Error awarding game XP:', err)
             );
 
             // Create final embed

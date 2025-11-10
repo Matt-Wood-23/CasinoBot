@@ -7,7 +7,7 @@ const {
 } = require('../utils/embeds');
 const { getUserMoney, getAllUserData } = require('../utils/data');
 const { getAllUserHeistStats } = require('../database/queries');
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, MessageFlags } = require('discord.js');
 
 module.exports = {
     data: {
@@ -146,7 +146,7 @@ module.exports = {
 
             const errorMessage = {
                 content: '❌ An error occurred while retrieving statistics. Please try again.',
-                ephemeral: true
+                flags: [MessageFlags.Ephemeral]
             };
 
             if (interaction.replied || interaction.deferred) {
