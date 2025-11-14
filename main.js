@@ -7,6 +7,7 @@ const path = require('path');
 const { loadUserData } = require('./database/queries');
 const { createGameEmbed } = require('./utils/embeds');
 const { createButtons } = require('./utils/buttons');
+const { isNaturalBlackjack } = require('./utils/cardHelpers');
 
 // Import game classes
 const BlackjackGame = require('./gameLogic/blackjackGame');
@@ -54,24 +55,7 @@ for (const file of commandFiles) {
     }
 }
 
-// Helper functions
-// Check if a hand is a natural blackjack (Ace + 10-value card with exactly 2 cards)
-function isNaturalBlackjack(hand) {
-    if (!hand || !hand.cards || hand.cards.length !== 2) return false;
-
-    const score = hand.cards.reduce((sum, card) => {
-        if (!card) return sum;
-        return sum + card.getBlackjackValue();
-    }, 0);
-
-    if (score !== 21) return false;
-
-    // Check for Ace and 10-value card
-    const hasAce = hand.cards.some(card => card && card.value === 14);
-    const hasTen = hand.cards.some(card => card && card.getBlackjackValue() === 10);
-
-    return hasAce && hasTen;
-}
+// Helper functions moved to utils/cardHelpers.js
 
 async function dealCardsWithDelay(interaction, message, game, userId, delay = 1000) {
     const { getUserMoney, setUserMoney, recordGameResult, getServerJackpot, resetJackpot } = require('./database/queries');

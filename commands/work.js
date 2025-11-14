@@ -5,6 +5,7 @@ const { getUserGuild } = require('../utils/guilds');
 const { getGuildWithLevel } = require('../database/queries');
 const { getPerkValue } = require('../utils/guildLevels');
 const { awardWorkXP } = require('../utils/guildXP');
+const { recordTransaction, TransactionTypes } = require('../utils/transactions');
 
 // Work cooldown: 4 hours
 const WORK_COOLDOWN = 4 * 60 * 60 * 1000;
@@ -130,7 +131,26 @@ module.exports = {
 
         // Give money
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + afterLoan);
+        const newBalance = currentMoney + afterLoan;
+        await setUserMoney(userId, newBalance);
+
+        // Record transaction
+        await recordTransaction({
+            userId: userId,
+            type: TransactionTypes.WORK,
+            amount: afterLoan,
+            balanceAfter: newBalance,
+            description: `${job.name} - earned $${earnings.toLocaleString()}${loanDeduction > 0 ? ` (loan payment: $${loanDeduction.toLocaleString()})` : ''}`,
+            metadata: {
+                jobName: job.name,
+                baseEarnings: earnings,
+                loanDeduction: loanDeduction,
+                netEarnings: afterLoan,
+                vipBonus: vipBonusAmount,
+                guildBonus: guildBonusAmount,
+                workBoost: workBoostAmount
+            }
+        });
 
         // Check work achievements and update challenges
         const { checkWorkAchievements } = require('../utils/achievements');
@@ -165,7 +185,7 @@ module.exports = {
         } else {
             embed.addFields(
                 { name: '💰 Earned', value: `${earnings.toLocaleString()}`, inline: true },
-                { name: '💵 New Balance', value: `${(currentMoney + afterLoan).toLocaleString()}`, inline: true }
+                { name: '💵 New Balance', value: `${newBalance.toLocaleString()}`, inline: true }
             );
         }
 

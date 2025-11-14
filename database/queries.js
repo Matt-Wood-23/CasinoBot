@@ -360,7 +360,7 @@ async function recordGameResult(userId, gameType, bet, winnings, result, details
 
         // Store notifications in memory
         if (!pendingNotifications.has(userId)) {
-            pendingNotifications.set(userId, { achievements: [], challenges: [] });
+            pendingNotifications.set(userId, { achievements: [], challenges: [], messages: [] });
         }
 
         const notifications = pendingNotifications.get(userId);
@@ -551,13 +551,26 @@ function cleanUserData() {
 // Get and clear pending notifications
 function getPendingNotifications(userId) {
     if (!pendingNotifications.has(userId)) {
-        return { achievements: [], challenges: [] };
+        return { achievements: [], challenges: [], messages: [] };
     }
 
     const notifications = pendingNotifications.get(userId);
     pendingNotifications.delete(userId);
 
     return notifications;
+}
+
+// Store a boost notification message
+function storeBoostNotification(userId, notification) {
+    if (!pendingNotifications.has(userId)) {
+        pendingNotifications.set(userId, { achievements: [], challenges: [], messages: [] });
+    }
+
+    const notifications = pendingNotifications.get(userId);
+    if (!notifications.messages) {
+        notifications.messages = [];
+    }
+    notifications.messages.push(notification);
 }
 
 // ============ INVENTORY & SHOP FUNCTIONS ============
@@ -4162,6 +4175,7 @@ module.exports = {
     updateUserGifts,
     cleanUserData,
     getPendingNotifications,
+    storeBoostNotification,
     // Inventory & Shop
     addToInventory,
     removeFromInventory,

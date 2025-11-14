@@ -5,6 +5,7 @@ const { getUserGuild } = require('../utils/guilds');
 const { getGuildWithLevel } = require('../database/queries');
 const { getPerkValue } = require('../utils/guildLevels');
 const { awardDailyXP } = require('../utils/guildXP');
+const { recordTransaction, TransactionTypes } = require('../utils/transactions');
 
 module.exports = {
     data: {
@@ -107,8 +108,28 @@ module.exports = {
             }
 
             // Update user money
-            await setUserMoney(interaction.user.id, userMoney + dailyAmount);
+            const newBalance = userMoney + dailyAmount;
+            await setUserMoney(interaction.user.id, newBalance);
             await setLastDaily(interaction.user.id);
+
+            // Record transaction
+            await recordTransaction({
+                userId: interaction.user.id,
+                type: TransactionTypes.DAILY,
+                amount: dailyAmount,
+                balanceAfter: newBalance,
+                description: `Daily bonus claimed - ${streakData.currentStreak} day streak${streakMultiplier > 1 ? ` (x${streakMultiplier.toFixed(1)} multiplier)` : ''}`,
+                metadata: {
+                    baseDailyAmount: baseDailyAmount,
+                    streakMultiplier: streakMultiplier,
+                    currentStreak: streakData.currentStreak,
+                    vipBonus: vipBonusAmount,
+                    guildBonus: guildBonusAmount,
+                    holidayBonus: holidayBonusAmount,
+                    doubleBoostUsed: doubleBoostUsed,
+                    totalAmount: dailyAmount
+                }
+            });
 
             // Award guild XP for daily claim (async, don't wait)
             awardDailyXP(interaction.user.id).catch(err =>
@@ -152,7 +173,7 @@ module.exports = {
             }
 
             // New balance
-            message += `\n\n💵 New Balance: **$${(userMoney + dailyAmount).toLocaleString()}**`;
+            message += `\n\n💵 New Balance: **$${newBalance.toLocaleString()}**`;
 
             await interaction.reply(message);
         } catch (error) {

@@ -3,6 +3,7 @@ const { createGameEmbed, sendPlayerCardsDM } = require('../utils/embeds');
 const { createButtons } = require('../utils/buttons');
 const { applyHolidayWinningsBonus } = require('../utils/holidayEvents');
 const { getServerJackpot, resetJackpot } = require('../database/queries');
+const { isNaturalBlackjack } = require('../utils/cardHelpers');
 const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { awardGameXP, awardWagerXP } = require('../utils/guildXP');
 const SlotsGame = require('../gameLogic/slotsGame');
@@ -20,23 +21,7 @@ const HiLoGame = require('../gameLogic/hiLoGame');
 const { startNewRoundFromBetting } = require('./modalHandler');
 const { recordGameToEvents, getEventNotifications } = require('../utils/eventIntegration');
 
-// Helper function to check if a hand is a natural blackjack (Ace + 10-value card with exactly 2 cards)
-function isNaturalBlackjack(hand) {
-    if (!hand || !hand.cards || hand.cards.length !== 2) return false;
-
-    const score = hand.cards.reduce((sum, card) => {
-        if (!card) return sum;
-        return sum + card.getBlackjackValue();
-    }, 0);
-
-    if (score !== 21) return false;
-
-    // Check for Ace and 10-value card
-    const hasAce = hand.cards.some(card => card && card.value === 14);
-    const hasTen = hand.cards.some(card => card && card.getBlackjackValue() === 10);
-
-    return hasAce && hasTen;
-}
+// Helper functions moved to utils/cardHelpers.js
 
 async function handleButtonInteraction(interaction, activeGames, client, dealCardsWithDelay, rouletteSessions) {
     const { customId, user } = interaction;
