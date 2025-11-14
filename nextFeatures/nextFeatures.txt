@@ -1,0 +1,148 @@
+🎮 NEW GAMES
+High-Priority (Popular & Engaging):
+Texas Hold'em Poker Tournaments - Multi-table tournaments with buy-ins and prize pools (you have poker tournament but full Texas Hold'em would be great)
+Keno - Number selection lottery game (quick, casual)
+Baccarat - Simple, elegant, popular in casinos
+Video Poker (Jacks or Better, Deuces Wild)
+Wheel of Fortune / Big Six Wheel - Visual spinning wheel with segments
+Scratch Cards - Quick instant-win with different tiers
+Player vs Player Games: 7. Dice Duel - Challenge another player to a dice-off 8. Coin Flip Duel - PvP betting on coin flips 9. Hi-Lo Battle - Compete against another player for streaks Unique/Creative: 10. Minesweeper Gambling - Click tiles, avoid mines, cash out anytime 11. Tower Climb - Choose left/right path, climb higher for bigger multipliers 12. Limbo - Predict multiplier thresholds (popular in crypto casinos)
+🏆 COMPETITION & SOCIAL FEATURES
+Player vs Player Duels System
+Challenge users to any game with custom stakes
+Duel leaderboards and records
+Special duel achievements
+Guild Tournaments
+Weekly/monthly guild competitions
+Guild vs Guild wars with territory control
+Guild level system with unlockable perks
+Seasonal Tournaments
+Bracket-style elimination tournaments
+Entry fee pools into prize pot
+Tournament history and champion tracking
+Spectator Mode
+Watch high-stakes games in real-time
+Tournament viewing
+Betting on other players' games
+Referral/Affiliate System
+Invite friends for bonuses
+Percentage of referral earnings
+Tiered referral rewards
+📈 PROGRESSION ENHANCEMENTS
+Prestige System
+Reset balance/progress for permanent multipliers
+Prestige-only cosmetics and titles
+Prestige leaderboards
+Level/XP System
+Gain XP from playing games (separate from money)
+Level unlocks: new games, higher bet limits, exclusive items
+Level-based matchmaking for tournaments
+Title & Badge System
+Earn titles from achievements ("High Roller", "Loan Shark", etc.)
+Display titles on profiles
+Rare/limited titles for events
+Perk/Skill Tree System
+Spend skill points on permanent bonuses
+Different paths: Gambler, Worker, Investor, Heister
+Respec options for flexibility
+Battle Pass / Season System
+Free and premium tracks
+Seasonal rewards and exclusive items
+Time-limited progression incentive
+💰 ECONOMY IMPROVEMENTS
+Stock Market Mini-Game
+Buy/sell fictional stocks
+Daily price fluctuations
+Dividend payments
+Investment Portfolio System
+Bonds (safe, low return)
+Stocks (risky, high return)
+Mutual funds (diversified)
+Bank Interest System
+Earn passive interest on banked money (not gambling balance)
+Higher tiers for larger deposits
+Risk-free growth alternative
+Insurance Products
+Bet insurance (already have consumable, make it recurring)
+Balance insurance (pay premium, protect from bankruptcy)
+Loan insurance (protection from high interest)
+Business Ventures (beyond properties)
+Start a casino, restaurant, club
+Hire employees, manage costs
+Deeper tycoon-style gameplay
+Currency Exchange/Premium Currency
+Optional: Tokens (premium) vs Cash (regular)
+Premium currency for exclusive items
+Monetization opportunity if desired
+🎯 ENGAGEMENT FEATURES
+Progressive Jackpots
+Server-wide jackpot that grows with each bet
+Random chance to win on any game
+Massive payout excitement
+Mega Multiplier Events
+Random "happy hours" with 2x-5x payouts
+Announced in advance or surprise
+Creates urgency and activity spikes
+Time-Limited Events
+Holiday themed events (Christmas, Halloween)
+Special event-only games
+Limited cosmetics and rewards
+Streak Bonuses (enhancement)
+Daily login streaks for increasing rewards
+Game win streak multipliers
+Streak milestone achievements
+Community Goals
+Server-wide challenges (play 10,000 games)
+Everyone earns rewards when completed
+Fosters community engagement
+Random Events
+Sudden robberies (lose money)
+Treasure finds (gain money)
+Mystery benefactor bonuses
+Adds unpredictability
+🎨 QUALITY OF LIFE IMPROVEMENTS
+Better Statistics Dashboard
+Visual graphs (win rate over time)
+Per-game profit/loss analysis
+ROI calculations
+Compare with server averages
+Auto-Play Features
+Auto-bet same amount on repeat games
+Auto-collect daily/property income
+Quick-play buttons for favorite games
+Betting Presets
+Save favorite bet amounts
+Quick-select buttons (10%, 25%, 50%, All-in)
+Smart betting based on balance
+Enhanced Notifications
+Customizable DM notifications
+Discord server announcements for big wins
+Opt-in for event reminders
+Game Strategy Tips
+Built-in odds calculator
+House edge display for each game
+Optimal play suggestions (blackjack basic strategy)
+Tutorial System
+First-time player guide
+Interactive tutorials for each game
+Practice mode with fake money
+Profile Customization
+Custom profile cards with stats
+Choose display stats
+Background colors/themes (purchasable)
+🃏 COLLECTION SYSTEMS
+Card Collection System
+Earn cards from playing games
+Different rarities (common to legendary)
+Complete sets for bonuses
+Trade cards with players
+Pet/Companion System
+Earn or buy pets
+Pets provide small passive bonuses
+Level up pets with use
+Cosmetic and functional
+Casino Customization
+Personalize your "casino space"
+Buy decorations with winnings
+Show off to other players
+Functional items (better tables = better odds)

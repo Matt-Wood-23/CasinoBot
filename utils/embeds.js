@@ -362,6 +362,20 @@ async function createMultiPlayerGameEmbed(game, userId, client) {
                 resultText += `Hand ${i + 1}: ${handResult}\n`;
             }
             resultText += `**Total: ${totalWinnings >= 0 ? '+' : ''}${totalWinnings}**\n`;
+
+            // Add progressive jackpot info if this player won it
+            if (game.jackpotWinner === playerId && game.jackpotAmount > 0) {
+                resultText += `\n💎🎰 **PROGRESSIVE JACKPOT WON!** 💎🎰\n+${game.jackpotAmount.toLocaleString()} bonus!\n`;
+            }
+
+            // Add loan deduction info if applicable (for multiplayer games)
+            if (game.loanDeductions && game.loanDeductions.has(playerId)) {
+                const loanInfo = game.loanDeductions.get(playerId);
+                if (loanInfo.loanDeducted > 0) {
+                    resultText += `\n🏦 **Loan Payment:** -${loanInfo.loanDeducted.toLocaleString()} (25%)\n`;
+                    resultText += `**Actual Received:** ${loanInfo.actualReceived.toLocaleString()}\n`;
+                }
+            }
         }
 
         embed.addFields({ name: '📊 Results', value: resultText, inline: false });
@@ -683,6 +697,10 @@ async function createSinglePlayerGameEmbed(game, userId) {
                 switch (result) {
                     case 'blackjack':
                         resultText = `🎉 BLACKJACK! You won ${totalWinnings.toLocaleString()}!`;
+                        // Add progressive jackpot info if won
+                        if (game.jackpotWinner === userId && game.jackpotAmount > 0) {
+                            resultText += `\n\n💎🎰 PROGRESSIVE JACKPOT WON! 💎🎰\n+${game.jackpotAmount.toLocaleString()} bonus!`;
+                        }
                         break;
                     case 'win':
                         resultText = `🎉 You won ${totalWinnings.toLocaleString()}!`;
@@ -741,17 +759,33 @@ async function createSinglePlayerGameEmbed(game, userId) {
                 resultText += `Hand ${i + 1}: ${handResult}\n`;
             }
             resultText += `**Total: ${handWinningsTotal >= 0 ? '+' : ''}${handWinningsTotal.toLocaleString()}**`;
+
+            // Add progressive jackpot info if won
+            if (game.jackpotWinner === userId && game.jackpotAmount > 0) {
+                resultText += `\n\n💎🎰 PROGRESSIVE JACKPOT WON! 💎🎰\n+${game.jackpotAmount.toLocaleString()} bonus!`;
+            }
         }
 
         embed.addFields({ name: '📊 Result', value: resultText, inline: false });
 
-        // Add jackpot win display if applicable
-        if (game.jackpotWon && game.jackpotWon > 0) {
+        // Add loan deduction info if applicable (for single-player games)
+        if (game.loanDeduction && game.loanDeduction.loanDeducted > 0) {
+            const loanText = `💸 **Loan Payment Deducted:**\n` +
+                `Winnings: $${(game.loanDeduction.actualReceived + game.loanDeduction.loanDeducted).toLocaleString()}\n` +
+                `Loan Payment (25%): -$${game.loanDeduction.loanDeducted.toLocaleString()}\n` +
+                `**Actual Received: $${game.loanDeduction.actualReceived.toLocaleString()}**`;
+            embed.addFields({ name: '🏦 Loan Repayment', value: loanText, inline: false });
+        }
+
+        // Add jackpot win display if applicable (check both jackpotAmount and legacy jackpotWon)
+        if ((game.jackpotAmount && game.jackpotAmount > 0 && game.jackpotWinner === userId) ||
+            (game.jackpotWon && game.jackpotWon > 0)) {
             embed.setColor('#FFD700');
             embed.setTitle('💎🃏 JACKPOT WINNER! 🃏💎');
+            const jackpotValue = game.jackpotAmount || game.jackpotWon;
             embed.addFields({
                 name: '🎉 PROGRESSIVE JACKPOT WON!',
-                value: `**$${game.jackpotWon.toLocaleString()}**\n🏆 Congratulations on hitting the jackpot! 🏆`,
+                value: `**$${jackpotValue.toLocaleString()}**\n🏆 Congratulations on hitting the jackpot! 🏆`,
                 inline: false
             });
         }
@@ -1003,7 +1037,7 @@ async function createEconomyStatsEmbed(targetUser, client) {
                 name: '✨ VIP Status',
                 value: vipTier
                     ? `${vipTier.emoji} **${vipTier.name}**\n` +
-                      `Work Bonus: +${vipTier.perks.workMultiplier * 100}%\n` +
+                      `Work Bonus: +${vipTier.perks.workBonus * 100}%\n` +
                       `Daily Bonus: $${vipTier.perks.dailyBonus.toLocaleString()}`
                     : 'No VIP Membership\nUse `/vip shop` to upgrade!',
                 inline: true
@@ -1180,10 +1214,10 @@ async function createProgressionStatsEmbed(targetUser, client) {
 
 async function createGuildStatsEmbed(targetUser, client) {
     const { getUserData } = require('./data');
-    const { getUserGuild } = require('./guilds');
+    const { getUserGuild, getGuildInfo } = require('./guilds');
 
     const userData = await getUserData(targetUser.id);
-    const guild = await getUserGuild(targetUser.id);
+    const userGuild = await getUserGuild(targetUser.id);
 
     if (!userData) {
         return createErrorEmbed('No Data', 'No guild statistics found for this user.');
@@ -1191,7 +1225,7 @@ async function createGuildStatsEmbed(targetUser, client) {
 
     const stats = userData.statistics;
 
-    if (!guild) {
+    if (!userGuild) {
         return createInfoEmbed(
             '🏰 No Guild',
             `**${targetUser.username}** is not in a guild!\n\n` +
@@ -1200,11 +1234,18 @@ async function createGuildStatsEmbed(targetUser, client) {
         );
     }
 
+    // Get full guild info with members
+    const guild = await getGuildInfo(userGuild.guildName);
+
+    if (!guild) {
+        return createErrorEmbed('Error', 'Failed to load guild information.');
+    }
+
     const isOwner = guild.ownerId === targetUser.id;
-    const memberCount = guild.members.length;
+    const memberCount = guild.members ? guild.members.length : 0;
 
     // Get user's member data
-    const memberData = guild.members.find(m => m.userId === targetUser.id);
+    const memberData = guild.members ? guild.members.find(m => m.userId === targetUser.id) : null;
     const joinedDate = memberData ? new Date(memberData.joinedAt) : null;
     const daysInGuild = joinedDate ? Math.floor((Date.now() - joinedDate.getTime()) / (24 * 60 * 60 * 1000)) : 0;
 
@@ -1223,7 +1264,7 @@ async function createGuildStatsEmbed(targetUser, client) {
             },
             {
                 name: '🎭 Your Contributions',
-                value: `Total Donated: $${(userData.guild?.contributedTotal || 0).toLocaleString()}\n` +
+                value: `Total Donated: $${(userGuild.contributedTotal || 0).toLocaleString()}\n` +
                        `Guild Stats: $${(stats.totalGuildContributions || 0).toLocaleString()}\n` +
                        `Days in Guild: ${daysInGuild}`,
                 inline: true

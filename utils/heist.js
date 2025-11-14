@@ -10,8 +10,11 @@ const {
     updateGuildHeistCooldown,
     recordGuildHeistAttempt,
     setGamblingBan,
-    isGamblingBanned
+    isGamblingBanned,
+    getGuildWithLevel
 } = require('../database/queries');
+const { getPerkValue } = require('./guildLevels');
+const { awardHeistXP } = require('./guildXP');
 
 const HEIST_COST = 10000;
 const HEIST_COOLDOWN = 24 * 60 * 60 * 1000; // 24 hours (always, regardless of success)
@@ -232,7 +235,7 @@ async function startGuildHeist(guildId, initiatorId) {
         // Create heist session (in-memory)
         activeGuildHeists[guildId] = {
             guildId,
-            guildName: guild.name,
+            guildName: guild.guildName,
             initiatorId,
             participants: [initiatorId],
             startTime: now,
@@ -268,7 +271,7 @@ async function joinGuildHeist(guildId, userId) {
         const { getUserGuild } = require('./guilds');
         const guild = await getUserGuild(userId);
 
-        if (!guild || guild.id !== guildId) {
+        if (!guild || guild.guildId !== guildId) {
             return { success: false, message: 'You must be in this guild to join the heist!' };
         }
 
@@ -324,14 +327,28 @@ async function executeGuildHeist(guildId) {
 
         const participantCount = heist.participants.length;
 
+        // Get guild level and perks
+        const guildData = await getGuildWithLevel(guildId);
+        const guildLevel = guildData ? (guildData.level || 1) : 1;
+
+        // Apply guild level perks
+        const successRateBonus = getPerkValue(guildLevel, 'heist_success'); // +0% to +30%
+        const costReduction = getPerkValue(guildLevel, 'heist_cost_reduction'); // 0% to -40%
+        const rewardBonus = getPerkValue(guildLevel, 'heist_reward_bonus'); // +0 to +1 multiplier
+
+        // Calculate adjusted cost per person
+        const adjustedCost = Math.floor(GUILD_HEIST_COST_PER_PERSON * (1 - costReduction));
+
         // Deduct entry fees from all participants
         for (const userId of heist.participants) {
             const currentMoney = await getUserMoney(userId);
-            await setUserMoney(userId, currentMoney - GUILD_HEIST_COST_PER_PERSON);
+            await setUserMoney(userId, currentMoney - adjustedCost);
         }
 
-        // Calculate success rate: 30% base + 4% per member
-        const successRate = GUILD_HEIST_BASE_SUCCESS + (participantCount * GUILD_HEIST_MEMBER_BONUS);
+        // Calculate success rate: 30% base + 4% per member + guild bonus
+        let successRate = GUILD_HEIST_BASE_SUCCESS + (participantCount * GUILD_HEIST_MEMBER_BONUS) + successRateBonus;
+        successRate = Math.min(successRate, 0.95); // Cap at 95%
+
         const roll = Math.random();
         const isSuccess = roll < successRate;
 
@@ -344,16 +361,23 @@ async function executeGuildHeist(guildId) {
         await recordGuildHeistAttempt(guildId, heist.participants, isSuccess);
 
         if (isSuccess) {
-            // Success - distribute winnings
-            const multiplier = Math.random() * (GUILD_HEIST_MAX_MULTIPLIER - GUILD_HEIST_MIN_MULTIPLIER) + GUILD_HEIST_MIN_MULTIPLIER;
-            const totalPot = GUILD_HEIST_COST_PER_PERSON * participantCount;
+            // Success - distribute winnings with guild bonus
+            let multiplier = Math.random() * (GUILD_HEIST_MAX_MULTIPLIER - GUILD_HEIST_MIN_MULTIPLIER) + GUILD_HEIST_MIN_MULTIPLIER;
+            multiplier += rewardBonus; // Add guild reward bonus
+
+            const totalPot = adjustedCost * participantCount;
             const totalWinnings = Math.floor(totalPot * multiplier);
             const winningsPerPerson = Math.floor(totalWinnings / participantCount);
 
-            // Distribute winnings
+            // Distribute winnings and award XP
             for (const userId of heist.participants) {
                 const currentMoney = await getUserMoney(userId);
                 await setUserMoney(userId, currentMoney + winningsPerPerson);
+
+                // Award guild XP for successful heist (async, don't wait)
+                awardHeistXP(userId, true).catch(err =>
+                    console.error('Error awarding heist XP:', err)
+                );
             }
 
             delete activeGuildHeists[guildId];
@@ -366,7 +390,14 @@ async function executeGuildHeist(guildId) {
                 multiplier: multiplier.toFixed(2),
                 totalWinnings,
                 winningsPerPerson,
-                netProfitPerPerson: winningsPerPerson - GUILD_HEIST_COST_PER_PERSON
+                netProfitPerPerson: winningsPerPerson - adjustedCost,
+                costPerPerson: adjustedCost,
+                guildLevel,
+                bonusesApplied: {
+                    successRateBonus: `+${(successRateBonus * 100).toFixed(0)}%`,
+                    costReduction: costReduction > 0 ? `-${(costReduction * 100).toFixed(0)}%` : 'None',
+                    rewardBonus: rewardBonus > 0 ? `+${rewardBonus}x` : 'None'
+                }
             };
         } else {
             // Failure - add debt and gambling bans
@@ -378,6 +409,11 @@ async function executeGuildHeist(guildId) {
 
                 // Add fine as heist debt
                 await addHeistDebt(userId, finePerPerson);
+
+                // Award reduced XP for participation (async, don't wait)
+                awardHeistXP(userId, false).catch(err =>
+                    console.error('Error awarding heist XP:', err)
+                );
             }
 
             delete activeGuildHeists[guildId];
@@ -388,8 +424,10 @@ async function executeGuildHeist(guildId) {
                 participantCount,
                 successRate: (successRate * 100).toFixed(1),
                 finePerPerson,
-                totalLossPerPerson: GUILD_HEIST_COST_PER_PERSON + finePerPerson,
-                gamblingBanHours: 8
+                totalLossPerPerson: adjustedCost + finePerPerson,
+                costPerPerson: adjustedCost,
+                gamblingBanHours: 8,
+                guildLevel
             };
         }
     } catch (error) {

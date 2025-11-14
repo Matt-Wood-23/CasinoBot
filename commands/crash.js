@@ -4,6 +4,7 @@ const { createGameEmbed } = require('../utils/embeds');
 const { createButtons } = require('../utils/buttons');
 const { validateBet } = require('../utils/vip');
 const CrashGame = require('../gameLogic/crashGame');
+const { recordGameToEvents, getEventNotifications } = require('../utils/eventIntegration');
 
 module.exports = {
     data: {

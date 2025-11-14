@@ -1,6 +1,11 @@
 const { EmbedBuilder } = require('discord.js');
 const { getUserMoney, setUserMoney, getUserData, setLastWork } = require('../utils/data');
 const { makePayment } = require('../utils/loanSystem');
+const { getUserGuild } = require('../utils/guilds');
+const { getGuildWithLevel } = require('../database/queries');
+const { getPerkValue } = require('../utils/guildLevels');
+const { awardWorkXP } = require('../utils/guildXP');
+const { recordTransaction, TransactionTypes } = require('../utils/transactions');
 
 // Work cooldown: 4 hours
 const WORK_COOLDOWN = 4 * 60 * 60 * 1000;
@@ -44,8 +49,17 @@ module.exports = {
             const hours = Math.floor(timeLeft / (60 * 60 * 1000));
             const minutes = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
 
+            // Check if user has a work reset token
+            const { canResetWork } = require('../utils/guildShopEffects');
+            const hasResetToken = await canResetWork(userId);
+
+            let message = `⏰ You're too tired to work! Come back in ${hours}h ${minutes}m.`;
+            if (hasResetToken) {
+                message += `\n\n💎 You have a **Work Reset Token**! Use \`/use-reset-token work\` to work again now!`;
+            }
+
             return interaction.reply({
-                content: `⏰ You're too tired to work! Come back in ${hours}h ${minutes}m.`,
+                content: message,
                 ephemeral: true
             });
         }
@@ -64,8 +78,38 @@ module.exports = {
             earnings += vipBonusAmount;
         }
 
+        // Apply Guild work bonus
+        let guildBonusAmount = 0;
+        const userGuild = await getUserGuild(userId);
+        if (userGuild) {
+            const guildData = await getGuildWithLevel(userGuild.guildId);
+            if (guildData) {
+                const guildLevel = guildData.level || 1;
+                const workBonusMultiplier = getPerkValue(guildLevel, 'work_bonus');
+                if (workBonusMultiplier > 0) {
+                    guildBonusAmount = Math.floor(earnings * workBonusMultiplier);
+                    earnings += guildBonusAmount;
+                }
+            }
+        }
+
+        // Check for guild shop work boost (Overtime Pass)
+        const { useWorkBoost } = require('../utils/guildShopEffects');
+        const workBoostResult = await useWorkBoost(userId);
+        let workBoostAmount = 0;
+        if (workBoostResult.success) {
+            const beforeBoost = earnings;
+            earnings = Math.floor(earnings * workBoostResult.multiplier);
+            workBoostAmount = earnings - beforeBoost;
+        }
+
         // Update last work time
         await setLastWork(userId);
+
+        // Award guild XP for work (async, don't wait)
+        awardWorkXP(userId).catch(err =>
+            console.error('Error awarding work XP:', err)
+        );
 
         // Check if has loan
         let loanDeduction = 0;
@@ -87,7 +131,26 @@ module.exports = {
 
         // Give money
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + afterLoan);
+        const newBalance = currentMoney + afterLoan;
+        await setUserMoney(userId, newBalance);
+
+        // Record transaction
+        await recordTransaction({
+            userId: userId,
+            type: TransactionTypes.WORK,
+            amount: afterLoan,
+            balanceAfter: newBalance,
+            description: `${job.name} - earned $${earnings.toLocaleString()}${loanDeduction > 0 ? ` (loan payment: $${loanDeduction.toLocaleString()})` : ''}`,
+            metadata: {
+                jobName: job.name,
+                baseEarnings: earnings,
+                loanDeduction: loanDeduction,
+                netEarnings: afterLoan,
+                vipBonus: vipBonusAmount,
+                guildBonus: guildBonusAmount,
+                workBoost: workBoostAmount
+            }
+        });
 
         // Check work achievements and update challenges
         const { checkWorkAchievements } = require('../utils/achievements');
@@ -122,7 +185,7 @@ module.exports = {
         } else {
             embed.addFields(
                 { name: '💰 Earned', value: `${earnings.toLocaleString()}`, inline: true },
-                { name: '💵 New Balance', value: `${(currentMoney + afterLoan).toLocaleString()}`, inline: true }
+                { name: '💵 New Balance', value: `${newBalance.toLocaleString()}`, inline: true }
             );
         }
 

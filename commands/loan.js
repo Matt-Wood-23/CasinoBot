@@ -268,8 +268,32 @@ async function handleLoanHistory(interaction, userId) {
 
     for (let i = 0; i < history.length; i++) {
         const loan = history[i];
-        const status = loan.paidOnTime ? '✅ On Time' : `❌ ${loan.daysOverdue} days late`;
-        const date = new Date(loan.date).toLocaleDateString();
+
+        // Calculate if loan was paid on time
+        const wasOnTime = loan.wasDefaulted === false && loan.repaidAt && loan.repaidAt <= loan.dueDate;
+
+        // Calculate days overdue if applicable
+        let daysOverdue = 0;
+        if (loan.repaidAt && loan.repaidAt > loan.dueDate) {
+            daysOverdue = Math.floor((loan.repaidAt - loan.dueDate) / (24 * 60 * 60 * 1000));
+        }
+
+        // Determine status
+        let status;
+        if (!loan.isActive && !loan.repaidAt) {
+            status = '⚠️ Incomplete';
+        } else if (wasOnTime) {
+            status = '✅ On Time';
+        } else if (loan.wasDefaulted) {
+            status = '❌ Defaulted';
+        } else if (daysOverdue > 0) {
+            status = `⚠️ ${daysOverdue} days late`;
+        } else {
+            status = '🔄 Active';
+        }
+
+        // Use takenAt for the date
+        const date = new Date(loan.takenAt).toLocaleDateString();
 
         embed.addFields({
             name: `Loan #${userData.loanHistory.length - history.length + i + 1}`,

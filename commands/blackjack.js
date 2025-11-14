@@ -3,6 +3,7 @@ const { isGamblingBanned, getGamblingBanTime, addToJackpot } = require('../datab
 const { createGameEmbed } = require('../utils/embeds');
 const { createButtons } = require('../utils/buttons');
 const BlackjackGame = require('../gameLogic/blackjackGame');
+const { recordGameToEvents, getEventNotifications } = require('../utils/eventIntegration');
 
 module.exports = {
     data: {
@@ -21,9 +22,12 @@ module.exports = {
     },
 
     async execute(interaction, activeGames, dealCardsWithDelay) {
+        const bet = interaction.options.getInteger('bet');
+        let userMoney = null;
+        let moneyDeducted = false;
+
         try {
-            const bet = interaction.options.getInteger('bet');
-            const userMoney = await getUserMoney(interaction.user.id);
+            userMoney = await getUserMoney(interaction.user.id);
             const serverId = interaction.guildId;
 
             // Check if user is gambling banned
@@ -53,16 +57,7 @@ module.exports = {
                 });
             }
 
-            // Contribute to jackpot (0.5% of bet)
-            if (serverId) {
-                const jackpotContribution = Math.floor(bet * 0.005);
-                await addToJackpot(serverId, jackpotContribution);
-            }
-
-            // Deduct bet from user's money
-            await setUserMoney(interaction.user.id, userMoney - bet);
-
-            // Create new game
+            // Create new game (before deducting money)
             const game = new BlackjackGame(interaction.channelId, interaction.user.id, bet, false);
             game.serverId = serverId; // Store serverId for jackpot checking
             activeGames.set(interaction.user.id, game);
@@ -86,15 +81,38 @@ module.exports = {
                 fetchReply: true
             });
 
+            // Only deduct money AFTER interaction reply succeeds
+            // Contribute to jackpot (0.5% of bet)
+            if (serverId) {
+                const jackpotContribution = Math.floor(bet * 0.005);
+                await addToJackpot(serverId, jackpotContribution);
+            }
 
+            // Deduct bet from user's money
+            await setUserMoney(interaction.user.id, userMoney - bet);
+            moneyDeducted = true;
+
+            // Deal cards - dealCardsWithDelay handles its own errors and refunds
             await dealCardsWithDelay(interaction, message, game, interaction.user.id, 1000);
-
 
         } catch (error) {
             console.error('Error in blackjack command:', error);
 
+            // Refund money if it was deducted
+            if (moneyDeducted && userMoney !== null) {
+                try {
+                    await setUserMoney(interaction.user.id, userMoney);
+                    console.log(`Refunded bet to user ${interaction.user.id} due to blackjack startup error`);
+                } catch (refundError) {
+                    console.error('Error refunding bet after failure:', refundError);
+                }
+            }
+
+            // Clean up the failed game
+            activeGames.delete(interaction.user.id);
+
             const errorMessage = {
-                content: '❌ An error occurred while starting the blackjack game. Please try again.',
+                content: `❌ An error occurred while starting the blackjack game. If your bet was deducted, it has been refunded.`,
                 ephemeral: true
             };
 

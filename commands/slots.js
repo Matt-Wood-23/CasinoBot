@@ -5,6 +5,9 @@ const { createButtons } = require('../utils/buttons');
 const { validateBet } = require('../utils/vip');
 const { applyHolidayWinningsBonus } = require('../utils/holidayEvents');
 const SlotsGame = require('../gameLogic/slotsGame');
+const { awardGameXP, awardWagerXP } = require('../utils/guildXP');
+const { applyWinningsBoost } = require('../utils/guildShopEffects');
+const { recordGameToEvents, getEventNotifications } = require('../utils/eventIntegration');
 
 module.exports = {
     data: {
@@ -83,7 +86,10 @@ module.exports = {
             const slotsGame = new SlotsGame(interaction.user.id, bet);
 
             // Apply holiday bonus to slot winnings (not jackpot)
-            const adjustedSlotWinnings = applyHolidayWinningsBonus(slotsGame.winnings);
+            let adjustedSlotWinnings = applyHolidayWinningsBonus(slotsGame.winnings);
+
+            // Apply guild shop winnings boost (Lucky Streak, etc)
+            adjustedSlotWinnings = await applyWinningsBoost(interaction.user.id, adjustedSlotWinnings);
 
             // Add jackpot to winnings if won
             const totalWinnings = adjustedSlotWinnings + jackpotAmount;
@@ -100,9 +106,38 @@ module.exports = {
                 totalWinnings > 0 ? 'win' : 'lose'
             );
 
+            // Award guild XP (async, don't wait)
+            awardWagerXP(interaction.user.id, bet, 'Slots').catch(err =>
+                console.error('Error awarding wager XP:', err)
+            );
+            const won = totalWinnings > 0;
+            awardGameXP(interaction.user.id, 'Slots', won).catch(err =>
+                console.error('Error awarding game XP:', err)
+            );
+
+            // Record to active guild events (async, don't wait)
+            let eventResults = null;
+            try {
+                eventResults = await recordGameToEvents(interaction.user.id, 'Slots', bet, totalWinnings);
+            } catch (err) {
+                console.error('Error recording game to events:', err);
+            }
+
             // Create and send the result
             const embed = await createGameEmbed(slotsGame, interaction.user.id, interaction.client);
             const buttons = await createButtons(slotsGame, interaction.user.id, interaction.client);
+
+            // Add event notifications to embed
+            if (eventResults) {
+                const notifications = getEventNotifications(eventResults);
+                if (notifications.length > 0) {
+                    embed.addFields({
+                        name: '🎉 Guild Event Progress',
+                        value: notifications.join('\n'),
+                        inline: false
+                    });
+                }
+            }
 
             // Add jackpot info to embed
             if (serverId) {

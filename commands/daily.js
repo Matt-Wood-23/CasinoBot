@@ -1,6 +1,11 @@
 const { getUserMoney, setUserMoney, canClaimDaily, setLastDaily, getTimeUntilNextDaily } = require('../utils/data');
 const { updateLoginStreak, getStreakMultiplier, getNextStreakMilestone } = require('../database/queries');
 const { getCurrentHoliday, getHolidayMultiplier } = require('../utils/holidayEvents');
+const { getUserGuild } = require('../utils/guilds');
+const { getGuildWithLevel } = require('../database/queries');
+const { getPerkValue } = require('../utils/guildLevels');
+const { awardDailyXP } = require('../utils/guildXP');
+const { recordTransaction, TransactionTypes } = require('../utils/transactions');
 
 module.exports = {
     data: {
@@ -18,8 +23,17 @@ module.exports = {
                 const hours = Math.floor(timeUntilNext / (1000 * 60 * 60));
                 const minutes = Math.floor((timeUntilNext % (1000 * 60 * 60)) / (1000 * 60));
 
+                // Check if user has a daily reset token
+                const { canResetDaily } = require('../utils/guildShopEffects');
+                const hasResetToken = await canResetDaily(interaction.user.id);
+
+                let message = `⏰ You can claim your daily bonus again in **${hours}h ${minutes}m**!`;
+                if (hasResetToken) {
+                    message += `\n\n💎 You have a **Daily Reset Token**! Use \`/use-reset-token daily\` to claim your daily now!`;
+                }
+
                 return await interaction.reply({
-                    content: `⏰ You can claim your daily bonus again in **${hours}h ${minutes}m**!`,
+                    content: message,
                     ephemeral: true
                 });
             }
@@ -35,6 +49,7 @@ module.exports = {
             let bonusBreakdown = [];
             let doubleBoostUsed = false;
             let vipBonusAmount = 0;
+            let guildBonusAmount = 0;
             let holidayBonusAmount = 0;
 
             // Apply VIP daily bonus
@@ -43,6 +58,22 @@ module.exports = {
             if (vipBonusAmount > 0) {
                 dailyAmount += vipBonusAmount;
                 bonusBreakdown.push(`👑 VIP: +$${vipBonusAmount}`);
+            }
+
+            // Apply Guild daily bonus
+            const userGuild = await getUserGuild(interaction.user.id);
+            if (userGuild) {
+                const guildData = await getGuildWithLevel(userGuild.guildId);
+                if (guildData) {
+                    const guildLevel = guildData.level || 1;
+                    const dailyBonusMultiplier = getPerkValue(guildLevel, 'daily_bonus');
+                    if (dailyBonusMultiplier > 0) {
+                        const beforeGuildBonus = dailyAmount;
+                        dailyAmount = Math.floor(dailyAmount * (1 + dailyBonusMultiplier));
+                        guildBonusAmount = dailyAmount - beforeGuildBonus;
+                        bonusBreakdown.push(`🏰 Guild Bonus (Lvl ${guildLevel}): +$${guildBonusAmount}`);
+                    }
+                }
             }
 
             // Check for active holiday event
@@ -66,9 +97,44 @@ module.exports = {
                 bonusBreakdown.push('💎 Double Daily Boost: x2');
             }
 
+            // Check for guild shop daily boost (Fortune Cookie)
+            const { useDailyBoost } = require('../utils/guildShopEffects');
+            const dailyBoostResult = await useDailyBoost(interaction.user.id);
+            if (dailyBoostResult.success) {
+                const beforeBoost = dailyAmount;
+                dailyAmount = Math.floor(dailyAmount * dailyBoostResult.multiplier);
+                const boostAmount = dailyAmount - beforeBoost;
+                bonusBreakdown.push(`🍪 ${dailyBoostResult.itemName}: +$${boostAmount}`);
+            }
+
             // Update user money
-            await setUserMoney(interaction.user.id, userMoney + dailyAmount);
+            const newBalance = userMoney + dailyAmount;
+            await setUserMoney(interaction.user.id, newBalance);
             await setLastDaily(interaction.user.id);
+
+            // Record transaction
+            await recordTransaction({
+                userId: interaction.user.id,
+                type: TransactionTypes.DAILY,
+                amount: dailyAmount,
+                balanceAfter: newBalance,
+                description: `Daily bonus claimed - ${streakData.currentStreak} day streak${streakMultiplier > 1 ? ` (x${streakMultiplier.toFixed(1)} multiplier)` : ''}`,
+                metadata: {
+                    baseDailyAmount: baseDailyAmount,
+                    streakMultiplier: streakMultiplier,
+                    currentStreak: streakData.currentStreak,
+                    vipBonus: vipBonusAmount,
+                    guildBonus: guildBonusAmount,
+                    holidayBonus: holidayBonusAmount,
+                    doubleBoostUsed: doubleBoostUsed,
+                    totalAmount: dailyAmount
+                }
+            });
+
+            // Award guild XP for daily claim (async, don't wait)
+            awardDailyXP(interaction.user.id).catch(err =>
+                console.error('Error awarding daily XP:', err)
+            );
 
             // Build response message
             let message = `🎁 **Daily Bonus Claimed!**\n\n`;
@@ -107,7 +173,7 @@ module.exports = {
             }
 
             // New balance
-            message += `\n\n💵 New Balance: **$${(userMoney + dailyAmount).toLocaleString()}**`;
+            message += `\n\n💵 New Balance: **$${newBalance.toLocaleString()}**`;
 
             await interaction.reply(message);
         } catch (error) {

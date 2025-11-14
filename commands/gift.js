@@ -1,5 +1,6 @@
 const { getUserMoney, setUserMoney, updateUserGifts } = require('../utils/data');
 const { EmbedBuilder } = require('discord.js');
+const { recordTransaction, TransactionTypes } = require('../utils/transactions');
 
 module.exports = {
     data: {
@@ -60,9 +61,40 @@ module.exports = {
             }
 
             // Process the gift transfer
-            await setUserMoney(interaction.user.id, userMoney - amount);
+            const senderNewBalance = userMoney - amount;
+            await setUserMoney(interaction.user.id, senderNewBalance);
             const targetMoney = await getUserMoney(targetUser.id);
-            await setUserMoney(targetUser.id, targetMoney + amount);
+            const recipientNewBalance = targetMoney + amount;
+            await setUserMoney(targetUser.id, recipientNewBalance);
+
+            // Record transactions for both sender and receiver
+            await recordTransaction({
+                userId: interaction.user.id,
+                type: TransactionTypes.GIFT_SENT,
+                amount: -amount,
+                balanceAfter: senderNewBalance,
+                relatedUserId: targetUser.id,
+                description: `Gift sent to ${targetUser.username}${message ? `: "${message}"` : ''}`,
+                metadata: {
+                    recipientId: targetUser.id,
+                    recipientName: targetUser.username,
+                    message: message
+                }
+            });
+
+            await recordTransaction({
+                userId: targetUser.id,
+                type: TransactionTypes.GIFT_RECEIVED,
+                amount: amount,
+                balanceAfter: recipientNewBalance,
+                relatedUserId: interaction.user.id,
+                description: `Gift received from ${interaction.user.username}${message ? `: "${message}"` : ''}`,
+                metadata: {
+                    senderId: interaction.user.id,
+                    senderName: interaction.user.username,
+                    message: message
+                }
+            });
 
             // Update gift statistics
             await updateUserGifts(interaction.user.id, targetUser.id, amount);
@@ -75,7 +107,7 @@ module.exports = {
                 .addFields(
                     { name: '💰 Amount', value: `${amount.toLocaleString()}`, inline: true },
                     { name: '👤 Recipient', value: targetUser.username, inline: true },
-                    { name: '💵 Your Balance', value: `${(userMoney - amount).toLocaleString()}`, inline: true }
+                    { name: '💵 Your Balance', value: `${senderNewBalance.toLocaleString()}`, inline: true }
                 );
 
             if (message) {
@@ -92,10 +124,10 @@ module.exports = {
                     .setTitle('🎁 You received a gift!')
                     .setColor('#00FF00')
                     .setDescription(`${interaction.user.username} sent you ${amount.toLocaleString()}!`)
-                    .addFields({ 
-                        name: '💵 Your New Balance', 
-                        value: `${(targetMoney + amount).toLocaleString()}`, 
-                        inline: true 
+                    .addFields({
+                        name: '💵 Your New Balance',
+                        value: `${recipientNewBalance.toLocaleString()}`,
+                        inline: true
                     });
 
                 if (message) {

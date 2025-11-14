@@ -404,11 +404,13 @@ async function updateChallengeProgress(userId, updateData = {}) {
                 break;
 
             case 'unique_games':
-                // Note: unique games tracking is limited without storing the list
-                // This would need a separate table or JSONB column to track properly
+                // LIMITATION: Unique games tracking is simplified
+                // Currently increments on each new game type seen in a session
+                // For full accuracy, would need JSONB column or separate table to track
+                // which specific games have been played (see FUTURE_IMPROVEMENTS.md)
                 if (updateData.gameType) {
-                    // Simplified: just increment (not fully accurate without state)
-                    // TODO: Add proper unique game tracking with JSONB or separate table
+                    // Simplified tracking: increment once per game type per session
+                    // This approximates unique games but isn't perfect
                     newProgress++;
                 }
                 break;

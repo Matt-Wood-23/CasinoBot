@@ -65,7 +65,18 @@ async function donateToGuild(userId, amount) {
     await setUserMoney(userId, currentMoney - amount);
 
     // Add to guild treasury
-    return await donateToGuildTreasury(userId, amount);
+    const result = await donateToGuildTreasury(userId, amount);
+
+    // Award guild XP for donation (async, don't wait)
+    if (result.success) {
+        // Lazy load to avoid circular dependency
+        const { awardDonationXP } = require('./guildXP');
+        awardDonationXP(userId, amount).catch(err =>
+            console.error('Error awarding donation XP:', err)
+        );
+    }
+
+    return result;
 }
 
 // Get guild info

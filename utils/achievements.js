@@ -198,7 +198,12 @@ async function checkAchievements(userId, gameData = {}) {
 
         if (hasProtection) {
             await consumeBoost(userId, 'streak_protection');
-            // TODO: Store notification that protection was used
+            // Store notification that protection was used
+            const { storeBoostNotification } = require('../database/queries');
+            await storeBoostNotification(userId, {
+                type: 'streak_protection',
+                message: '🛡️ Your Win Streak Protection saved your streak from being reset!'
+            });
             // Don't reset streak
         } else {
             await updateWinStreakDB(userId, false);
