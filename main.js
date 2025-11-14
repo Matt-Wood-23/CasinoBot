@@ -428,17 +428,6 @@ process.on('unhandledRejection', error => {
     console.error('Unhandled promise rejection:', error);
 });
 
-client.on('messageCreate', async message => {
-
-    //get the bots id
-    const botID = client.user.id;
-
-
-    if(message.content.toLowerCase() === '!jacob' && message.author.id != botID)
-        message.channel.send({files:['./IMG_3001.jpg']});
-   
-});
-
 const { closePool } = require('./database/connection');
 
 // Graceful shutdown handling
