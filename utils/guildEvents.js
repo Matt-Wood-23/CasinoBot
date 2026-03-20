@@ -1,4 +1,5 @@
 const { query } = require('../database/connection');
+const { convertDatabaseResult } = require('../database/queries/users');
 
 // =====================
 // EVENT CREATION & MANAGEMENT
@@ -285,20 +286,6 @@ async function hasClaimedRewards(eventId, guildId) {
 // =====================
 // HELPER FUNCTIONS
 // =====================
-
-/**
- * Convert snake_case database results to camelCase
- */
-function convertDatabaseResult(row) {
-    if (!row) return null;
-
-    const converted = {};
-    for (const key in row) {
-        const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
-        converted[camelKey] = row[key];
-    }
-    return converted;
-}
 
 /**
  * Get event type emoji

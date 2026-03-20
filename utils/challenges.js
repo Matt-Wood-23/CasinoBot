@@ -1,11 +1,11 @@
 const {
     getUserChallengesDB,
     createChallengeDB,
-    updateChallengeProgressDB,
-    markChallengeCompletedDB,
     deleteChallengesDB,
     hasActiveChallengesDB,
-    getLastResetTimeDB
+    getLastResetTimeDB,
+    batchUpdateChallengeProgressDB,
+    batchMarkChallengesCompletedDB
 } = require('./data');
 
 // Challenge templates for daily challenges
@@ -261,176 +261,94 @@ async function shouldResetWeekly(userId) {
     return (now - lastReset) >= oneWeekMs;
 }
 
-// Update challenge progress
+// Compute new progress for a single challenge given the update data
+function computeNewProgress(challenge, updateData) {
+    let newProgress = challenge.progress;
+    switch (challenge.type) {
+        case 'blackjack_wins':
+            if (updateData.gameType === 'blackjack' && (updateData.result === 'win' || updateData.result === 'blackjack')) newProgress++;
+            break;
+        case 'blackjack_hands':
+            if (updateData.gameType === 'blackjack') newProgress += updateData.handsPlayed || 1;
+            break;
+        case 'slots_spins':
+            if (updateData.gameType === 'slots') newProgress++;
+            break;
+        case 'slots_wins':
+            if (updateData.gameType === 'slots' && updateData.result === 'win') newProgress++;
+            break;
+        case 'roulette_spins':
+            if (updateData.gameType === 'roulette') newProgress++;
+            break;
+        case 'coinflip_games':
+            if (updateData.gameType === 'coinflip') newProgress++;
+            break;
+        case 'any_wins':
+            if (updateData.result === 'win' || updateData.result === 'blackjack') newProgress++;
+            break;
+        case 'total_wagered':
+            if (updateData.bet) newProgress += updateData.bet;
+            break;
+        case 'net_profit':
+            if (updateData.winnings) newProgress += updateData.winnings;
+            break;
+        case 'work_shifts':
+            if (updateData.type === 'work') newProgress++;
+            break;
+        case 'single_big_win':
+            if (updateData.winnings >= challenge.target) newProgress = challenge.target;
+            break;
+        case 'unique_games':
+            if (updateData.gameType && !challenge.uniqueGamesPlayed.includes(updateData.gameType)) {
+                challenge.uniqueGamesPlayed.push(updateData.gameType);
+                newProgress++;
+            }
+            break;
+    }
+    return newProgress;
+}
+
+// Update challenge progress (batch DB writes: one update + one complete per call)
 async function updateChallengeProgress(userId, updateData = {}) {
     const completedChallenges = [];
 
     // Check if resets are needed
-    if (await shouldResetDaily(userId)) {
-        await resetDailyChallenges(userId);
-    }
-    if (await shouldResetWeekly(userId)) {
-        await resetWeeklyChallenges(userId);
-    }
+    if (await shouldResetDaily(userId)) await resetDailyChallenges(userId);
+    if (await shouldResetWeekly(userId)) await resetWeeklyChallenges(userId);
 
-    // Get current challenges from DB
     const challenges = await getUserChallengesDB(userId);
+    const allChallenges = [...challenges.daily, ...challenges.weekly];
 
-    // Process daily challenges
-    for (const challenge of challenges.daily) {
+    const progressUpdates = [];   // { challengeId, progress }
+    const completedIds = [];      // challenge ids to mark completed
+
+    for (const challenge of allChallenges) {
         if (challenge.completed) continue;
 
-        let newProgress = challenge.progress;
+        const newProgress = computeNewProgress(challenge, updateData);
 
-        switch (challenge.type) {
-            case 'blackjack_wins':
-                if (updateData.gameType === 'blackjack' && (updateData.result === 'win' || updateData.result === 'blackjack')) {
-                    newProgress++;
-                }
-                break;
-
-            case 'blackjack_hands':
-                if (updateData.gameType === 'blackjack') {
-                    newProgress += updateData.handsPlayed || 1;
-                }
-                break;
-
-            case 'slots_spins':
-                if (updateData.gameType === 'slots') {
-                    newProgress++;
-                }
-                break;
-
-            case 'slots_wins':
-                if (updateData.gameType === 'slots' && updateData.result === 'win') {
-                    newProgress++;
-                }
-                break;
-
-            case 'roulette_spins':
-                if (updateData.gameType === 'roulette') {
-                    newProgress++;
-                }
-                break;
-
-            case 'coinflip_games':
-                if (updateData.gameType === 'coinflip') {
-                    newProgress++;
-                }
-                break;
-
-            case 'any_wins':
-                if (updateData.result === 'win' || updateData.result === 'blackjack') {
-                    newProgress++;
-                }
-                break;
-
-            case 'total_wagered':
-                if (updateData.bet) {
-                    newProgress += updateData.bet;
-                }
-                break;
-
-            case 'work_shifts':
-                if (updateData.type === 'work') {
-                    newProgress++;
-                }
-                break;
-
-            case 'single_big_win':
-                if (updateData.winnings >= challenge.target) {
-                    newProgress = challenge.target;
-                }
-                break;
-        }
-
-        // Update progress in DB if changed
         if (newProgress !== challenge.progress) {
-            await updateChallengeProgressDB(userId, challenge.id, newProgress);
             challenge.progress = newProgress;
+            const update = { challengeId: challenge.id, progress: newProgress };
+            if (challenge.type === 'unique_games') {
+                update.metadata = { gamesPlayed: challenge.uniqueGamesPlayed };
+            }
+            progressUpdates.push(update);
         }
 
-        // Check if challenge is completed
-        if (challenge.progress >= challenge.target && !challenge.completed) {
-            await markChallengeCompletedDB(userId, challenge.id);
+        if (challenge.progress >= challenge.target) {
             challenge.completed = true;
             challenge.completedAt = Date.now();
-
+            completedIds.push(challenge.id);
             completedChallenges.push(challenge);
         }
     }
 
-    // Process weekly challenges
-    for (const challenge of challenges.weekly) {
-        if (challenge.completed) continue;
-
-        let newProgress = challenge.progress;
-
-        switch (challenge.type) {
-            case 'blackjack_hands':
-                if (updateData.gameType === 'blackjack') {
-                    newProgress += updateData.handsPlayed || 1;
-                }
-                break;
-
-            case 'slots_wins':
-                if (updateData.gameType === 'slots' && updateData.result === 'win') {
-                    newProgress++;
-                }
-                break;
-
-            case 'any_wins':
-                if (updateData.result === 'win' || updateData.result === 'blackjack') {
-                    newProgress++;
-                }
-                break;
-
-            case 'total_wagered':
-                if (updateData.bet) {
-                    newProgress += updateData.bet;
-                }
-                break;
-
-            case 'net_profit':
-                if (updateData.winnings) {
-                    newProgress += updateData.winnings;
-                }
-                break;
-
-            case 'work_shifts':
-                if (updateData.type === 'work') {
-                    newProgress++;
-                }
-                break;
-
-            case 'unique_games':
-                // LIMITATION: Unique games tracking is simplified
-                // Currently increments on each new game type seen in a session
-                // For full accuracy, would need JSONB column or separate table to track
-                // which specific games have been played (see FUTURE_IMPROVEMENTS.md)
-                if (updateData.gameType) {
-                    // Simplified tracking: increment once per game type per session
-                    // This approximates unique games but isn't perfect
-                    newProgress++;
-                }
-                break;
-        }
-
-        // Update progress in DB if changed
-        if (newProgress !== challenge.progress) {
-            await updateChallengeProgressDB(userId, challenge.id, newProgress);
-            challenge.progress = newProgress;
-        }
-
-        // Check if challenge is completed
-        if (challenge.progress >= challenge.target && !challenge.completed) {
-            await markChallengeCompletedDB(userId, challenge.id);
-            challenge.completed = true;
-            challenge.completedAt = Date.now();
-
-            completedChallenges.push(challenge);
-        }
-    }
+    // Single batch write for progress, single batch write for completions
+    await Promise.all([
+        batchUpdateChallengeProgressDB(userId, progressUpdates),
+        batchMarkChallengesCompletedDB(userId, completedIds)
+    ]);
 
     return completedChallenges;
 }

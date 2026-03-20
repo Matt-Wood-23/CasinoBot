@@ -4,7 +4,9 @@
   "description": "",
   "main": "main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "author": "matt",
   "license": "ISC",
@@ -12,5 +14,8 @@
     "discord.js": "^14.22.1",
     "dotenv": "^17.2.3",
     "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "jest": "^30.2.0"
   }
 }

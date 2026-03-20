@@ -9,7 +9,7 @@ module.exports = {
     async execute(interaction) {
         try {
             // Create and send leaderboard embed
-            const leaderboardEmbed = await createLeaderboardEmbed(interaction.client);
+            const leaderboardEmbed = await createLeaderboardEmbed(interaction.client, interaction.user.id);
             await interaction.reply({ embeds: [leaderboardEmbed] });
             
         } catch (error) {

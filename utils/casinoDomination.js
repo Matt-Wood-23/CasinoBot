@@ -1,5 +1,6 @@
 const { query } = require('../database/connection');
 const { createGuildEvent, getEvent, getCurrentEvent, joinEvent, getEventLeaderboard } = require('./guildEvents');
+const { convertDatabaseResult } = require('../database/queries/users');
 
 /**
  * Create a new Casino Domination competition
@@ -211,20 +212,6 @@ async function getEventStatistics(eventId) {
     }
 
     return convertDatabaseResult(result.rows[0]);
-}
-
-/**
- * Convert snake_case to camelCase
- */
-function convertDatabaseResult(row) {
-    if (!row) return null;
-
-    const converted = {};
-    for (const key in row) {
-        const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
-        converted[camelKey] = row[key];
-    }
-    return converted;
 }
 
 module.exports = {

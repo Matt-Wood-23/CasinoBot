@@ -1,7 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { getUserMoney, setUserMoney, recordGameResult } = require('../utils/data');
-const { isGamblingBanned, getGamblingBanTime } = require('../database/queries');
 const { validateBet } = require('../utils/vip');
+const { checkGamblingBan, checkCooldown, setCooldown } = require('../utils/guardChecks');
 const PlinkoGame = require('../gameLogic/plinkoGame');
 const { awardGameXP, awardWagerXP } = require('../utils/guildXP');
 const { recordGameToEvents, getEventNotifications } = require('../utils/eventIntegration');
@@ -35,6 +35,12 @@ module.exports = {
 
     async execute(interaction) {
         try {
+            // Cooldown: 3 seconds between drops
+            if (checkCooldown(interaction, 'plinko', 3000)) return;
+
+            // Check if user is gambling banned
+            if (await checkGamblingBan(interaction)) return;
+
             const bet = interaction.options.getInteger('bet');
             const risk = interaction.options.getString('risk') || 'medium';
             const userId = interaction.user.id;
@@ -48,20 +54,6 @@ module.exports = {
                 });
             }
 
-            // Check if user is gambling banned
-            const isBanned = await isGamblingBanned(userId);
-            if (isBanned) {
-                const banUntil = await getGamblingBanTime(userId);
-                const timeLeft = banUntil - Date.now();
-                const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
-                const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
-
-                return await interaction.reply({
-                    content: `🚫 You're banned from gambling after a failed heist!\nBan expires in: ${hoursLeft}h ${minutesLeft}m`,
-                    ephemeral: true
-                });
-            }
-
             const userMoney = await getUserMoney(userId);
 
             // Check if user has enough money
@@ -71,6 +63,9 @@ module.exports = {
                     ephemeral: true
                 });
             }
+
+            // All checks passed — set cooldown
+            setCooldown(interaction, 'plinko', 3000);
 
             // Deduct bet
             await setUserMoney(userId, userMoney - bet);

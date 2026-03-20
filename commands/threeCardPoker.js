@@ -1,5 +1,5 @@
 const { getUserMoney, setUserMoney } = require('../utils/data');
-const { isGamblingBanned, getGamblingBanTime } = require('../database/queries');
+const { checkGamblingBan, checkCooldown, setCooldown } = require('../utils/guardChecks');
 const { createGameEmbed } = require('../utils/embeds');
 const { createButtons } = require('../utils/buttons');
 const { validateBet } = require('../utils/vip');
@@ -32,6 +32,12 @@ module.exports = {
 
     async execute(interaction, activeGames) {
         try {
+            // Cooldown: 3 seconds between games
+            if (checkCooldown(interaction, 'poker', 3000)) return;
+
+            // Check if user is gambling banned
+            if (await checkGamblingBan(interaction)) return;
+
             const anteBet = interaction.options.getInteger('ante');
             const pairPlusBet = interaction.options.getInteger('pairplus') || 0;
             const totalBet = anteBet + pairPlusBet;
@@ -57,20 +63,6 @@ module.exports = {
                 }
             }
 
-            // Check if user is gambling banned
-            const isBanned = await isGamblingBanned(interaction.user.id);
-            if (isBanned) {
-                const banUntil = await getGamblingBanTime(interaction.user.id);
-                const timeLeft = banUntil - Date.now();
-                const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
-                const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
-
-                return await interaction.reply({
-                    content: `🚫 You're banned from gambling after a failed heist!\nBan expires in: ${hoursLeft}h ${minutesLeft}m`,
-                    ephemeral: true
-                });
-            }
-
             // Clean up any existing poker game
             if (activeGames.has(`poker_${interaction.user.id}`)) {
                 activeGames.delete(`poker_${interaction.user.id}`);
@@ -83,6 +75,9 @@ module.exports = {
                     ephemeral: true
                 });
             }
+
+            // All checks passed — set cooldown
+            setCooldown(interaction, 'poker', 3000);
 
             // Deduct bet and create game
             await setUserMoney(interaction.user.id, userMoney - totalBet);

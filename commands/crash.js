@@ -1,8 +1,8 @@
 const { getUserMoney, setUserMoney } = require('../utils/data');
-const { isGamblingBanned, getGamblingBanTime } = require('../database/queries');
 const { createGameEmbed } = require('../utils/embeds');
 const { createButtons } = require('../utils/buttons');
 const { validateBet } = require('../utils/vip');
+const { checkGamblingBan, checkCooldown, setCooldown } = require('../utils/guardChecks');
 const CrashGame = require('../gameLogic/crashGame');
 const { recordGameToEvents, getEventNotifications } = require('../utils/eventIntegration');
 
@@ -23,9 +23,14 @@ module.exports = {
     },
 
     async execute(interaction, activeGames) {
+        const userId = interaction.user.id;
+        const betAmount = interaction.options.getInteger('bet');
+        let moneyDeducted = false;
+        let userMoney = null;
+
         try {
-            const betAmount = interaction.options.getInteger('bet');
-            const userId = interaction.user.id;
+            // Cooldown: 5 seconds between games
+            if (checkCooldown(interaction, 'crash', 5000)) return;
 
             // Validate bet against VIP limits
             const betValidation = await validateBet(userId, betAmount, 10, 10000);
@@ -37,21 +42,10 @@ module.exports = {
             }
 
             // Check if user is gambling banned
-            const isBanned = await isGamblingBanned(userId);
-            if (isBanned) {
-                const banUntil = await getGamblingBanTime(userId);
-                const timeLeft = banUntil - Date.now();
-                const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
-                const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
-
-                return await interaction.reply({
-                    content: `🚫 You're banned from gambling after a failed heist!\nBan expires in: ${hoursLeft}h ${minutesLeft}m`,
-                    ephemeral: true
-                });
-            }
+            if (await checkGamblingBan(interaction)) return;
 
             // Check user has enough money
-            const userMoney = await getUserMoney(userId);
+            userMoney = await getUserMoney(userId);
             if (userMoney < betAmount) {
                 return interaction.reply({
                     content: `❌ You don't have enough money! You have ${userMoney.toLocaleString()}, but need ${betAmount.toLocaleString()}.`,
@@ -59,8 +53,10 @@ module.exports = {
                 });
             }
 
-            // Deduct bet
+            // All checks passed — set cooldown and deduct bet
+            setCooldown(interaction, 'crash', 5000);
             await setUserMoney(userId, userMoney - betAmount);
+            moneyDeducted = true;
 
             // Create game
             const crashGame = new CrashGame(userId, betAmount);
@@ -78,8 +74,20 @@ module.exports = {
         } catch (error) {
             console.error('Error in crash command:', error);
 
+            // Refund the bet if money was already deducted before the error
+            if (moneyDeducted && userMoney !== null) {
+                try {
+                    await setUserMoney(userId, userMoney);
+                    console.log(`Refunded crash bet to user ${userId} due to startup error`);
+                } catch (refundError) {
+                    console.error('Error refunding crash bet:', refundError);
+                }
+            }
+
+            activeGames.delete(`crash_${userId}`);
+
             const errorMessage = {
-                content: '❌ An error occurred while starting the game. Please try again.',
+                content: '❌ An error occurred while starting the game. If your bet was deducted, it has been refunded.',
                 ephemeral: true
             };
 

@@ -1,6 +1,6 @@
 const { getUserMoney, setUserMoney } = require('../utils/data');
-const { isGamblingBanned, getGamblingBanTime } = require('../database/queries');
 const { validateBet } = require('../utils/vip');
+const { checkGamblingBan, checkCooldown, setCooldown } = require('../utils/guardChecks');
 const WarGame = require('../gameLogic/warGame');
 const { createGameEmbed } = require('../utils/embeds');
 const { createButtons } = require('../utils/buttons');
@@ -23,6 +23,12 @@ module.exports = {
 
     async execute(interaction, activeGames) {
         try {
+            // Cooldown: 3 seconds between games
+            if (checkCooldown(interaction, 'war', 3000)) return;
+
+            // Check if user is gambling banned
+            if (await checkGamblingBan(interaction)) return;
+
             const bet = interaction.options.getInteger('bet');
             const userId = interaction.user.id;
 
@@ -35,20 +41,6 @@ module.exports = {
                 });
             }
 
-            // Check if user is gambling banned
-            const isBanned = await isGamblingBanned(userId);
-            if (isBanned) {
-                const banUntil = await getGamblingBanTime(userId);
-                const timeLeft = banUntil - Date.now();
-                const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
-                const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
-
-                return await interaction.reply({
-                    content: `🚫 You're banned from gambling after a failed heist!\nBan expires in: ${hoursLeft}h ${minutesLeft}m`,
-                    ephemeral: true
-                });
-            }
-
             // Check if user has enough money
             const userMoney = await getUserMoney(userId);
             if (userMoney < bet) {
@@ -57,6 +49,9 @@ module.exports = {
                     ephemeral: true
                 });
             }
+
+            // All checks passed — set cooldown
+            setCooldown(interaction, 'war', 3000);
 
             // Deduct bet
             await setUserMoney(userId, userMoney - bet);

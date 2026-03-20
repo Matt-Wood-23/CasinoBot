@@ -1,4 +1,5 @@
 const Deck = require('./deck');
+const { randomUUID } = require('crypto');
 
 class BlackjackGame {
     constructor(channelId, creatorId, bet, isMultiPlayer) {
@@ -26,7 +27,7 @@ class BlackjackGame {
         this.readyPlayers = new Map();
         this.dealerHoleCard = null;
         this.isDealing = false; // Flag to prevent concurrent dealing
-        this.gameId = Date.now() + Math.random(); // Unique game ID
+        this.gameId = randomUUID(); // Unique game ID
     }
 
     // Multi-player methods

@@ -1,7 +1,9 @@
 const { getUserMoney, setUserMoney } = require('../utils/data');
-const { isGamblingBanned, getGamblingBanTime, addToJackpot } = require('../database/queries');
+const { addToJackpot } = require('../database/queries');
 const { createGameEmbed } = require('../utils/embeds');
 const { createButtons } = require('../utils/buttons');
+const { validateBet } = require('../utils/vip');
+const { checkGamblingBan, checkCooldown, setCooldown } = require('../utils/guardChecks');
 const BlackjackGame = require('../gameLogic/blackjackGame');
 const { recordGameToEvents, getEventNotifications } = require('../utils/eventIntegration');
 
@@ -27,22 +29,23 @@ module.exports = {
         let moneyDeducted = false;
 
         try {
+            // Cooldown: 5 seconds between hands
+            if (checkCooldown(interaction, 'blackjack', 5000)) return;
+
             userMoney = await getUserMoney(interaction.user.id);
             const serverId = interaction.guildId;
 
-            // Check if user is gambling banned
-            const isBanned = await isGamblingBanned(interaction.user.id);
-            if (isBanned) {
-                const banUntil = await getGamblingBanTime(interaction.user.id);
-                const timeLeft = banUntil - Date.now();
-                const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
-                const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
-
+            // Validate bet against VIP limits (base max 50,000; Platinum VIP can reach 100,000)
+            const betValidation = await validateBet(interaction.user.id, bet, 10, 50000);
+            if (!betValidation.valid) {
                 return await interaction.reply({
-                    content: `🚫 You're banned from gambling after a failed heist!\nBan expires in: ${hoursLeft}h ${minutesLeft}m`,
+                    content: betValidation.message,
                     ephemeral: true
                 });
             }
+
+            // Check if user is gambling banned
+            if (await checkGamblingBan(interaction)) return;
 
             // Clean up any existing game
             if (activeGames.has(interaction.user.id)) {
@@ -56,6 +59,9 @@ module.exports = {
                     ephemeral: true
                 });
             }
+
+            // All checks passed — set cooldown
+            setCooldown(interaction, 'blackjack', 5000);
 
             // Create new game (before deducting money)
             const game = new BlackjackGame(interaction.channelId, interaction.user.id, bet, false);

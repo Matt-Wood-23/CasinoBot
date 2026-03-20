@@ -44,6 +44,7 @@ module.exports = {
             // Create new bingo game
             const bingoGame = new BingoGame(channelId, entryFee);
             activeGames.set(`bingo_${channelId}`, bingoGame);
+            bingoGame.createdAt = Date.now();
 
             // Create embed
             const embed = new EmbedBuilder()

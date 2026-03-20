@@ -1,5 +1,6 @@
 const { query } = require('../database/connection');
 const { createGuildEvent, getEvent, joinEvent, updateEventScore, recordMemberContribution, getEventLeaderboard } = require('./guildEvents');
+const { convertDatabaseResult } = require('../database/queries/users');
 
 // Boss configurations
 const BOSS_TYPES = {
@@ -316,20 +317,6 @@ async function getPlayerDamageLeaderboard(eventId, guildId = null, limit = 10) {
 
     const result = await query(sql, params);
     return result.rows.map(convertDatabaseResult);
-}
-
-/**
- * Convert snake_case to camelCase
- */
-function convertDatabaseResult(row) {
-    if (!row) return null;
-
-    const converted = {};
-    for (const key in row) {
-        const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
-        converted[camelKey] = row[key];
-    }
-    return converted;
 }
 
 module.exports = {
