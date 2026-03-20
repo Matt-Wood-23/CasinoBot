@@ -1,8 +1,9 @@
 const { getUserMoney, setUserMoney, recordGameResult } = require('../utils/data');
-const { isGamblingBanned, getGamblingBanTime, getServerJackpot, addToJackpot, resetJackpot } = require('../database/queries');
+const { getServerJackpot, addToJackpot, resetJackpot } = require('../database/queries');
 const { createGameEmbed } = require('../utils/embeds');
 const { createButtons } = require('../utils/buttons');
 const { validateBet } = require('../utils/vip');
+const { checkGamblingBan, checkCooldown, setCooldown } = require('../utils/guardChecks');
 const { applyHolidayWinningsBonus } = require('../utils/holidayEvents');
 const SlotsGame = require('../gameLogic/slotsGame');
 const { awardGameXP, awardWagerXP } = require('../utils/guildXP');
@@ -31,6 +32,9 @@ module.exports = {
             const userMoney = await getUserMoney(interaction.user.id);
             const serverId = interaction.guildId;
 
+            // Cooldown: 3 seconds between spins
+            if (checkCooldown(interaction, 'slots', 3000)) return;
+
             // Validate bet against VIP limits
             const betValidation = await validateBet(interaction.user.id, bet, 1, 1000);
             if (!betValidation.valid) {
@@ -41,18 +45,7 @@ module.exports = {
             }
 
             // Check if user is gambling banned
-            const isBanned = await isGamblingBanned(interaction.user.id);
-            if (isBanned) {
-                const banUntil = await getGamblingBanTime(interaction.user.id);
-                const timeLeft = banUntil - Date.now();
-                const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
-                const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
-
-                return await interaction.reply({
-                    content: `🚫 You're banned from gambling after a failed heist!\nBan expires in: ${hoursLeft}h ${minutesLeft}m`,
-                    ephemeral: true
-                });
-            }
+            if (await checkGamblingBan(interaction)) return;
 
             // Check if user has enough money
             if (userMoney < bet) {
@@ -61,6 +54,9 @@ module.exports = {
                     ephemeral: true
                 });
             }
+
+            // All checks passed — set cooldown
+            setCooldown(interaction, 'slots', 3000);
 
             // Contribute to jackpot (0.5% of bet)
             if (serverId) {
@@ -81,8 +77,8 @@ module.exports = {
                 }
             }
 
-            // Deduct bet and create game
-            await setUserMoney(interaction.user.id, userMoney - bet);
+            // Deduct bet, spin, then credit net result in one final write
+            // (avoids leaving user short-changed if an error occurs between two setUserMoney calls)
             const slotsGame = new SlotsGame(interaction.user.id, bet);
 
             // Apply holiday bonus to slot winnings (not jackpot)
@@ -94,7 +90,7 @@ module.exports = {
             // Add jackpot to winnings if won
             const totalWinnings = adjustedSlotWinnings + jackpotAmount;
 
-            // Update user's money with winnings
+            // Single atomic write: deduct bet and credit winnings together
             await setUserMoney(interaction.user.id, userMoney - bet + totalWinnings);
 
             // Record the game result

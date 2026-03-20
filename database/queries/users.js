@@ -97,23 +97,39 @@ async function getUserMoney(userId) {
     }
 }
 
-// Set user money - returns loan deduction info if applicable
+// Set user money - returns loan deduction info if applicable.
+// Uses SELECT FOR UPDATE inside a transaction to prevent concurrent balance corruption.
 async function setUserMoney(userId, amount) {
+    const dbClient = await getClient();
     try {
-        await getUserMoney(userId); // Ensure user exists
+        await dbClient.query('BEGIN');
 
-        const oldMoneyResult = await query(
-            'SELECT money FROM users WHERE discord_id = $1',
+        // Lock the user row to prevent concurrent modifications
+        let userRow = await dbClient.query(
+            'SELECT id, money FROM users WHERE discord_id = $1 FOR UPDATE',
             [userId]
         );
-        const oldMoney = parseInt(oldMoneyResult.rows[0].money);
+
+        if (userRow.rows.length === 0) {
+            // Create user inside this transaction
+            const newUser = await dbClient.query(
+                `INSERT INTO users (discord_id, money, last_daily, last_work, credit_score)
+                 VALUES ($1, 500, 0, 0, 500)
+                 RETURNING id, money`,
+                [userId]
+            );
+            await dbClient.query('INSERT INTO user_statistics (user_id) VALUES ($1)', [newUser.rows[0].id]);
+            await dbClient.query('COMMIT');
+            return { loanDeducted: 0, actualReceived: 0 };
+        }
+
+        const oldMoney = parseInt(userRow.rows[0].money);
         const newMoney = Math.max(0, Math.floor(amount));
 
-        // If money increased (winnings), check for loan deduction
+        // If money increased (winnings), check for active loan deduction
         if (newMoney > oldMoney) {
-            // Check for active loan
-            const loanResult = await query(
-                `SELECT l.id, l.amount_owed FROM loans l
+            const loanResult = await dbClient.query(
+                `SELECT l.id, l.amount_owed, l.repaid_amount FROM loans l
                  JOIN users u ON u.id = l.user_id
                  WHERE u.discord_id = $1 AND l.is_active = TRUE
                  ORDER BY l.id DESC LIMIT 1`,
@@ -123,40 +139,35 @@ async function setUserMoney(userId, amount) {
             if (loanResult.rows.length > 0) {
                 const { deductFromWinnings } = require('../../utils/loanSystem');
                 const winnings = newMoney - oldMoney;
-
                 const { deducted, remaining } = await deductFromWinnings(userId, winnings);
 
                 if (deducted > 0) {
                     const finalMoney = Math.max(0, Math.floor(oldMoney + remaining));
-                    await query(
+                    await dbClient.query(
                         'UPDATE users SET money = $1 WHERE discord_id = $2',
                         [finalMoney, userId]
                     );
+                    await dbClient.query('COMMIT');
                     console.log(`Auto-deducted ${deducted} from ${userId}'s winnings for loan payment`);
-
-                    // Return loan deduction info
-                    return {
-                        loanDeducted: deducted,
-                        actualReceived: remaining
-                    };
+                    return { loanDeducted: deducted, actualReceived: remaining };
                 }
             }
         }
 
-        // Normal money update (no loan deduction)
-        await query(
+        // Normal money update
+        await dbClient.query(
             'UPDATE users SET money = $1 WHERE discord_id = $2',
             [newMoney, userId]
         );
+        await dbClient.query('COMMIT');
 
-        // Return no deduction
-        return {
-            loanDeducted: 0,
-            actualReceived: newMoney - oldMoney
-        };
+        return { loanDeducted: 0, actualReceived: newMoney - oldMoney };
     } catch (error) {
+        await dbClient.query('ROLLBACK');
         console.error('Error setting user money:', error);
         throw error;
+    } finally {
+        dbClient.release();
     }
 }
 
@@ -217,10 +228,10 @@ async function getTimeUntilNextDaily(userId) {
 }
 
 // Get all user data (for leaderboards, etc.)
-async function getAllUserData() {
+async function getAllUserData(limit = null, offset = 0) {
     try {
-        const result = await query(
-            `SELECT
+        const params = [];
+        let sql = `SELECT
                 u.discord_id,
                 u.money,
                 u.last_daily,
@@ -232,8 +243,15 @@ async function getAllUserData() {
                 u.total_gifts_sent,
                 row_to_json(s.*) as statistics
              FROM users u
-             LEFT JOIN user_statistics s ON s.user_id = u.id`
-        );
+             LEFT JOIN user_statistics s ON s.user_id = u.id
+             ORDER BY u.id`;
+
+        if (limit !== null) {
+            params.push(limit, offset);
+            sql += ` LIMIT $1 OFFSET $2`;
+        }
+
+        const result = await query(sql, params);
 
         // Convert to old format: { discordId: userData }
         const userData = {};
@@ -352,9 +370,13 @@ function storeBoostNotification(userId, notification) {
     notifications.messages.push(notification);
 }
 
+// Flat snake_case → camelCase converter for DB row objects (shared across utils)
+const convertDatabaseResult = convertKeysToCamelCase;
+
 module.exports = {
     snakeToCamel,
     convertKeysToCamelCase,
+    convertDatabaseResult,
     loadUserData,
     saveUserData,
     getUserMoney,

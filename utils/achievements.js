@@ -142,97 +142,60 @@ async function unlockAchievement(userId, achievementId) {
     return ACHIEVEMENTS[achievementId];
 }
 
-// Check achievements after a game result (FIXED - now uses database)
+// Check achievements after a game result (batch: loads all unlocked IDs in one query)
 async function checkAchievements(userId, gameData = {}) {
-    const userData = await getUserData(userId);
+    const [userData, existingList] = await Promise.all([
+        getUserData(userId),
+        getUserAchievementsDB(userId)
+    ]);
     if (!userData) return [];
 
+    const unlocked = new Set(existingList.map(a => a.achievementId));
     const stats = userData.statistics || {};
     const newAchievements = [];
 
-    // Check Broke the Bank (win $10k+ in one bet)
-    if (gameData.winnings >= 10000 && !(await hasAchievement(userId, 'broke_the_bank'))) {
-        const achievement = await unlockAchievement(userId, 'broke_the_bank');
-        if (achievement) newAchievements.push(achievement);
-    }
+    const tryUnlock = async (id) => {
+        if (unlocked.has(id)) return;
+        const achievement = await unlockAchievement(userId, id);
+        if (achievement) {
+            unlocked.add(id);
+            newAchievements.push(achievement);
+        }
+    };
 
-    // Check Rock Bottom (lose $50k+ in one bet)
-    if (gameData.winnings <= -50000 && !(await hasAchievement(userId, 'rock_bottom'))) {
-        const achievement = await unlockAchievement(userId, 'rock_bottom');
-        if (achievement) newAchievements.push(achievement);
-    }
-
-    // Check High Roller (wager $100k total)
-    if (stats.totalWagered >= 100000 && !(await hasAchievement(userId, 'high_roller'))) {
-        const achievement = await unlockAchievement(userId, 'high_roller');
-        if (achievement) newAchievements.push(achievement);
-    }
-
-    // Check Millionaire (reach $1M balance)
-    if (userData.money >= 1000000 && !(await hasAchievement(userId, 'millionaire'))) {
-        const achievement = await unlockAchievement(userId, 'millionaire');
-        if (achievement) newAchievements.push(achievement);
-    }
+    if (gameData.winnings >= 10000) await tryUnlock('broke_the_bank');
+    if (gameData.winnings <= -50000) await tryUnlock('rock_bottom');
+    if (stats.totalWagered >= 100000) await tryUnlock('high_roller');
+    if (userData.money >= 1000000) await tryUnlock('millionaire');
 
     // Check win streak achievements
     if (gameData.result === 'win' || gameData.result === 'blackjack') {
         const streakData = await updateWinStreakDB(userId, true);
 
         if (streakData) {
-            // Lucky Streak - 10 wins in a row
-            if (streakData.currentWinStreak >= 10 && !(await hasAchievement(userId, 'lucky_streak'))) {
-                const achievement = await unlockAchievement(userId, 'lucky_streak');
-                if (achievement) newAchievements.push(achievement);
-            }
-
-            // Unstoppable - 25 wins in a row
-            if (streakData.currentWinStreak >= 25 && !(await hasAchievement(userId, 'unstoppable'))) {
-                const achievement = await unlockAchievement(userId, 'unstoppable');
-                if (achievement) newAchievements.push(achievement);
-            }
+            if (streakData.currentWinStreak >= 10) await tryUnlock('lucky_streak');
+            if (streakData.currentWinStreak >= 25) await tryUnlock('unstoppable');
         }
     } else if (gameData.result === 'lose') {
-        // Check for Win Streak Protection boost
         const { hasActiveBoost, consumeBoost } = require('./shop');
         const hasProtection = await hasActiveBoost(userId, 'streak_protection');
 
         if (hasProtection) {
             await consumeBoost(userId, 'streak_protection');
-            // Store notification that protection was used
             const { storeBoostNotification } = require('../database/queries');
             await storeBoostNotification(userId, {
                 type: 'streak_protection',
                 message: '🛡️ Your Win Streak Protection saved your streak from being reset!'
             });
-            // Don't reset streak
         } else {
             await updateWinStreakDB(userId, false);
         }
     }
 
-    // Check Blackjack Master (100 blackjacks)
-    if (stats.blackjacks >= 100 && !(await hasAchievement(userId, 'blackjack_master'))) {
-        const achievement = await unlockAchievement(userId, 'blackjack_master');
-        if (achievement) newAchievements.push(achievement);
-    }
-
-    // Check Slots Champion (500 slots wins)
-    if (stats.slots_wins >= 500 && !(await hasAchievement(userId, 'slots_champion'))) {
-        const achievement = await unlockAchievement(userId, 'slots_champion');
-        if (achievement) newAchievements.push(achievement);
-    }
-
-    // Check Roulette King (100 roulette wins)
-    if (stats.roulette_wins >= 100 && !(await hasAchievement(userId, 'roulette_king'))) {
-        const achievement = await unlockAchievement(userId, 'roulette_king');
-        if (achievement) newAchievements.push(achievement);
-    }
-
-    // Check Generous (send $50k in gifts)
-    if (userData.totalGiftsSent >= 50000 && !(await hasAchievement(userId, 'generous'))) {
-        const achievement = await unlockAchievement(userId, 'generous');
-        if (achievement) newAchievements.push(achievement);
-    }
+    if (stats.blackjacks >= 100) await tryUnlock('blackjack_master');
+    if (stats.slots_wins >= 500) await tryUnlock('slots_champion');
+    if (stats.roulette_wins >= 100) await tryUnlock('roulette_king');
+    if (userData.totalGiftsSent >= 50000) await tryUnlock('generous');
 
     return newAchievements;
 }

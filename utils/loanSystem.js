@@ -116,28 +116,42 @@ async function makePayment(userId, amount) {
     return result;
 }
 
-// Check and update overdue loans (run daily)
+// Check and update overdue loans (run daily), processed in batches of 100
 async function checkOverdueLoans() {
-    const overdueLoans = await getOverdueLoans();
     const overdueUsers = [];
+    const batchSize = 100;
+    let offset = 0;
 
-    for (const loan of overdueLoans) {
-        const daysOverdue = loan.daysOverdue;
+    while (true) {
+        const overdueLoans = await getOverdueLoans(batchSize, offset);
+        if (overdueLoans.length === 0) break;
 
-        // Escalating interest: +5% per day overdue
-        const additionalInterest = Math.floor(loan.principalAmount * 0.05);
+        for (const loan of overdueLoans) {
+            const daysOverdue = loan.daysOverdue;
 
-        // Update loan with additional interest
-        await updateOverdueLoan(loan.userId, additionalInterest, daysOverdue);
+            // Cap interest accrual at 30 days overdue to prevent infinite debt
+            const additionalInterest = daysOverdue <= 30
+                ? Math.floor(loan.principalAmount * 0.05)
+                : 0;
 
-        // Decrease credit score daily
-        await updateCreditScore(loan.userId, -5);
+            if (additionalInterest > 0) {
+                await updateOverdueLoan(loan.userId, additionalInterest, daysOverdue);
+            }
 
-        overdueUsers.push({
-            userId: loan.userId,
-            daysOverdue,
-            totalOwed: loan.totalOwed + additionalInterest
-        });
+            // Decrease credit score daily (also capped at 30 days)
+            if (daysOverdue <= 30) {
+                await updateCreditScore(loan.userId, -5);
+            }
+
+            overdueUsers.push({
+                userId: loan.userId,
+                daysOverdue,
+                totalOwed: loan.totalOwed + additionalInterest
+            });
+        }
+
+        if (overdueLoans.length < batchSize) break;
+        offset += batchSize;
     }
 
     return overdueUsers;
@@ -181,6 +195,30 @@ async function canPlayGames(userId) {
     return { canPlay: true };
 }
 
+// Declare bankruptcy: wipe the active loan at the cost of credit score and all money
+async function declareBankruptcy(userId) {
+    const loan = await getActiveLoan(userId);
+    if (!loan) return { success: false, reason: 'You have no active loan to declare bankruptcy on.' };
+
+    const daysOverdue = Math.max(0, Math.floor((Date.now() - loan.dueDate) / (24 * 60 * 60 * 1000)));
+    if (daysOverdue < 3) {
+        return { success: false, reason: 'You can only declare bankruptcy on a loan that is 3+ days overdue.' };
+    }
+
+    const { setUserMoney } = require('./data');
+
+    // Wipe the loan (mark as defaulted)
+    await markLoanRepaid(userId, false);
+
+    // Seize all money
+    await setUserMoney(userId, 0);
+
+    // Heavy credit score penalty (-200, floored at 0 by DB constraint)
+    await updateCreditScore(userId, -200);
+
+    return { success: true, debtWiped: loan.totalOwed - loan.amountPaid };
+}
+
 module.exports = {
     getMaxLoanAmount,
     getInterestRate,
@@ -190,5 +228,6 @@ module.exports = {
     makePayment,
     checkOverdueLoans,
     deductFromWinnings,
-    canPlayGames
+    canPlayGames,
+    declareBankruptcy
 };

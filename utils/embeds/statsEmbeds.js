@@ -3,7 +3,7 @@ const { getUserData, getAllUserData } = require('../data');
 const { createErrorEmbed, createInfoEmbed } = require('./utilityEmbeds');
 
 // Leaderboard Embeds
-async function createLeaderboardEmbed(client) {
+async function createLeaderboardEmbed(client, requestingUserId = null) {
     const userData = await getAllUserData() || {}; // Ensure userData is an object
 
     const sortedUsers = Object.entries(userData)
@@ -38,6 +38,15 @@ async function createLeaderboardEmbed(client) {
 
     if (sortedUsers.length > 10) {
         leaderboardText += `\n...and ${sortedUsers.length - 10} more players!`;
+    }
+
+    // Show caller's rank if they're outside the top 10
+    if (requestingUserId) {
+        const rank = sortedUsers.findIndex(u => u.userId === requestingUserId);
+        if (rank >= 10) {
+            const { money } = sortedUsers[rank];
+            leaderboardText += `\n---\n**Your Rank: #${rank + 1}** — ${money.toLocaleString()}`;
+        }
     }
 
     embed.setDescription(leaderboardText);

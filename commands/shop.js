@@ -79,7 +79,7 @@ module.exports = {
                 rows.push(row);
 
                 // Discord limit: max 5 action rows
-                if (rows.length >= 2) break;
+                if (rows.length >= 4) break;
             }
 
             await interaction.reply({ embeds: [embed], components: rows });

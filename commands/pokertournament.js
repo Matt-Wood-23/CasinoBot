@@ -57,6 +57,7 @@ module.exports = {
             // Create new tournament
             const tournament = new PokerTournament(channelId, buyIn, maxPlayers);
             activeGames.set(`tournament_${channelId}`, tournament);
+            tournament.createdAt = Date.now();
 
             // Create embed
             const embed = new EmbedBuilder()

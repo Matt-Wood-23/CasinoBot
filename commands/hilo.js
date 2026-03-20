@@ -1,7 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { getUserMoney } = require('../utils/data');
-const { isGamblingBanned, getGamblingBanTime } = require('../database/queries');
 const { recordGameToEvents, getEventNotifications } = require('../utils/eventIntegration');
+const { checkGamblingBan, checkCooldown, setCooldown } = require('../utils/guardChecks');
 
 module.exports = {
     data: {
@@ -12,19 +12,11 @@ module.exports = {
 
     async execute(interaction) {
         try {
-            // Check if user is gambling banned
-            const isBanned = await isGamblingBanned(interaction.user.id);
-            if (isBanned) {
-                const banUntil = await getGamblingBanTime(interaction.user.id);
-                const timeLeft = banUntil - Date.now();
-                const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
-                const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
+            // Cooldown: 3 seconds between games
+            if (checkCooldown(interaction, 'hilo', 3000)) return;
 
-                return await interaction.reply({
-                    content: `🚫 You're banned from gambling after a failed heist!\nBan expires in: ${hoursLeft}h ${minutesLeft}m`,
-                    ephemeral: true
-                });
-            }
+            // Check if user is gambling banned
+            if (await checkGamblingBan(interaction)) return;
 
             const userMoney = await getUserMoney(interaction.user.id);
 
@@ -34,6 +26,9 @@ module.exports = {
                     ephemeral: true
                 });
             }
+
+            // All checks passed — set cooldown
+            setCooldown(interaction, 'hilo', 3000);
 
             // Show betting modal
             const modal = new ModalBuilder()

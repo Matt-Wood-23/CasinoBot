@@ -14,7 +14,7 @@ async function getUserChallengesDB(userId) {
         const dbUserId = userResult.rows[0].id;
 
         const result = await query(
-            `SELECT id, challenge_id, challenge_type, challenge_name, description, progress, target, reward, period, is_completed, is_claimed, started_at, expires_at, completed_at
+            `SELECT id, challenge_id, challenge_type, challenge_name, description, progress, target, reward, period, is_completed, is_claimed, started_at, expires_at, completed_at, metadata
              FROM user_challenges
              WHERE user_id = $1 AND expires_at > $2
              ORDER BY period DESC, started_at ASC`,
@@ -27,6 +27,7 @@ async function getUserChallengesDB(userId) {
         };
 
         for (const row of result.rows) {
+            const meta = row.metadata || {};
             const challenge = {
                 id: row.challenge_id,
                 name: row.challenge_name,
@@ -40,7 +41,7 @@ async function getUserChallengesDB(userId) {
                 expiresAt: parseInt(row.expires_at),
                 startedAt: parseInt(row.started_at),
                 emoji: '🎯', // Default emoji, challenges.js will override this
-                uniqueGamesPlayed: [] // For tracking unique games
+                uniqueGamesPlayed: Array.isArray(meta.gamesPlayed) ? meta.gamesPlayed : []
             };
 
             if (row.completed_at) {
@@ -257,6 +258,63 @@ async function getLastResetTimeDB(userId, period) {
     }
 }
 
+// Batch update progress for multiple challenges in one query
+// updates: Array of { challengeId, progress, metadata? }
+async function batchUpdateChallengeProgressDB(userId, updates) {
+    if (!updates || updates.length === 0) return true;
+    try {
+        const userResult = await query('SELECT id FROM users WHERE discord_id = $1', [userId]);
+        if (userResult.rows.length === 0) return false;
+        const dbUserId = userResult.rows[0].id;
+
+        // Build parameterised VALUES list: ($2,$3,$4),($5,$6,$7)...
+        const params = [dbUserId];
+        const valueClauses = updates.map((u) => {
+            params.push(u.challengeId, u.progress, u.metadata ? JSON.stringify(u.metadata) : null);
+            const p1 = params.length - 2;
+            const p2 = params.length - 1;
+            const p3 = params.length;
+            return `($${p1}::text, $${p2}::int, $${p3}::jsonb)`;
+        });
+
+        await query(
+            `UPDATE user_challenges AS uc
+             SET progress = v.progress,
+                 metadata = COALESCE(v.meta, uc.metadata)
+             FROM (VALUES ${valueClauses.join(',')}) AS v(challenge_id, progress, meta)
+             WHERE uc.user_id = $1
+               AND uc.challenge_id = v.challenge_id
+               AND uc.is_completed = FALSE`,
+            params
+        );
+        return true;
+    } catch (error) {
+        console.error('Error batch updating challenge progress:', error);
+        return false;
+    }
+}
+
+// Batch mark multiple challenges as completed
+async function batchMarkChallengesCompletedDB(userId, challengeIds) {
+    if (!challengeIds || challengeIds.length === 0) return true;
+    try {
+        const userResult = await query('SELECT id FROM users WHERE discord_id = $1', [userId]);
+        if (userResult.rows.length === 0) return false;
+        const dbUserId = userResult.rows[0].id;
+
+        await query(
+            `UPDATE user_challenges
+             SET is_completed = TRUE, completed_at = $1
+             WHERE user_id = $2 AND challenge_id = ANY($3)`,
+            [Date.now(), dbUserId, challengeIds]
+        );
+        return true;
+    } catch (error) {
+        console.error('Error batch marking challenges completed:', error);
+        return false;
+    }
+}
+
 module.exports = {
     getUserChallengesDB,
     createChallengeDB,
@@ -265,5 +323,7 @@ module.exports = {
     markChallengeClaimedDB,
     deleteChallengesDB,
     hasActiveChallengesDB,
-    getLastResetTimeDB
+    getLastResetTimeDB,
+    batchUpdateChallengeProgressDB,
+    batchMarkChallengesCompletedDB
 };

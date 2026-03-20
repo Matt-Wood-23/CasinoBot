@@ -264,12 +264,37 @@ async function dealCardsWithDelay(interaction, message, game, userId, delay = 10
 function cleanupStaleGames() {
     const now = Date.now();
     const timeoutMs = 15 * 60 * 1000; // 15 minutes
-    
+    const multiplayerTimeoutMs = 2 * 60 * 60 * 1000; // 2 hours
+    const completedTimeoutMs = 5 * 60 * 1000; // 5 minutes after completion
+
     for (const [key, game] of activeGames) {
-        if (!game.isMultiPlayer && game.interactionStartTime && 
+        // Single-player cleanup
+        if (!game.isMultiPlayer && game.interactionStartTime &&
             (now - game.interactionStartTime > timeoutMs)) {
             activeGames.delete(key);
             console.log(`Cleaned up stale single-player game for user ${key}`);
+            continue;
+        }
+
+        // Multiplayer bingo cleanup
+        if (key.startsWith('bingo_') && game.createdAt) {
+            const isComplete = game.gameComplete;
+            const age = now - game.createdAt;
+            if ((isComplete && age > completedTimeoutMs) || age > multiplayerTimeoutMs) {
+                activeGames.delete(key);
+                console.log(`Cleaned up stale bingo game in channel ${key}`);
+            }
+            continue;
+        }
+
+        // Multiplayer poker tournament cleanup
+        if (key.startsWith('tournament_') && game.createdAt) {
+            const isComplete = game.tournamentComplete;
+            const age = now - game.createdAt;
+            if ((isComplete && age > completedTimeoutMs) || age > multiplayerTimeoutMs) {
+                activeGames.delete(key);
+                console.log(`Cleaned up stale poker tournament in channel ${key}`);
+            }
         }
     }
 }
@@ -278,6 +303,14 @@ function cleanupStaleGames() {
 client.once('ready', async () => {
     console.log(`${client.user.tag} is online!`);
     await loadUserData();
+
+    // Restore any in-progress lottery from DB (survives bot restarts)
+    try {
+        const { resumeLotteryIfNeeded } = require('./commands/lottery');
+        await resumeLotteryIfNeeded(client);
+    } catch (err) {
+        console.error('Error restoring lottery state on startup:', err);
+    }
 
     // Check for active holiday event
     const { getCurrentHoliday, getHolidayMessage } = require('./utils/holidayEvents');
@@ -288,22 +321,24 @@ client.once('ready', async () => {
         console.log(welcomeMessage);
 
         // Update bot activity to reflect event
-        client.user.setActivity(`${currentHoliday.emoji} ${currentHoliday.name} Event! 🎰`, { type: "PLAYING" });
+        const { ActivityType } = require('discord.js');
+        client.user.setActivity(`${currentHoliday.emoji} ${currentHoliday.name} Event! 🎰`, { type: ActivityType.Playing });
     } else {
         // Set normal activity
-        client.user.setActivity("Blackjack, Poker & Slots 🎰", { type: "PLAYING" });
+        const { ActivityType } = require('discord.js');
+        client.user.setActivity("Blackjack, Poker & Slots 🎰", { type: ActivityType.Playing });
     }
 
     // Register slash commands
     const commands = client.commands.map(command => command.data);
-    
+
     try {
         await client.application.commands.set(commands);
         console.log('Successfully registered application commands.');
     } catch (error) {
         console.error('Error registering commands:', error);
     }
-    
+
     // Start cleanup interval
     setInterval(cleanupStaleGames, 60 * 1000); // Every minute
 });
@@ -434,7 +469,7 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 // Daily loan checker - runs every 24 hours
 setInterval(async () => {
     const { checkOverdueLoans } = require('./utils/loanSystem');
-    const overdueUsers = checkOverdueLoans();
+    const overdueUsers = await checkOverdueLoans();
 
     if (overdueUsers.length > 0) {
         console.log(`Checked loans: ${overdueUsers.length} users with overdue loans`);
@@ -550,6 +585,38 @@ const scheduleWeeklyRewards = () => {
 setInterval(scheduleWeeklyRewards, 60 * 60 * 1000);
 // Also check immediately on startup
 setTimeout(scheduleWeeklyRewards, 5000);
+
+// Season rotation - runs on the 1st of each month at midnight
+const scheduleSeasonRotation = () => {
+    const now = new Date();
+    const dayOfMonth = now.getDate();
+    const hour = now.getHours();
+
+    // Check if it's the 1st of the month between 00:00 and 01:00
+    if (dayOfMonth === 1 && hour === 0) {
+        const { distributeSeasonRewards } = require('./utils/guildRewards');
+        const { endSeasonAndStartNew, getCurrentSeason } = require('./database/queries/guilds');
+
+        getCurrentSeason()
+            .then(season => {
+                if (!season) return;
+                return distributeSeasonRewards(season.id)
+                    .then(result => {
+                        console.log(`Season ${season.id} rewards distributed to ${result.distributions?.length ?? 0} guilds`);
+                        return endSeasonAndStartNew();
+                    });
+            })
+            .then(newSeason => {
+                if (newSeason) console.log(`New guild season started: ${newSeason.id}`);
+            })
+            .catch(error => {
+                console.error('Error rotating guild season:', error);
+            });
+    }
+};
+
+// Check for season rotation every hour
+setInterval(scheduleSeasonRotation, 60 * 60 * 1000);
 
 // Start the bot
 client.login(token);

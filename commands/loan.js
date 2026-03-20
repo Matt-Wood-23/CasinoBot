@@ -6,8 +6,10 @@ const {
     makePayment,
     getMaxLoanAmount,
     getInterestRate,
-    getRepaymentDays
+    getRepaymentDays,
+    declareBankruptcy
 } = require('../utils/loanSystem');
+const { recordTransaction, TransactionTypes } = require('../utils/transactions');
 
 module.exports = {
     data: {
@@ -51,6 +53,11 @@ module.exports = {
                 name: 'history',
                 description: 'View your loan history',
                 type: 1
+            },
+            {
+                name: 'bankruptcy',
+                description: 'Declare bankruptcy to wipe your debt (3+ days overdue only) — costs all money and -200 credit',
+                type: 1
             }
         ]
     },
@@ -67,6 +74,8 @@ module.exports = {
             await handleLoanStatus(interaction, userId);
         } else if (subcommand === 'history') {
             await handleLoanHistory(interaction, userId);
+        } else if (subcommand === 'bankruptcy') {
+            await handleBankruptcy(interaction, userId);
         }
     }
 };
@@ -114,7 +123,17 @@ async function handleLoanRequest(interaction, userId) {
 
     // Give money to user
     const currentMoney = await getUserMoney(userId);
-    await setUserMoney(userId, currentMoney + amount);
+    const newBalance = currentMoney + amount;
+    await setUserMoney(userId, newBalance);
+
+    await recordTransaction({
+        userId,
+        type: TransactionTypes.LOAN_TAKEN,
+        amount,
+        balanceAfter: newBalance,
+        description: `Loan of ${amount.toLocaleString()} approved at ${interestRate}% interest`,
+        metadata: { totalOwed: loan.totalOwed, dueDate: loan.dueDate, interestRate }
+    });
 
     const embed = new EmbedBuilder()
         .setTitle('💰 Loan Approved!')
@@ -163,10 +182,19 @@ async function handleLoanRepayment(interaction, userId) {
     }
 
     // Deduct payment
-    await setUserMoney(userId, userMoney - paymentAmount);
+    const balanceAfterRepay = userMoney - paymentAmount;
+    await setUserMoney(userId, balanceAfterRepay);
 
     // Make payment
     const result = await makePayment(userId, paymentAmount);
+
+    await recordTransaction({
+        userId,
+        type: TransactionTypes.LOAN_REPAYMENT,
+        amount: -paymentAmount,
+        balanceAfter: balanceAfterRepay,
+        description: result?.paidOff ? `Loan fully repaid (${paymentAmount.toLocaleString()})` : `Loan payment of ${paymentAmount.toLocaleString()}`
+    });
 
     const embed = new EmbedBuilder()
         .setTitle(result.paidOff ? '✅ Loan Paid Off!' : '💵 Payment Made')
@@ -184,6 +212,31 @@ async function handleLoanRepayment(interaction, userId) {
     }
 
     embed.setTimestamp();
+    await interaction.reply({ embeds: [embed] });
+}
+
+async function handleBankruptcy(interaction, userId) {
+    const result = await declareBankruptcy(userId);
+
+    if (!result.success) {
+        return interaction.reply({
+            content: `❌ ${result.reason}`,
+            ephemeral: true
+        });
+    }
+
+    const embed = new EmbedBuilder()
+        .setTitle('🏦 Bankruptcy Declared')
+        .setColor('#FF0000')
+        .setDescription(
+            `Your debt of **${result.debtWiped.toLocaleString()}** has been wiped.\n\n` +
+            `**Consequences:**\n` +
+            `• All your money has been seized\n` +
+            `• Your credit score has been reduced by 200\n\n` +
+            `You may take out small loans again once your credit score allows it.`
+        )
+        .setTimestamp();
+
     await interaction.reply({ embeds: [embed] });
 }
 

@@ -1,5 +1,6 @@
 const { query } = require('../database/connection');
 const { createGuildEvent, getEvent, getCurrentEvent, joinEvent, recordMemberContribution } = require('./guildEvents');
+const { convertDatabaseResult } = require('../database/queries/users');
 
 // Heist Festival bonuses
 const FESTIVAL_BONUSES = {
@@ -251,20 +252,6 @@ async function getEventStatistics(eventId) {
         : '0.0%';
 
     return stats;
-}
-
-/**
- * Convert snake_case to camelCase
- */
-function convertDatabaseResult(row) {
-    if (!row) return null;
-
-    const converted = {};
-    for (const key in row) {
-        const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
-        converted[camelKey] = row[key];
-    }
-    return converted;
 }
 
 module.exports = {

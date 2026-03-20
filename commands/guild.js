@@ -812,7 +812,7 @@ async function showGuildShop(interaction, userId) {
     }
 
     return interaction.reply({
-        content: '🏪 **Guild Shop Coming Soon!**\n\nThe guild shop will allow you to spend contribution points on exclusive items, boosts, and cosmetics!\n\nEarn contribution points by:\n• Playing games\n• Wagering money\n• Donating to the treasury\n• Completing challenges\n• Participating in heists',
+        content: '🏪 **Guild Shop is available via `/guild-shop`!**\n\nUse `/guild-shop browse` to view items and spend your contribution points on exclusive boosts and cosmetics.',
         flags: [MessageFlags.Ephemeral]
     });
 }

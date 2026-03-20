@@ -2,7 +2,7 @@ const { getUserMoney, setUserMoney, getUserProperty, setUserProperty, getUserIte
 const { EmbedBuilder } = require('discord.js');
 
 async function handleShopPurchase(interaction, userId) {
-    const { purchaseItem, getShopItem } = require('../utils/shop');
+    const { purchaseItem, getShopItem } = require('../../utils/shop');
 
     try {
         const itemId = interaction.customId.replace('shop_buy_', '');
@@ -39,8 +39,8 @@ async function handleShopPurchase(interaction, userId) {
 }
 
 async function handlePropertyPurchase(interaction, userId) {
-    const { purchaseProperty } = require('../utils/properties');
-    const { getUserMoney } = require('../utils/data');
+    const { purchaseProperty } = require('../../utils/properties');
+    const { getUserMoney } = require('../../utils/data');
 
     try {
         await interaction.deferReply();
@@ -114,7 +114,7 @@ async function handlePropertyPurchase(interaction, userId) {
 }
 
 async function handleUseItem(interaction, userId) {
-    const { useItem, getUserInventory, SHOP_ITEMS } = require('../utils/shop');
+    const { useItem, getUserInventory, SHOP_ITEMS } = require('../../utils/shop');
 
     try {
         const itemType = interaction.customId.replace('use_item_', '');
@@ -165,8 +165,8 @@ async function handleUseItem(interaction, userId) {
 }
 
 async function handleVIPPurchase(interaction, userId) {
-    const { purchaseVIP, getVIPTierById } = require('../utils/vip');
-    const { getUserMoney } = require('../utils/data');
+    const { purchaseVIP, getVIPTierById } = require('../../utils/vip');
+    const { getUserMoney } = require('../../utils/data');
 
     try {
         const tierId = interaction.customId.replace('vip_buy_', '');

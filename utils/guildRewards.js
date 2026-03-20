@@ -4,6 +4,7 @@
  */
 
 const { query } = require('../database/connection');
+const { convertDatabaseResult } = require('../database/queries/users');
 
 // Reward tiers for season-end
 const SEASON_REWARDS = {
@@ -320,20 +321,6 @@ async function getGuildXPInPeriod(guildId, startTime, endTime) {
     }
 
     return parseInt(result.rows[0].total_xp) || 0;
-}
-
-/**
- * Convert snake_case to camelCase
- */
-function convertDatabaseResult(row) {
-    if (!row) return null;
-
-    const converted = {};
-    for (const key in row) {
-        const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
-        converted[camelKey] = row[key];
-    }
-    return converted;
 }
 
 module.exports = {

@@ -196,15 +196,17 @@ async function updateOverdueLoan(userId, additionalAmount, daysOverdue) {
     }
 }
 
-// Get all overdue loans
-async function getOverdueLoans() {
+// Get overdue loans with pagination
+async function getOverdueLoans(limit = 100, offset = 0) {
     try {
         const result = await query(
             `SELECT u.discord_id, l.id, l.amount, l.amount_owed, l.due_date, l.repaid_amount, l.taken_at
              FROM loans l
              JOIN users u ON u.id = l.user_id
-             WHERE l.is_active = TRUE AND l.due_date < $1`,
-            [Date.now()]
+             WHERE l.is_active = TRUE AND l.due_date < $1
+             ORDER BY l.due_date ASC
+             LIMIT $2 OFFSET $3`,
+            [Date.now(), limit, offset]
         );
 
         return result.rows.map(row => ({
