@@ -9,5 +9,9 @@ config.js
 # Runtime data
 blackjack_data.json
 
-# Claude Code local settings
-utils/CLAUDE.md
+# Documentation / notes (keep README.md only)
+*.md
+!README.md
+markdown/
+main.js
+IMG_3001.jpg

@@ -15,11 +15,11 @@ module.exports = {
             },
             {
                 name: 'amount',
-                description: 'Amount to send (10-1000)',
+                description: 'Amount to send (10-10000)',
                 type: 4,
                 required: true,
                 min_value: 10,
-                max_value: 1000
+                max_value: 10000
             },
             {
                 name: 'message',

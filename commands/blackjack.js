@@ -14,11 +14,11 @@ module.exports = {
         options: [
             {
                 name: 'bet',
-                description: 'Amount to bet (10-500,000)',
+                description: 'Amount to bet (10-100,000)',
                 type: 4,
                 required: true,
                 min_value: 10,
-                max_value: 500000
+                max_value: 100000
             }
         ]
     },

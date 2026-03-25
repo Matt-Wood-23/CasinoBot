@@ -1,7 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 
 async function handleGuildHeistJoin(interaction, userId) {
-    const { joinGuildHeist, getActiveGuildHeist } = require('../utils/heist');
+    const { joinGuildHeist, getActiveGuildHeist } = require('../../utils/heist');
 
     try {
         const guildId = interaction.customId.replace('guildheist_join_', '');
