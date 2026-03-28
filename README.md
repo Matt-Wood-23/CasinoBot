@@ -2,6 +2,23 @@
 
 A feature-rich Discord casino bot with 16 games, guilds, achievements, and an extensive economy system. Built with Discord.js v14 and PostgreSQL.
 
+## Screenshots
+
+### Commands
+![Command list](docs/screenshots/command-list.png)
+
+### Games
+![Blackjack and Three Card Poker](docs/screenshots/games-blackjack-poker.png)
+
+### Economy
+![Property income and VIP membership](docs/screenshots/economy-property-vip.png)
+
+### Statistics
+![Player statistics](docs/screenshots/player-statistics.png)
+
+### Guild System
+![Guild heist success and work](docs/screenshots/guild-heist-work.png)
+
 ## Features
 
 ### Games
