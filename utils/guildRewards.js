@@ -58,34 +58,44 @@ const WEEKLY_REWARDS = {
  * Get top guilds by XP for a time period
  */
 async function getTopGuildsByXP(limit = 10, since = null) {
-    let sql = `
-        SELECT
-            g.id as guild_id,
-            g.name as guild_name,
-            g.level,
-            gxp.total_xp,
-            gxp.current_level_xp,
-            COUNT(DISTINCT gm.user_id) as member_count
-        FROM guilds g
-        JOIN guild_xp gxp ON g.id = gxp.guild_id
-        LEFT JOIN guild_members gm ON g.id = gm.guild_id
-    `;
-
-    const params = [];
-    let paramCount = 1;
+    let sql, params;
 
     if (since) {
-        sql += ` WHERE gxp.updated_at >= $${paramCount}`;
-        params.push(since);
-        paramCount++;
+        // Weekly: rank by XP earned in the time period using the experience log
+        sql = `
+            SELECT
+                g.id as guild_id,
+                g.name as guild_name,
+                g.level,
+                g.experience as total_xp,
+                COALESCE(SUM(gel.amount), 0) as period_xp,
+                COUNT(DISTINCT gm.user_id) as member_count
+            FROM guilds g
+            JOIN guild_experience_log gel ON g.id = gel.guild_id AND gel.timestamp >= $1
+            LEFT JOIN guild_members gm ON g.id = gm.guild_id
+            GROUP BY g.id, g.name, g.level, g.experience
+            ORDER BY period_xp DESC
+            LIMIT $2
+        `;
+        params = [since, limit];
+    } else {
+        // Season: rank by total XP
+        sql = `
+            SELECT
+                g.id as guild_id,
+                g.name as guild_name,
+                g.level,
+                g.experience as total_xp,
+                COUNT(DISTINCT gm.user_id) as member_count
+            FROM guilds g
+            LEFT JOIN guild_members gm ON g.id = gm.guild_id
+            WHERE g.experience > 0
+            GROUP BY g.id, g.name, g.level, g.experience
+            ORDER BY g.experience DESC
+            LIMIT $1
+        `;
+        params = [limit];
     }
-
-    sql += `
-        GROUP BY g.id, g.name, g.level, gxp.total_xp, gxp.current_level_xp
-        ORDER BY gxp.total_xp DESC
-        LIMIT $${paramCount}
-    `;
-    params.push(limit);
 
     const result = await query(sql, params);
     return result.rows.map(convertDatabaseResult);

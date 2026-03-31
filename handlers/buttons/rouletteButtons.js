@@ -3,7 +3,7 @@ const { createGameEmbed } = require('../../utils/embeds');
 const { createButtons } = require('../../utils/buttons');
 const { applyHolidayWinningsBonus } = require('../../utils/holidayEvents');
 const { awardGameXP, awardWagerXP } = require('../../utils/guildXP');
-const { recordGameToEvents, getEventNotifications } = require('../../utils/eventIntegration');
+const { recordGameToEvents } = require('../../utils/eventIntegration');
 const { ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const RouletteGame = require('../../gameLogic/rouletteGame');
 
@@ -178,18 +178,6 @@ async function handleRouletteButtons(interaction, activeGames, userId, client, r
         await interaction.deferUpdate();
         const embed = await createGameEmbed(rouletteGame, userId, client);
         const buttons = await createButtons(rouletteGame, userId, client);
-
-        // Add event notifications to embed
-            if (eventResults) {
-                const notifications = getEventNotifications(eventResults);
-                if (notifications.length > 0) {
-                    embed.addFields({
-                        name: '🎉 Guild Event Progress',
-                        value: notifications.join('\n'),
-                        inline: false
-                    });
-                }
-            }
 
         await interaction.editReply({
             embeds: [embed],

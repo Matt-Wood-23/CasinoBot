@@ -68,10 +68,11 @@ module.exports = {
                 activeGames.delete(`poker_${interaction.user.id}`);
             }
 
-            // Check if user has enough money
-            if (userMoney < totalBet) {
+            // Check if user has enough money for ante + potential play bet (play bet = ante)
+            const requiredTotal = anteBet * 2 + pairPlusBet;
+            if (userMoney < requiredTotal) {
                 return await interaction.reply({
-                    content: `❌ You don't have enough money! You have ${userMoney.toLocaleString()}, but need ${totalBet.toLocaleString()} (Ante: ${anteBet.toLocaleString()}${pairPlusBet > 0 ? `, Pair Plus: ${pairPlusBet.toLocaleString()}` : ''}).`,
+                    content: `❌ You don't have enough money! You have ${userMoney.toLocaleString()}, but need ${requiredTotal.toLocaleString()} (Ante: ${anteBet.toLocaleString()} × 2 for play bet${pairPlusBet > 0 ? `, Pair Plus: ${pairPlusBet.toLocaleString()}` : ''}).`,
                     ephemeral: true
                 });
             }
