@@ -233,4 +233,74 @@ async function handleVIPPurchase(interaction, userId) {
 }
 
 
-module.exports = { handleShopPurchase, handlePropertyPurchase, handleUseItem, handleVIPPurchase };
+async function handlePropertyUpgrade(interaction, userId) {
+    const { upgradeProperty } = require('../../utils/properties');
+    const { getUserMoney } = require('../../utils/data');
+
+    try {
+        await interaction.deferReply();
+
+        const propertyId = interaction.customId.replace('property_upgrade_', '');
+        const result = await upgradeProperty(userId, propertyId);
+
+        if (!result.success) {
+            const errorEmbed = new EmbedBuilder()
+                .setColor('#FF0000')
+                .setTitle('❌ Upgrade Failed')
+                .setDescription(result.message)
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [errorEmbed] });
+        }
+
+        const property = result.property;
+        const upgrade = result.upgrade;
+        const currentMoney = await getUserMoney(userId);
+
+        const embed = new EmbedBuilder()
+            .setColor('#FFD700')
+            .setTitle('⭐ Property Upgraded!')
+            .setDescription(`${property.emoji} **${property.name}**\nUpgraded to Level ${result.newLevel}`)
+            .addFields(
+                {
+                    name: '💰 Upgrade Cost',
+                    value: `$${upgrade.cost.toLocaleString()}`,
+                    inline: true
+                },
+                {
+                    name: '📈 Income Boost',
+                    value: `+$${upgrade.incomeBoost.toLocaleString()}/day`,
+                    inline: true
+                },
+                {
+                    name: '🔧 Maintenance Increase',
+                    value: `+$${upgrade.maintenanceIncrease.toLocaleString()}/day`,
+                    inline: true
+                },
+                {
+                    name: '💳 New Balance',
+                    value: `$${currentMoney.toLocaleString()}`,
+                    inline: true
+                }
+            )
+            .setTimestamp();
+
+        await interaction.editReply({ embeds: [embed] });
+
+    } catch (error) {
+        console.error('Error handling property upgrade:', error);
+
+        const errorMessage = {
+            content: '❌ An error occurred while processing your upgrade. Please try again.',
+            ephemeral: true
+        };
+
+        if (interaction.deferred) {
+            await interaction.editReply(errorMessage);
+        } else {
+            await interaction.reply(errorMessage);
+        }
+    }
+}
+
+module.exports = { handleShopPurchase, handlePropertyPurchase, handleUseItem, handleVIPPurchase, handlePropertyUpgrade };

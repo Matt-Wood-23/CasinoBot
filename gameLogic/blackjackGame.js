@@ -292,9 +292,12 @@ class BlackjackGame {
     }
 
     dealerPlay() {
+        // First call: only reveal the hole card and let the animation handle drawing
         if (this.dealerHoleCard) {
             this.dealer.cards.push(this.dealerHoleCard);
             this.dealerHoleCard = null;
+            this.dealer.isDrawing = true;
+            return; // Let animateDealerDrawing show the reveal, then draw with delays
         }
 
         const allHandsBusted = Array.from(this.players.values()).every(player =>
@@ -353,20 +356,22 @@ class BlackjackGame {
         const hand = player.hands[handIndex];
         const playerScore = this.calculateScore(hand.cards);
         const dealerScore = this.getDealerScore(true);
-        
+
         if (playerScore > 21) return 'lose';
-        if (dealerScore > 21) return 'win';
-        
+
+        // Check blackjack before dealer bust so natural BJ always pays 3:2
         if (playerScore === 21 && hand.cards.length === 2) {
             const hasAce = hand.cards.some(card => card.value === 14);
             const hasTen = hand.cards.some(card => card.getBlackjackValue() === 10);
-            
+
             if (hasAce && hasTen) {
                 if (dealerScore === 21 && this.getDealerCards(true).length === 2) return 'push';
                 return 'blackjack';
             }
         }
-        
+
+        if (dealerScore > 21) return 'win';
+
         if (playerScore > dealerScore) return 'win';
         if (playerScore < dealerScore) return 'lose';
         return 'push';

@@ -12,7 +12,7 @@ const { handleRouletteButtons } = require('./buttons/rouletteButtons');
 const { handleTournamentButtons } = require('./buttons/tournamentButtons');
 const { handleBlackjackButtons, updateBettingDisplay, startTurnTimer, animateDealerDrawing } = require('./buttons/blackjackButtons');
 const { handleTableButtons } = require('./buttons/tableButtons');
-const { handleShopPurchase, handlePropertyPurchase, handleUseItem, handleVIPPurchase } = require('./buttons/shopButtons');
+const { handleShopPurchase, handlePropertyPurchase, handleUseItem, handleVIPPurchase, handlePropertyUpgrade } = require('./buttons/shopButtons');
 const { handleGuildHeistJoin } = require('./buttons/guildButtons');
 const { handleClaimChallengeRewards } = require('./buttons/challengeButtons');
 
@@ -102,6 +102,12 @@ async function handleButtonInteraction(interaction, activeGames, client, dealCar
     // Handle property purchase buttons
     if (customId.startsWith('property_buy_')) {
         await handlePropertyPurchase(interaction, user.id);
+        return;
+    }
+
+    // Handle property upgrade buttons
+    if (customId.startsWith('property_upgrade_')) {
+        await handlePropertyUpgrade(interaction, user.id);
         return;
     }
 

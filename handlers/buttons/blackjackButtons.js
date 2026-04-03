@@ -435,6 +435,18 @@ async function animateDealerDrawing(game, interaction, userId, client) {
     const delay = 1000; // 1 second between each dealer card
     const currentGameId = game.gameId; // Store gameId to detect if game is replaced
 
+    // Show hole card reveal immediately before any drawing begins
+    const revealEmbed = await createGameEmbed(game, userId, client);
+    const revealButtons = await createButtons(game, userId, client);
+    const revealComponents = revealButtons
+        ? (Array.isArray(revealButtons) ? revealButtons : [revealButtons])
+        : [];
+    try {
+        await interaction.message.edit({ embeds: [revealEmbed], components: revealComponents });
+    } catch (error) {
+        console.error('Error updating game message on hole card reveal:', error);
+    }
+
     while (game.shouldDealerContinue()) {
         // Check if game was replaced during animation
         if (game.gameId !== currentGameId) {

@@ -90,44 +90,85 @@ async function showOwnedProperties(interaction, userId) {
             value: 'Use `/properties shop` to browse available properties!',
             inline: false
         });
-    } else {
-        let totalIncome = 0;
-        let totalMaintenance = 0;
-
-        const propertyText = ownedProperties.map(prop => {
-            totalIncome += prop.dailyIncome;
-            totalMaintenance += prop.dailyMaintenance;
-
-            const upgradeInfo = prop.upgradeLevel > 0 ? ` (⭐ Level ${prop.upgradeLevel})` : '';
-            return `${prop.emoji} **${prop.name}**${upgradeInfo}\n` +
-                `Daily Income: $${prop.dailyIncome.toLocaleString()} | Maintenance: $${prop.dailyMaintenance.toLocaleString()}\n` +
-                `Net: $${prop.netIncome.toLocaleString()}/day`;
-        }).join('\n\n');
-
-        embed.setDescription(propertyText);
-
-        embed.addFields(
-            {
-                name: '💰 Total Daily Income',
-                value: `$${totalIncome.toLocaleString()}`,
-                inline: true
-            },
-            {
-                name: '🔧 Total Maintenance',
-                value: `$${totalMaintenance.toLocaleString()}`,
-                inline: true
-            },
-            {
-                name: '💵 Net Daily Profit',
-                value: `$${(totalIncome - totalMaintenance).toLocaleString()}`,
-                inline: true
-            }
-        );
-
-        embed.setFooter({ text: 'Use /collect to claim your daily property income!' });
+        return interaction.reply({ embeds: [embed] });
     }
 
-    await interaction.reply({ embeds: [embed] });
+    let totalIncome = 0;
+    let totalMaintenance = 0;
+    const userMoney = await getUserMoney(userId);
+
+    const propertyText = ownedProperties.map(prop => {
+        totalIncome += prop.dailyIncome;
+        totalMaintenance += prop.dailyMaintenance;
+
+        const maxLevel = prop.upgrades.length;
+        const upgradeInfo = prop.upgradeLevel > 0 ? ` (⭐ Level ${prop.upgradeLevel}/${maxLevel})` : ` (Level 0/${maxLevel})`;
+        const nextUpgrade = prop.upgradeLevel < maxLevel ? prop.upgrades[prop.upgradeLevel] : null;
+        const upgradeHint = nextUpgrade
+            ? `Next upgrade: $${nextUpgrade.cost.toLocaleString()} → +$${nextUpgrade.incomeBoost.toLocaleString()}/day`
+            : '✅ Fully upgraded';
+
+        return `${prop.emoji} **${prop.name}**${upgradeInfo}\n` +
+            `Daily Income: $${prop.dailyIncome.toLocaleString()} | Maintenance: $${prop.dailyMaintenance.toLocaleString()}\n` +
+            `Net: $${prop.netIncome.toLocaleString()}/day | ${upgradeHint}`;
+    }).join('\n\n');
+
+    embed.setDescription(propertyText);
+
+    embed.addFields(
+        {
+            name: '💰 Total Daily Income',
+            value: `$${totalIncome.toLocaleString()}`,
+            inline: true
+        },
+        {
+            name: '🔧 Total Maintenance',
+            value: `$${totalMaintenance.toLocaleString()}`,
+            inline: true
+        },
+        {
+            name: '💵 Net Daily Profit',
+            value: `$${(totalIncome - totalMaintenance).toLocaleString()}`,
+            inline: true
+        }
+    );
+
+    embed.setFooter({ text: `Balance: $${userMoney.toLocaleString()} | Use /collect to claim daily income!` });
+
+    // Build upgrade buttons (one per property)
+    const rows = [];
+    const itemsPerRow = 4;
+
+    for (let i = 0; i < ownedProperties.length; i += itemsPerRow) {
+        const row = new ActionRowBuilder();
+        const chunk = ownedProperties.slice(i, i + itemsPerRow);
+
+        for (const prop of chunk) {
+            const maxLevel = prop.upgrades.length;
+            const isMaxed = prop.upgradeLevel >= maxLevel;
+            const nextUpgrade = isMaxed ? null : prop.upgrades[prop.upgradeLevel];
+            const canAfford = nextUpgrade && userMoney >= nextUpgrade.cost;
+
+            const costLabel = isMaxed ? 'Max' : (nextUpgrade.cost >= 1000000
+                ? `$${(nextUpgrade.cost / 1000000).toFixed(1)}M`
+                : nextUpgrade.cost >= 1000
+                    ? `$${(nextUpgrade.cost / 1000)}k`
+                    : `$${nextUpgrade.cost}`);
+
+            row.addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`property_upgrade_${prop.id}`)
+                    .setLabel(`${prop.emoji} Upgrade (${costLabel})`)
+                    .setStyle(isMaxed ? ButtonStyle.Secondary : (canAfford ? ButtonStyle.Primary : ButtonStyle.Secondary))
+                    .setDisabled(isMaxed || !canAfford)
+            );
+        }
+
+        rows.push(row);
+        if (rows.length >= 5) break;
+    }
+
+    await interaction.reply({ embeds: [embed], components: rows });
 }
 
 async function showPropertyShop(interaction, userId) {
