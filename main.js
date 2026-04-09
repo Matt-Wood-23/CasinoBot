@@ -85,10 +85,11 @@ async function dealCardsWithDelay(interaction, message, game, userId, delay = 10
         }
         
         try {
-            await message.edit({
-                embeds: [embed],
-                components: components
-            });
+            if (message) {
+                await message.edit({ embeds: [embed], components: components });
+            } else {
+                await interaction.editReply({ embeds: [embed], components: components });
+            }
         } catch (error) {
             console.error('Error updating game message during dealing:', error);
 
@@ -126,7 +127,50 @@ async function dealCardsWithDelay(interaction, message, game, userId, delay = 10
         game.dealNextCard();
 
         if (game.gameOver) {
-            if (game.isMultiPlayer) {
+            if (game.isDuel) {
+                // PvP Duel payout logic
+                const players = Array.from(game.players.keys());
+                if (players.length === 2) {
+                    const playerAId = players[0];
+                    const playerBId = players[1];
+
+                    // Calculate PvP winner using the new method
+                    const pvpResult = game.calculatePvPWinner(playerAId, playerBId);
+
+                    if (pvpResult.isPush) {
+                        // Push - refund both players
+                        const currentMoneyA = await getUserMoney(playerAId);
+                        await setUserMoney(playerAId, currentMoneyA + game.getTotalBet(playerAId));
+
+                        const currentMoneyB = await getUserMoney(playerBId);
+                        await setUserMoney(playerBId, currentMoneyB + game.getTotalBet(playerBId));
+
+                        // Record results for both
+                        await recordGameResult(playerAId, 'blackjack', game.getTotalBet(playerAId), 0, 'push', { pvpDuel: true });
+                        await recordGameResult(playerBId, 'blackjack', game.getTotalBet(playerBId), 0, 'push', { pvpDuel: true });
+                        game.pvpResult = { isPush: true };
+                    } else {
+                        // Winner takes the pot
+                        const winnerId = pvpResult.winnerId;
+                        const loserId = winnerId === playerAId ? playerBId : playerAId;
+
+                        // Give winner the pot amount
+                        const currentMoneyWinner = await getUserMoney(winnerId);
+                        const potAmount = pvpResult.amount;
+                        await setUserMoney(winnerId, currentMoneyWinner + potAmount);
+
+                        // Record results
+                        const winnerBet = game.getTotalBet(winnerId);
+                        const loserBet = game.getTotalBet(loserId);
+                        const winnerWinnings = potAmount - winnerBet;
+
+                        await recordGameResult(winnerId, 'blackjack', winnerBet, winnerWinnings, 'win', { pvpDuel: true, potWon: potAmount });
+                        await recordGameResult(loserId, 'blackjack', loserBet, -loserBet, 'lose', { pvpDuel: true });
+
+                        game.pvpResult = { winnerId, amount: potAmount };
+                    }
+                }
+            } else if (game.isMultiPlayer) {
                 let jackpotAwarded = false; // Track if jackpot was already awarded
                 game.loanDeductions = game.loanDeductions || new Map(); // Store loan deductions per player
 
@@ -247,10 +291,11 @@ async function dealCardsWithDelay(interaction, message, game, userId, delay = 10
         }
         
         try {
-            await message.edit({
-                embeds: [embed],
-                components: components
-            });
+            if (message) {
+                await message.edit({ embeds: [embed], components: components });
+            } else {
+                await interaction.editReply({ embeds: [embed], components: components });
+            }
         } catch (error) {
             console.error('Error updating game message:', error);
             game.isDealing = false;
@@ -294,6 +339,25 @@ function cleanupStaleGames() {
             if ((isComplete && age > completedTimeoutMs) || age > multiplayerTimeoutMs) {
                 activeGames.delete(key);
                 console.log(`Cleaned up stale poker tournament in channel ${key}`);
+            }
+        }
+
+        // PvP duel game cleanup
+        if (key.startsWith('duel_game_') && game.gameId) {
+            const isComplete = game.gameOver;
+            const age = now - game.interactionStartTime;
+            if ((isComplete && age > completedTimeoutMs) || age > multiplayerTimeoutMs) {
+                activeGames.delete(key);
+                console.log(`Cleaned up stale duel game ${key}`);
+            }
+        }
+
+        // Duel challenge cleanup (expired challenges)
+        if (key.startsWith('duel_challenge_') && game.createdAt) {
+            const age = now - game.createdAt;
+            if (age > 5 * 60 * 1000) { // 5 minutes
+                activeGames.delete(key);
+                console.log(`Cleaned up expired duel challenge ${key}`);
             }
         }
     }

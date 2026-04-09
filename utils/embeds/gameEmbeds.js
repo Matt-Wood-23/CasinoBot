@@ -193,7 +193,10 @@ async function createBlackjackEmbed(game, userId, client) {
 
     let embed;
 
-    if (game.isMultiPlayer) {
+    if (game.isDuel) {
+        // PvP Duel - use multi-player embed but with PvP styling
+        return await createPvPBlackjackEmbed(game, userId, client);
+    } else if (game.isMultiPlayer) {
         embed = new EmbedBuilder()
             .setTitle('🃏 Blackjack Table')
             .setColor(game.gameOver ? '#FFD700' : '#0099FF');
@@ -406,6 +409,109 @@ async function createMultiPlayerGameEmbed(game, userId, client) {
             value: `Waiting for ${username}'s action...`,
             inline: false
         });
+    }
+
+    return embed;
+}
+
+async function createPvPBlackjackEmbed(game, userId, client) {
+    const embed = new EmbedBuilder()
+        .setTitle('⚔️ PvP Blackjack Duel')
+        .setColor(game.gameOver ? (game.pvpResult?.isPush ? '#FFFF00' : '#FFD700') : '#FFA500');
+
+    // Add both players' hands
+    for (const [playerId, player] of game.players) {
+        if (!player.hands || player.hands.length === 0) continue;
+
+        let username = 'Unknown User';
+        try {
+            const user = client.users.cache.get(playerId) || await client.users.fetch(playerId);
+            username = user.username;
+        } catch (error) {
+            console.error(`Error fetching user ${playerId}:`, error);
+        }
+
+        for (let i = 0; i < player.hands.length; i++) {
+            const hand = player.hands[i];
+            const visibleCards = game.dealingPhase >= 2 ? hand.cards :
+                (game.dealingPhase === 1 ? [hand.cards[0]] : []);
+            const handScore = game.dealingPhase >= 2 ? game.calculateScore(hand.cards) :
+                (game.dealingPhase === 1 ? game.calculateScore([hand.cards[0]]) : 0);
+            const handName = `⚔️ ${username}${i > 0 ? ` - Hand ${i + 1}` : ''}`;
+
+            let handValue = visibleCards.length > 0 ?
+                `${visibleCards.map(card => card.getName()).join(' ')} (${handScore})` :
+                'Waiting for cards...';
+
+            if (game.dealingPhase >= 2) {
+                if (handScore > 21) handValue += ' **BUST**';
+                else if (handScore === 21 && hand.cards.length === 2) handValue += ' **BLACKJACK**';
+            }
+
+            embed.addFields({
+                name: handName,
+                value: `${handValue}\n💰 Bet: ${hand.bet.toLocaleString()}${playerId === userId ? ' (You)' : ''}`,
+                inline: true
+            });
+        }
+    }
+
+    if (game.gameOver) {
+        if (game.pvpResult?.isPush) {
+            embed.setDescription('🤝 **PUSH!** Both players receive their bets back.');
+        } else if (game.pvpResult?.winnerId) {
+            try {
+                const winner = await client.users.fetch(game.pvpResult.winnerId);
+                embed.setDescription(`🏆 **${winner.username} WINS THE DUEL!**\n\nPrize: **${game.pvpResult.amount.toLocaleString()}**`);
+            } catch (error) {
+                embed.setDescription(`🏆 **Winner takes the pot! (${game.pvpResult.amount.toLocaleString()})**`);
+            }
+        } else {
+            embed.setDescription('Duel complete!');
+        }
+
+        let resultText = '';
+        for (const [playerId, player] of game.players) {
+            let username = 'Unknown User';
+            try {
+                const user = client.users.cache.get(playerId) || await client.users.fetch(playerId);
+                username = user.username;
+            } catch (error) {
+                console.error(`Error fetching user ${playerId}:`, error);
+            }
+
+            const isWinner = game.pvpResult?.winnerId === playerId;
+            const isPush = game.pvpResult?.isPush;
+            const score = game.calculateScore(player.hands[0].cards);
+            const busted = score > 21;
+            const statusEmoji = isPush ? '🤝' : isWinner ? '🏆' : '💀';
+            const bet = game.getTotalBet(playerId);
+
+            resultText += `${statusEmoji} **${username}**: ${busted ? 'BUST' : score}\n`;
+            if (isPush) {
+                resultText += `Refunded: ${bet.toLocaleString()}\n`;
+            } else if (isWinner) {
+                resultText += `Won: **${game.pvpResult.amount.toLocaleString()}**\n`;
+            } else {
+                resultText += `Lost: ${bet.toLocaleString()}\n`;
+            }
+            resultText += '\n';
+        }
+
+        embed.addFields({ name: '📊 Duel Results', value: resultText, inline: false });
+    } else if (game.dealingPhase < 5) {
+        embed.setDescription('Dealing cards...');
+    } else {
+        const currentPlayerId = Array.from(game.players.keys())[game.currentPlayerIndex];
+        let username = 'Unknown User';
+        try {
+            const user = client.users.cache.get(currentPlayerId) || await client.users.fetch(currentPlayerId);
+            username = user.username;
+        } catch (error) {
+            console.error(`Error fetching user ${currentPlayerId}:`, error);
+        }
+
+        embed.setDescription(`⚔️ Waiting for **${username}**'s action...`);
     }
 
     return embed;
@@ -1307,6 +1413,7 @@ module.exports = {
     createBlackjackEmbed,
     createBettingPhaseEmbed,
     createMultiPlayerGameEmbed,
+    createPvPBlackjackEmbed,
     createSinglePlayerGameEmbed,
     createCrapsEmbed,
     createWarEmbed,

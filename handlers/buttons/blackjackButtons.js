@@ -20,7 +20,17 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
         game = activeGames.get(interaction.channelId);
         isMultiPlayer = game.isMultiPlayer;
     } else {
-        return interaction.reply({ content: '❌ No active game found!', ephemeral: true });
+        // Search for an active duel game containing this player
+        for (const [key, g] of activeGames) {
+            if (key.startsWith('duel_game_') && g.isDuel && g.players.has(user.id) && !g.gameOver) {
+                game = g;
+                isMultiPlayer = true;
+                break;
+            }
+        }
+        if (!game) {
+            return interaction.reply({ content: '❌ No active game found!', ephemeral: true });
+        }
     }
 
     // Handle play again buttons
@@ -128,7 +138,33 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
 
         // Handle game completion
         if (actionSuccess && game.gameOver) {
-            if (!isMultiPlayer) {
+            if (game.isDuel) {
+                const players = Array.from(game.players.keys());
+                if (players.length === 2) {
+                    const [playerAId, playerBId] = players;
+                    const pvpResult = game.calculatePvPWinner(playerAId, playerBId);
+
+                    if (pvpResult.isPush) {
+                        const currentMoneyA = await getUserMoney(playerAId);
+                        await setUserMoney(playerAId, currentMoneyA + game.getTotalBet(playerAId));
+                        const currentMoneyB = await getUserMoney(playerBId);
+                        await setUserMoney(playerBId, currentMoneyB + game.getTotalBet(playerBId));
+                        await recordGameResult(playerAId, 'blackjack', game.getTotalBet(playerAId), 0, 'push', { pvpDuel: true });
+                        await recordGameResult(playerBId, 'blackjack', game.getTotalBet(playerBId), 0, 'push', { pvpDuel: true });
+                        game.pvpResult = { isPush: true };
+                    } else {
+                        const { winnerId, amount } = pvpResult;
+                        const loserId = winnerId === playerAId ? playerBId : playerAId;
+                        const currentMoneyWinner = await getUserMoney(winnerId);
+                        await setUserMoney(winnerId, currentMoneyWinner + amount);
+                        const winnerBet = game.getTotalBet(winnerId);
+                        const loserBet = game.getTotalBet(loserId);
+                        await recordGameResult(winnerId, 'blackjack', winnerBet, amount - winnerBet, 'win', { pvpDuel: true });
+                        await recordGameResult(loserId, 'blackjack', loserBet, -loserBet, 'lose', { pvpDuel: true });
+                        game.pvpResult = { winnerId, amount };
+                    }
+                }
+            } else if (!isMultiPlayer) {
                 const baseWinnings = game.getWinnings(user.id);
                 const winnings = applyHolidayWinningsBonus(baseWinnings);
                 const currentMoney = await getUserMoney(user.id);

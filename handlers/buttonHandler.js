@@ -15,6 +15,7 @@ const { handleTableButtons } = require('./buttons/tableButtons');
 const { handleShopPurchase, handlePropertyPurchase, handleUseItem, handleVIPPurchase, handlePropertyUpgrade } = require('./buttons/shopButtons');
 const { handleGuildHeistJoin } = require('./buttons/guildButtons');
 const { handleClaimChallengeRewards } = require('./buttons/challengeButtons');
+const { handleDuelAccept, handleDuelCancel, handleDuelRematch } = require('./buttons/duelButtons');
 
 // Helper functions moved to utils/cardHelpers.js
 
@@ -126,6 +127,21 @@ async function handleButtonInteraction(interaction, activeGames, client, dealCar
     // Handle guild heist join buttons
     if (customId.startsWith('guildheist_join_')) {
         await handleGuildHeistJoin(interaction, user.id);
+        return;
+    }
+
+    // Handle PvP duel buttons
+    if (customId.startsWith('duel_accept_') || customId.startsWith('duel_cancel_')) {
+        if (customId.startsWith('duel_accept_')) {
+            await handleDuelAccept(interaction, activeGames, client, dealCardsWithDelay);
+        } else {
+            await handleDuelCancel(interaction, activeGames);
+        }
+        return;
+    }
+
+    if (customId.startsWith('duel_rematch_')) {
+        await handleDuelRematch(interaction, activeGames, client, dealCardsWithDelay);
         return;
     }
 

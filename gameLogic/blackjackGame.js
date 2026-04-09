@@ -2,7 +2,7 @@ const Deck = require('./deck');
 const { randomUUID } = require('crypto');
 
 class BlackjackGame {
-    constructor(channelId, creatorId, bet, isMultiPlayer) {
+    constructor(channelId, creatorId, bet, isMultiPlayer, isDuel = false) {
 
         // Ensure bet is a valid number
         const validBet = (typeof bet === 'number' && !isNaN(bet) && bet > 0) ? Math.floor(bet) : 0;
@@ -21,6 +21,7 @@ class BlackjackGame {
         this.currentPlayerIndex = 0;
         this.gameOver = false;
         this.isMultiPlayer = isMultiPlayer;
+        this.isDuel = isDuel;
         this.interactionId = null;
         this.interactionStartTime = Date.now();
         this.bettingPhase = false;
@@ -75,24 +76,30 @@ class BlackjackGame {
     // Card dealing
     dealNextCard() {
         this.dealingPhase++;
-        
+
         if (this.dealingPhase === 1 || this.dealingPhase === 2) {
             // Deal cards to all players
             for (const player of this.players.values()) {
                 player.hands[0].cards.push(this.deck.drawCard());
             }
-        } else if (this.dealingPhase === 3) {
-            // Deal dealer up card
-            this.dealer.cards.push(this.deck.drawCard());
-        } else if (this.dealingPhase === 4) {
-            // Deal dealer hole card
-            this.dealerHoleCard = this.deck.drawCard();
-        } else if (this.dealingPhase === 5) {
-            // Check for dealer blackjack
-            if (this.hasDealerBlackjack()) {
-                this.dealer.cards.push(this.dealerHoleCard);
-                this.dealerHoleCard = null;
-                this.gameOver = true;
+            // Duel games have no dealer — skip dealer phases entirely
+            if (this.isDuel && this.dealingPhase === 2) {
+                this.dealingPhase = 5;
+            }
+        } else if (!this.isDuel) {
+            if (this.dealingPhase === 3) {
+                // Deal dealer up card
+                this.dealer.cards.push(this.deck.drawCard());
+            } else if (this.dealingPhase === 4) {
+                // Deal dealer hole card
+                this.dealerHoleCard = this.deck.drawCard();
+            } else if (this.dealingPhase === 5) {
+                // Check for dealer blackjack
+                if (this.hasDealerBlackjack()) {
+                    this.dealer.cards.push(this.dealerHoleCard);
+                    this.dealerHoleCard = null;
+                    this.gameOver = true;
+                }
             }
         }
     }
@@ -269,7 +276,11 @@ class BlackjackGame {
         }
         
         if (Array.from(this.players.values()).every(player => player.stood)) {
-            this.dealerPlay();
+            if (this.isDuel) {
+                this.gameOver = true;
+            } else {
+                this.dealerPlay();
+            }
         } else {
             let nextIndex = (this.currentPlayerIndex + 1) % this.players.size;
             let checkedPlayers = 0;
@@ -410,6 +421,42 @@ class BlackjackGame {
         }
 
         return totalWinnings;
+    }
+
+    calculatePvPWinner(playerAId, playerBId) {
+        const playerA = this.players.get(playerAId);
+        const playerB = this.players.get(playerBId);
+
+        if (!playerA || !playerB) return { isPush: true };
+
+        const scoreA = this.calculateScore(playerA.hands[0].cards);
+        const scoreB = this.calculateScore(playerB.hands[0].cards);
+        const bustA = scoreA > 21;
+        const bustB = scoreB > 21;
+        const totalPot = this.getTotalBet(playerAId) + this.getTotalBet(playerBId);
+
+        // Both bust = push
+        if (bustA && bustB) return { isPush: true };
+
+        let winnerId = null;
+
+        if (bustA) {
+            winnerId = playerBId;
+        } else if (bustB) {
+            winnerId = playerAId;
+        } else if (scoreA > scoreB) {
+            winnerId = playerAId;
+        } else if (scoreB > scoreA) {
+            winnerId = playerBId;
+        } else {
+            return { isPush: true };
+        }
+
+        return {
+            winnerId,
+            amount: totalPot,
+            isPush: false
+        };
     }
 
     getTotalBet(userId) {

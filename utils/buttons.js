@@ -203,7 +203,20 @@ function createBettingPhaseButtons(game, userId, client, options = {}) {
 }
 
 function createGameOverButtons(game, userId) {
-    if (game.isMultiPlayer) {
+    if (game.isDuel) {
+        return new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`duel_rematch_accept_${game.gameId}`)
+                    .setLabel('Play Again')
+                    .setStyle(ButtonStyle.Success)
+                    .setEmoji('⚔️'),
+                new ButtonBuilder()
+                    .setCustomId(`duel_rematch_decline_${game.gameId}`)
+                    .setLabel('Decline')
+                    .setStyle(ButtonStyle.Danger)
+            );
+    } else if (game.isMultiPlayer) {
         return new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
