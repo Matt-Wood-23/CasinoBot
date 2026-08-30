@@ -410,3 +410,142 @@ describe('action guards', () => {
         expect(game.dealer.cards).toHaveLength(1);
     });
 });
+
+describe('naturals resolve on the deal', () => {
+    test('a player dealt a natural is stood without taking a turn', () => {
+        const game = stackedGame([
+            new Card(14, 'hearts'), new Card(13, 'spades'),  // player A+K = natural
+            new Card(6, 'clubs'), new Card(9, 'diamonds')    // dealer 15, no blackjack
+        ]);
+        for (let i = 0; i < 5; i++) game.dealNextCard();
+
+        const player = game.players.get('player1');
+        expect(game.naturalsStood).toBe(true);
+        expect(player.stood).toBe(true);
+        expect(game.getCurrentHand('player1')).toBeNull();
+        // The dealer takes over immediately.
+        expect(game.dealer.isDrawing).toBe(true);
+        expect(game.gameOver).toBe(false);
+    });
+
+    test('the dealer only shows its hole card against a lone natural', () => {
+        const game = stackedGame([
+            new Card(14, 'hearts'), new Card(13, 'spades'),
+            new Card(6, 'clubs'), new Card(5, 'diamonds')    // dealer 11: would normally draw
+        ]);
+        for (let i = 0; i < 5; i++) game.dealNextCard();
+
+        expect(game.shouldDealerContinue()).toBe(false);
+        expect(game.hasHiddenDealerCard()).toBe(false);
+        expect(game.dealer.cards).toHaveLength(2); // no card drawn to 11
+        expect(game.gameOver).toBe(true);
+        expect(game.getHandResult('player1', 0)).toBe('blackjack');
+        expect(game.getWinnings('player1')).toBe(150);
+    });
+
+    test('a dealer blackjack takes priority over the player natural', () => {
+        const game = stackedGame([
+            new Card(14, 'hearts'), new Card(13, 'spades'),  // player natural
+            new Card(14, 'clubs'), new Card(12, 'diamonds')  // dealer natural
+        ]);
+        for (let i = 0; i < 5; i++) game.dealNextCard();
+
+        expect(game.gameOver).toBe(true);
+        expect(game.naturalsStood).toBe(false); // the peek ended it first
+        expect(game.getHandResult('player1', 0)).toBe('push');
+        expect(game.getWinnings('player1')).toBe(0);
+    });
+
+    test('an ordinary hand still gets its turn', () => {
+        const game = stackedGame([
+            new Card(10, 'hearts'), new Card(9, 'spades'),   // 19, not a natural
+            new Card(6, 'clubs'), new Card(9, 'diamonds')
+        ]);
+        for (let i = 0; i < 5; i++) game.dealNextCard();
+
+        expect(game.naturalsStood).toBe(false);
+        expect(game.players.get('player1').stood).toBe(false);
+        expect(game.dealer.isDrawing).toBeFalsy();
+        expect(game.hit('player1')).toBe(true);
+    });
+
+    test('at a table, only the natural is stood and play passes to the others', () => {
+        const game = new BlackjackGame('ch', 'player1', 100, true);
+        game.addPlayer('player2', 100);
+        const sequence = [
+            new Card(14, 'hearts'), new Card(7, 'clubs'),    // first card each
+            new Card(13, 'spades'), new Card(9, 'diamonds'), // second: p1 = A+K, p2 = 16
+            new Card(6, 'hearts'), new Card(9, 'spades')     // dealer 15
+        ];
+        let i = 0;
+        jest.spyOn(game.deck, 'drawCard').mockImplementation(
+            () => sequence[i++] ?? new Card(2, 'hearts')
+        );
+        for (let p = 0; p < 5; p++) game.dealNextCard();
+
+        expect(game.players.get('player1').stood).toBe(true);  // natural
+        expect(game.players.get('player2').stood).toBe(false); // still to play
+        // The turn must sit on the player who can still act.
+        expect(Array.from(game.players.keys())[game.currentPlayerIndex]).toBe('player2');
+        expect(game.dealer.isDrawing).toBeFalsy();
+    });
+
+    test('the dealer still plays out for a live hand alongside a natural', () => {
+        const game = new BlackjackGame('ch', 'player1', 100, true);
+        game.addPlayer('player2', 100);
+        const sequence = [
+            new Card(14, 'hearts'), new Card(7, 'clubs'),
+            new Card(13, 'spades'), new Card(9, 'diamonds'), // p1 natural, p2 = 16
+            new Card(6, 'hearts'), new Card(5, 'spades'),    // dealer 11
+            new Card(4, 'clubs')                             // dealer draws to 15...
+        ];
+        let i = 0;
+        jest.spyOn(game.deck, 'drawCard').mockImplementation(
+            () => sequence[i++] ?? new Card(2, 'hearts')
+        );
+        for (let p = 0; p < 5; p++) game.dealNextCard();
+
+        game.stand('player2');
+        // player2's 16 can still be beaten, so the dealer has a decision.
+        expect(game.needsDealerHand()).toBe(true);
+        expect(game.shouldDealerContinue()).toBe(true);
+    });
+
+    test('the dealer does not draw once every live hand is a natural or bust', () => {
+        const game = new BlackjackGame('ch', 'player1', 100, true);
+        game.addPlayer('player2', 100);
+        const sequence = [
+            new Card(14, 'hearts'), new Card(10, 'clubs'),
+            new Card(13, 'spades'), new Card(9, 'diamonds'), // p1 natural, p2 = 19
+            new Card(6, 'hearts'), new Card(5, 'spades'),    // dealer 11
+            new Card(10, 'clubs')                            // p2's bust card
+        ];
+        let i = 0;
+        jest.spyOn(game.deck, 'drawCard').mockImplementation(
+            () => sequence[i++] ?? new Card(2, 'hearts')
+        );
+        for (let p = 0; p < 5; p++) game.dealNextCard();
+
+        game.hit('player2'); // 19 + 10 = 29, bust
+        expect(game.needsDealerHand()).toBe(false);
+        expect(game.shouldDealerContinue()).toBe(false);
+        expect(game.dealer.cards).toHaveLength(2); // hole card shown, nothing drawn
+        expect(game.gameOver).toBe(true);
+    });
+
+    test('a split hand of 21 does not stand itself', () => {
+        const game = stackedGame([
+            new Card(14, 'hearts'), new Card(14, 'spades'),  // pair of aces
+            new Card(6, 'clubs'), new Card(9, 'diamonds'),
+            new Card(13, 'hearts'),  // hand 0: A+K = 21, but split
+            new Card(5, 'clubs')     // hand 1: A+5
+        ]);
+        for (let i = 0; i < 5; i++) game.dealNextCard();
+        game.split('player1');
+
+        const player = game.players.get('player1');
+        expect(player.stood).toBe(false);
+        expect(player.currentHandIndex).toBe(0);
+        expect(game.needsDealerHand()).toBe(true);
+    });
+});

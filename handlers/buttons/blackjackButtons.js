@@ -165,7 +165,7 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
 
         // If the dealer's turn has begun, play it out one card at a time.
         if (game.dealer.isDrawing) {
-            await animateDealerDrawing(game, interaction, user.id, client);
+            await animateDealerDrawing(game, interaction.message, user.id, client);
         }
 
         if (game.gameOver) {
@@ -234,7 +234,7 @@ function startTurnTimer(game, interaction, activeGames, client, dealCardsWithDel
             // here too — the old timeout path never did, which left the hand
             // stuck with the dealer mid-draw and no way to finish it.
             if (game.dealer.isDrawing) {
-                await animateDealerDrawing(game, interaction, currentPlayerId, client);
+                await animateDealerDrawing(game, interaction.message, currentPlayerId, client);
             }
 
             if (game.gameOver) {
@@ -253,11 +253,16 @@ function startTurnTimer(game, interaction, activeGames, client, dealCardsWithDel
  * Play the dealer's turn out at a readable pace: a beat, the hole card, then
  * one card at a time.
  *
+ * `target` is whatever the table is drawn on — the Message for a game started
+ * by a command, or the interaction itself for one that has no message of its
+ * own. It is passed in rather than read off an interaction because a slash
+ * command interaction has no `.message` to edit.
+ *
  * Only one of these may run per game. Two concurrent loops (which a double
  * click on Stand used to produce) both draw and both redraw, which is what made
  * the dealer's cards appear to flip past almost instantly.
  */
-async function animateDealerDrawing(game, interaction, userId, client) {
+async function animateDealerDrawing(game, target, userId, client) {
     if (game.isDealerAnimating) return;
     game.isDealerAnimating = true;
 
@@ -278,7 +283,11 @@ async function animateDealerDrawing(game, interaction, userId, client) {
             if (!stillCurrent()) return;
 
             game.revealDealerHoleCard();
-            if (!await renderBlackjack(interaction.message, game, userId, client)) return;
+            // Settle whether more cards are coming before drawing this frame,
+            // so a dealer with nothing left to do — standing pat, or facing
+            // nothing but naturals and busts — is not labelled as drawing.
+            game.shouldDealerContinue();
+            if (!await renderBlackjack(target, game, userId, client)) return;
         }
 
         while (game.shouldDealerContinue()) {
@@ -289,7 +298,7 @@ async function animateDealerDrawing(game, interaction, userId, client) {
 
             game.drawDealerCard();
 
-            if (!await renderBlackjack(interaction.message, game, userId, client)) return;
+            if (!await renderBlackjack(target, game, userId, client)) return;
         }
 
         // Let the dealer's final hand sit for a moment before the result

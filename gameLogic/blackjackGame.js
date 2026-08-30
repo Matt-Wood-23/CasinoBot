@@ -31,6 +31,7 @@ class BlackjackGame {
         this.isDealing = false; // Flag to prevent concurrent dealing
         this.isDealerAnimating = false; // Flag to prevent concurrent dealer animations
         this.settled = false; // True once payouts have been applied, so they only run once
+        this.naturalsStood = false; // True once the deal stood a player on a natural
         this.gameId = randomUUID(); // Unique game ID
     }
 
@@ -101,11 +102,14 @@ class BlackjackGame {
                 // Deal dealer hole card
                 this.dealerHoleCard = this.deck.drawCard();
             } else if (this.dealingPhase === 5) {
-                // Check for dealer blackjack
+                // The dealer peeks. A dealer blackjack ends the hand outright;
+                // otherwise every player already holding a natural is done.
                 if (this.hasDealerBlackjack()) {
                     this.dealer.cards.push(this.dealerHoleCard);
                     this.dealerHoleCard = null;
                     this.gameOver = true;
+                } else {
+                    this.standNaturals();
                 }
             }
         }
@@ -342,9 +346,55 @@ class BlackjackGame {
         }
     }
 
-    allHandsBusted() {
-        return Array.from(this.players.values()).every(player =>
-            player.hands.every(hand => this.calculateScore(hand.cards) > 21));
+    /**
+     * Stand every player dealt a two-card 21.
+     *
+     * A natural is already decided the moment the dealer's peek comes back
+     * empty: it cannot be improved and it cannot be beaten. Making the player
+     * click Stand on it only slowed the hand down — and with Hit disabled at
+     * 21, Stand was the single legal move anyway.
+     *
+     * Called after the peek, so it never runs when the dealer has blackjack.
+     */
+    standNaturals() {
+        for (const [playerId, player] of this.players) {
+            if (player.stood || !this.isNaturalHand(playerId, 0)) continue;
+
+            player.hands[0].stood = true;
+            player.currentHandIndex = player.hands.length;
+            player.stood = true;
+            this.naturalsStood = true;
+        }
+
+        if (!this.naturalsStood) return;
+
+        // Hand the table to whoever still has a decision, or to the dealer.
+        const playerIds = Array.from(this.players.keys());
+        const nextLive = playerIds.findIndex(id => !this.players.get(id).stood);
+
+        if (nextLive === -1) {
+            this.dealerPlay();
+        } else {
+            this.currentPlayerIndex = nextLive;
+        }
+    }
+
+    /**
+     * Does the dealer still have a decision to make?
+     *
+     * Only a live hand that could still be beaten needs one. Busted hands have
+     * already lost and naturals have already won, so a table made up only of
+     * those is settled and the dealer just shows its hole card.
+     */
+    needsDealerHand() {
+        for (const [playerId, player] of this.players) {
+            for (let i = 0; i < player.hands.length; i++) {
+                if (this.calculateScore(player.hands[i].cards) > 21) continue;
+                if (this.isNaturalHand(playerId, i)) continue;
+                return true;
+            }
+        }
+        return false;
     }
 
     // Move the hole card face up. Returns true only on the flip itself so the
@@ -386,7 +436,7 @@ class BlackjackGame {
         // act on a hand it has not turned face up.
         this.revealDealerHoleCard();
 
-        if (this.allHandsBusted() || this.calculateScore(this.dealer.cards) >= 17) {
+        if (!this.needsDealerHand() || this.calculateScore(this.dealer.cards) >= 17) {
             this.finishDealerTurn();
             return false;
         }

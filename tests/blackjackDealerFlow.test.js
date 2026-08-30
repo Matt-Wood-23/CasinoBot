@@ -85,7 +85,7 @@ describe('dealer animation', () => {
         const interaction = fakeInteraction();
 
         game.stand('player1');
-        await animateDealerDrawing(game, interaction, 'player1', null);
+        await animateDealerDrawing(game, interaction.message, 'player1', null);
 
         const dealerFields = interaction.frames.map(dealerFieldOf);
         expect(dealerFields.length).toBeGreaterThan(0);
@@ -105,7 +105,7 @@ describe('dealer animation', () => {
         const interaction = fakeInteraction();
 
         game.stand('player1');
-        await animateDealerDrawing(game, interaction, 'player1', null);
+        await animateDealerDrawing(game, interaction.message, 'player1', null);
 
         for (const frame of interaction.frames) {
             const cardCount = dealerCardCount(frame);
@@ -126,7 +126,7 @@ describe('dealer animation', () => {
         const interaction = fakeInteraction();
 
         game.stand('player1');
-        await animateDealerDrawing(game, interaction, 'player1', null);
+        await animateDealerDrawing(game, interaction.message, 'player1', null);
 
         // Reveal frame, then exactly one more card per frame after it.
         expect(interaction.frames.map(dealerCardCount)).toEqual([2, 3, 4, 5]);
@@ -143,7 +143,7 @@ describe('dealer animation', () => {
         const interaction = fakeInteraction();
 
         game.stand('player1');
-        await animateDealerDrawing(game, interaction, 'player1', null);
+        await animateDealerDrawing(game, interaction.message, 'player1', null);
 
         const lastField = dealerFieldOf(interaction.frames[interaction.frames.length - 1]);
         expect(lastField).not.toContain('drawing');
@@ -161,8 +161,8 @@ describe('dealer animation', () => {
 
         // Two clicks land at once; only one of them may deal the dealer's hand.
         await Promise.all([
-            animateDealerDrawing(game, interaction, 'player1', null),
-            animateDealerDrawing(game, interaction, 'player1', null)
+            animateDealerDrawing(game, interaction.message, 'player1', null),
+            animateDealerDrawing(game, interaction.message, 'player1', null)
         ]);
 
         expect(game.getDealerScore(true)).toBe(20); // 2+3+4+5+6, not doubled up
@@ -180,7 +180,7 @@ describe('dealer animation', () => {
 
         game.stand('player1');
         // The player hit "Play Again" the instant the dealer's turn began.
-        const animation = animateDealerDrawing(game, interaction, 'player1', null);
+        const animation = animateDealerDrawing(game, interaction.message, 'player1', null);
         game.gameId = 'a-different-hand';
         await animation;
 
@@ -196,12 +196,49 @@ describe('dealer animation', () => {
         const interaction = fakeInteraction();
 
         game.hit('player1'); // 19 + 10 = 29, bust → dealer's turn opens
-        await animateDealerDrawing(game, interaction, 'player1', null);
+        await animateDealerDrawing(game, interaction.message, 'player1', null);
 
         expect(game.hasHiddenDealerCard()).toBe(false);
         expect(game.gameOver).toBe(true);
         // The dealer does not draw against a table that has already busted.
         expect(game.dealer.cards).toHaveLength(2);
         expect(dealerFieldOf(interaction.frames[0])).not.toContain('🂠');
+    });
+});
+
+describe('naturals', () => {
+    test('the reveal frame is the only frame, and is not labelled drawing', async () => {
+        const game = gameReadyForDealer([
+            new Card(14, 'hearts'), new Card(13, 'spades'),  // player natural
+            new Card(6, 'clubs'), new Card(5, 'diamonds')    // dealer 11: would normally draw
+        ]);
+        const interaction = fakeInteraction();
+
+        // The deal itself stands the player and opens the dealer's turn.
+        expect(game.dealer.isDrawing).toBe(true);
+        expect(game.players.get('player1').stood).toBe(true);
+
+        await animateDealerDrawing(game, interaction.message, 'player1', null);
+
+        expect(interaction.frames).toHaveLength(1);
+        const field = dealerFieldOf(interaction.frames[0]);
+        expect(field).not.toContain('🂠');
+        expect(field).not.toContain('drawing');
+        expect(dealerCardCount(interaction.frames[0])).toBe(2); // nothing drawn to 11
+        expect(game.gameOver).toBe(true);
+    });
+
+    test('a dealer standing pat is not labelled drawing either', async () => {
+        const game = gameReadyForDealer([
+            new Card(10, 'hearts'), new Card(9, 'spades'),   // 19, an ordinary hand
+            new Card(10, 'clubs'), new Card(8, 'diamonds')   // dealer 18: stands
+        ]);
+        const interaction = fakeInteraction();
+
+        game.stand('player1');
+        await animateDealerDrawing(game, interaction.message, 'player1', null);
+
+        expect(interaction.frames).toHaveLength(1);
+        expect(dealerFieldOf(interaction.frames[0])).not.toContain('drawing');
     });
 });

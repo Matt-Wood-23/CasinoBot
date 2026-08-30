@@ -8,6 +8,7 @@ const { loadUserData } = require('./database/queries');
 const { settleBlackjackGame } = require('./utils/blackjackSettlement');
 const { renderBlackjack, wait } = require('./utils/blackjackRender');
 const { INITIAL_DEAL_DELAY } = require('./utils/blackjackTiming');
+const { animateDealerDrawing } = require('./handlers/buttons/blackjackButtons');
 
 // Import configuration
 const { token, ALLOWED_CHANNEL_IDS, ADMIN_USER_ID, liam } = require('./config');
@@ -99,17 +100,28 @@ async function dealCardsWithDelay(interaction, message, game, userId, delay = IN
             return;
         }
 
-        // Phase 5 is the dealer peeking for blackjack. It changes nothing the
-        // player can see unless the dealer actually has one, so it only earns a
-        // frame in that case — and then only after payouts are recorded, so the
-        // result is drawn once instead of appearing and then changing.
+        // Phase 5 is the dealer peeking for blackjack, which also stands any
+        // player already holding a natural. It only earns a frame when it
+        // actually changes the table.
         if (game.dealingPhase === 4) {
             game.dealNextCard();
 
-            if (game.gameOver) {
+            if (game.dealer.isDrawing) {
+                // Naturals settled every hand, so the dealer's only remaining
+                // job is to show its hole card.
+                await animateDealerDrawing(game, target, userId, client);
+            } else if (game.naturalsStood) {
+                // Some players are out on a natural but the hand goes on, so
+                // the table has to show whose turn it is now.
+                await renderBlackjack(target, game, userId, client);
+            } else if (game.gameOver) {
+                // Dealer blackjack: a beat before the result lands.
                 await wait(delay);
-                if (game.gameId !== currentGameId) return;
+            }
 
+            if (game.gameId !== currentGameId) return;
+
+            if (game.gameOver) {
                 try {
                     await settleBlackjackGame(game);
                 } catch (error) {
