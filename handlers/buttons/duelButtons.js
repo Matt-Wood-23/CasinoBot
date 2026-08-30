@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney, recordGameResult } = require('../../database/queries');
+const { getUserMoney, setUserMoney } = require('../../database/queries');
 const { createGameEmbed } = require('../../utils/embeds');
 const BlackjackGame = require('../../gameLogic/blackjackGame');
 const { EmbedBuilder } = require('discord.js');
