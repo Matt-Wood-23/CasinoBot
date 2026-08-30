@@ -1,4 +1,5 @@
-const { getUserMoney, setUserMoney } = require('../../utils/data');
+const { getUserMoney, setUserMoney, addToJackpot } = require('../../utils/data');
+const { checkGamblingBan } = require('../../utils/guardChecks');
 const BlackjackGame = require('../../gameLogic/blackjackGame');
 const { settleBlackjackGame } = require('../../utils/blackjackSettlement');
 const { renderBlackjack, wait } = require('../../utils/blackjackRender');
@@ -46,6 +47,11 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
             return interaction.reply({ content: '❌ Your current hand is still in play!', ephemeral: true });
         }
 
+        // Replaying runs a whole new hand, so it has to clear the same gate
+        // /blackjack does — otherwise the button is a way to keep gambling
+        // straight through a heist ban.
+        if (await checkGamblingBan(interaction)) return;
+
         const player = game.players.get(user.id);
         const lastBet = Math.floor(player.bet / (player.hasSplit ? 2 : 1));
         const userMoney = await getUserMoney(user.id);
@@ -64,6 +70,14 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
         newGame.serverId = game.serverId;
         newGame.interactionStartTime = Date.now();
         activeGames.set(user.id, newGame);
+
+        // ...and a hand that can win the jackpot has to pay into it at the same
+        // rate /blackjack does, or replaying is a way to drain the pool for
+        // free.
+        if (newGame.serverId) {
+            await addToJackpot(newGame.serverId, Math.floor(lastBet * 0.005))
+                .catch(err => console.error('Error contributing to jackpot on replay:', err));
+        }
 
         await interaction.deferUpdate();
 
