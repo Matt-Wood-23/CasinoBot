@@ -24,6 +24,11 @@ class BlackjackGame {
         this.isMultiPlayer = isMultiPlayer;
         this.isDuel = isDuel;
         this.interactionId = null;
+        // The message this game is drawn on. Button handling resolves games by
+        // user or channel, but renders target whichever message was clicked, so
+        // without this the two can drift apart and one hand gets painted onto
+        // another hand's message.
+        this.messageId = null;
         this.interactionStartTime = Date.now();
         this.bettingPhase = false;
         this.readyPlayers = new Map();

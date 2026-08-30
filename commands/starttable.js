@@ -71,6 +71,9 @@ module.exports = {
                 fetchReply: true
             });
 
+            // Bind the table to its message before any button can be pressed.
+            game.messageId = message.id;
+
             // Start 30-second countdown for players to join
             let countdown = 30;
             const countdownInterval = setInterval(async () => {

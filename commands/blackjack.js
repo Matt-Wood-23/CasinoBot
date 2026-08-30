@@ -87,6 +87,9 @@ module.exports = {
                 fetchReply: true
             });
 
+            // Bind the game to its message before any button can be pressed.
+            game.messageId = message.id;
+
             // Only deduct money AFTER interaction reply succeeds
             // Contribute to jackpot (0.5% of bet)
             if (serverId) {

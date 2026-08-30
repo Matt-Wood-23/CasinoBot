@@ -10,28 +10,76 @@ const {
     INITIAL_DEAL_DELAY
 } = require('../../utils/blackjackTiming');
 
+/**
+ * Find the blackjack game that the clicked message belongs to.
+ *
+ * Games are filed under a user id (single player) or a channel id (tables),
+ * but every render targets interaction.message — whichever message was
+ * clicked. Those two answers disagree the moment a player has more than one
+ * blackjack message live, and the user key is checked first, so:
+ *
+ *   - sitting at a table AND holding a solo hand meant a click on the table
+ *     resolved the solo hand, then drew the solo cards onto the table's
+ *     message, in front of everyone else at it;
+ *   - an abandoned hand's message kept working buttons, and clicking them
+ *     acted on the current hand and repainted the old message with it, so two
+ *     messages appeared to swap cards back and forth.
+ *
+ * Matching on the message first keeps the game and the surface it is drawn on
+ * in step. (join_table already deleted a joiner's solo game to dodge the first
+ * case; this covers both directions and the stale-message case too.)
+ */
+function findGameByMessage(activeGames, messageId) {
+    if (!messageId) return null;
+
+    for (const candidate of activeGames.values()) {
+        if (candidate &&
+            candidate.constructor && candidate.constructor.name === 'BlackjackGame' &&
+            candidate.messageId === messageId) {
+            return candidate;
+        }
+    }
+    return null;
+}
+
 async function handleBlackjackButtons(interaction, activeGames, client, dealCardsWithDelay) {
     const { customId, user } = interaction;
-    let game;
-    let isMultiPlayer = false;
+    const clickedMessageId = interaction.message ? interaction.message.id : null;
 
-    // Find the game
-    if (activeGames.has(user.id)) {
-        game = activeGames.get(user.id);
-    } else if (activeGames.has(interaction.channelId)) {
-        game = activeGames.get(interaction.channelId);
-        isMultiPlayer = game.isMultiPlayer;
-    } else {
-        // Search for an active duel game containing this player
-        for (const [key, g] of activeGames) {
-            if (key.startsWith('duel_game_') && g.isDuel && g.players.has(user.id) && !g.gameOver) {
-                game = g;
-                isMultiPlayer = true;
-                break;
+    // Prefer the game this exact message belongs to.
+    let game = findGameByMessage(activeGames, clickedMessageId);
+    let isMultiPlayer = game ? game.isMultiPlayer : false;
+
+    if (!game) {
+        // Fall back to the original lookup for games with no message bound yet.
+        if (activeGames.has(user.id)) {
+            game = activeGames.get(user.id);
+        } else if (activeGames.has(interaction.channelId)) {
+            game = activeGames.get(interaction.channelId);
+            isMultiPlayer = game.isMultiPlayer;
+        } else {
+            // Search for an active duel game containing this player
+            for (const [key, g] of activeGames) {
+                if (key.startsWith('duel_game_') && g.isDuel && g.players.has(user.id) && !g.gameOver) {
+                    game = g;
+                    isMultiPlayer = true;
+                    break;
+                }
             }
         }
+
         if (!game) {
             return interaction.reply({ content: '❌ No active game found!', ephemeral: true });
+        }
+
+        // The fallback found a game that lives on a different message. Acting
+        // on it would draw that hand onto this message — the exact swap this
+        // lookup exists to prevent — so refuse and say where the hand is.
+        if (game.messageId && clickedMessageId && game.messageId !== clickedMessageId) {
+            return interaction.reply({
+                content: '❌ This message is from an earlier hand. Your current hand is on a newer message in this channel.',
+                ephemeral: true
+            });
         }
     }
 
@@ -68,6 +116,7 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
         // Without this the replayed hand silently drops out of the progressive
         // jackpot: every jackpot check is gated on game.serverId.
         newGame.serverId = game.serverId;
+        newGame.messageId = interaction.message ? interaction.message.id : null;
         newGame.interactionStartTime = Date.now();
         activeGames.set(user.id, newGame);
 
@@ -314,4 +363,4 @@ async function animateDealerDrawing(game, interaction, userId, client) {
     }
 }
 
-module.exports = { handleBlackjackButtons, updateBettingDisplay, startTurnTimer, animateDealerDrawing };
+module.exports = { handleBlackjackButtons, updateBettingDisplay, startTurnTimer, animateDealerDrawing, findGameByMessage };

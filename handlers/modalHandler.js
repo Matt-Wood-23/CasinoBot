@@ -348,6 +348,7 @@ async function startNewRoundFromBetting(game, interaction, activeGames, client, 
     activeGames.delete(interaction.channelId);
     activeGames.set(interaction.channelId, newGame);
     newGame.interactionId = interaction.id;
+    newGame.messageId = interaction.message ? interaction.message.id : null;
     newGame.interactionStartTime = Date.now();
 
     // Deal cards immediately

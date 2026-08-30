@@ -47,6 +47,9 @@ async function handleDuelAccept(interaction, activeGames, client, dealCardsWithD
         // Create PvP Blackjack game
         const game = new BlackjackGame(interaction.channelId, challengerId, bet, true, true);
         game.serverId = serverId;
+        // The duel plays out on the challenge message, which interaction.update
+        // below rewrites into the table.
+        game.messageId = interaction.message ? interaction.message.id : null;
 
         // Add both players
         game.addPlayer(challengedId, bet);
@@ -225,6 +228,7 @@ async function handleDuelRematch(interaction, activeGames, client, dealCardsWith
         // Create new game
         const newGame = new BlackjackGame(interaction.channelId, playerAId, bet, true, true);
         newGame.serverId = serverId;
+        newGame.messageId = interaction.message ? interaction.message.id : null;
         newGame.addPlayer(playerBId, bet);
 
         const newGameKey = `duel_game_${newGame.gameId}`;
