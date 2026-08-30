@@ -74,7 +74,7 @@ async function handleDuelAccept(interaction, activeGames, client, dealCardsWithD
         await new Promise(resolve => setTimeout(resolve, 2000));
 
         // Start dealing
-        await dealCardsWithDelay(interaction, null, game, challengerId, 1000);
+        await dealCardsWithDelay(interaction, null, game, challengerId);
 
     } catch (error) {
         console.error('Error handling duel accept:', error);
@@ -240,7 +240,7 @@ async function handleDuelRematch(interaction, activeGames, client, dealCardsWith
         await interaction.update({ embeds: [startEmbed], components: [] });
 
         await new Promise(resolve => setTimeout(resolve, 2000));
-        await dealCardsWithDelay(interaction, null, newGame, playerAId, 1000);
+        await dealCardsWithDelay(interaction, null, newGame, playerAId);
 
     } catch (error) {
         console.error('Error handling duel rematch:', error);

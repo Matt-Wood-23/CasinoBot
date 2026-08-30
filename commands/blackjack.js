@@ -99,7 +99,7 @@ module.exports = {
             moneyDeducted = true;
 
             // Deal cards - dealCardsWithDelay handles its own errors and refunds
-            await dealCardsWithDelay(interaction, message, game, interaction.user.id, 1000);
+            await dealCardsWithDelay(interaction, message, game, interaction.user.id);
 
         } catch (error) {
             console.error('Error in blackjack command:', error);

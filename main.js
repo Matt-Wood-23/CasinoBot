@@ -5,17 +5,9 @@ const path = require('path');
 
 // Import utilities
 const { loadUserData } = require('./database/queries');
-const { createGameEmbed } = require('./utils/embeds');
-const { createButtons } = require('./utils/buttons');
-const { isNaturalBlackjack } = require('./utils/cardHelpers');
-
-// Import game classes
-const BlackjackGame = require('./gameLogic/blackjackGame');
-const SlotsGame = require('./gameLogic/slotsGame');
-const ThreeCardPokerGame = require('./gameLogic/threeCardPokerGame');
-const RouletteGame = require('./gameLogic/rouletteGame');
-const CrapsGame = require('./gameLogic/crapsGame');
-const WarGame = require('./gameLogic/warGame');
+const { settleBlackjackGame } = require('./utils/blackjackSettlement');
+const { renderBlackjack, wait } = require('./utils/blackjackRender');
+const { INITIAL_DEAL_DELAY } = require('./utils/blackjackTiming');
 
 // Import configuration
 const { token, ALLOWED_CHANNEL_IDS, ADMIN_USER_ID, liam } = require('./config');
@@ -57,9 +49,16 @@ for (const file of commandFiles) {
 
 // Helper functions moved to utils/cardHelpers.js
 
-async function dealCardsWithDelay(interaction, message, game, userId, delay = 1000) {
-    const { getUserMoney, setUserMoney, recordGameResult, getServerJackpot, resetJackpot } = require('./database/queries');
-
+/**
+ * Deal the opening cards one at a time.
+ *
+ * The old version rendered a frame and then slept, so the hand opened with a
+ * dead second at the end, and it dealt phase 5 inside the loop *and* again
+ * afterwards — which redrew the finished table twice in a row, once before
+ * payouts were recorded and once after. That second redraw is what made
+ * results appear and then immediately change.
+ */
+async function dealCardsWithDelay(interaction, message, game, userId, delay = INITIAL_DEAL_DELAY) {
     // Prevent concurrent dealing for the same game
     if (game.isDealing) {
         console.log(`Game ${game.gameId} is already dealing, skipping duplicate call`);
@@ -68,242 +67,104 @@ async function dealCardsWithDelay(interaction, message, game, userId, delay = 10
 
     game.isDealing = true;
     const currentGameId = game.gameId;
+    const target = message || interaction;
 
-    while (game.dealingPhase < 5 && !game.gameOver && game.gameId === currentGameId) {
-        game.dealNextCard();
-        
-        const embed = await createGameEmbed(game, userId, client);
-        const buttons = await createButtons(game, userId, client);
-        
-        let components = [];
-        if (buttons) {
-            if (Array.isArray(buttons)) {
-                components = buttons;
-            } else {
-                components = [buttons];
+    try {
+        let firstCard = true;
+
+        // Phases 1-4 put a card on the table each time, so each one is a frame.
+        while (game.dealingPhase < 4 && !game.gameOver && game.gameId === currentGameId) {
+            // Sleep before each card except the first, so the table appears
+            // immediately and the pause always sits *between* two cards.
+            if (!firstCard) await wait(delay);
+            firstCard = false;
+
+            if (game.gameId !== currentGameId) break;
+
+            game.dealNextCard();
+
+            const rendered = await renderBlackjack(target, game, userId, client);
+            if (!rendered) {
+                // The table can no longer be shown, so the hand cannot be
+                // played. Give the stakes back and drop the game, so its
+                // orphaned buttons cannot pay out a hand that was refunded.
+                dropGame(game);
+                await refundFailedDeal(interaction, game, userId);
+                return;
             }
         }
-        
-        try {
-            if (message) {
-                await message.edit({ embeds: [embed], components: components });
-            } else {
-                await interaction.editReply({ embeds: [embed], components: components });
-            }
-        } catch (error) {
-            console.error('Error updating game message during dealing:', error);
 
-            // Refund the bet if message update fails
-            try {
-                const totalBet = game.getTotalBet(userId);
-                const currentMoney = await getUserMoney(userId);
-                await setUserMoney(userId, currentMoney + totalBet);
-                console.log(`Refunded ${totalBet} to user ${userId} due to dealing error`);
-
-                // Try to notify user via followUp
-                await interaction.followUp({
-                    content: `❌ Game failed to load properly. Your bet of ${totalBet.toLocaleString()} has been refunded.`,
-                    ephemeral: true
-                });
-            } catch (refundError) {
-                console.error('Error refunding bet:', refundError);
-            }
-
-            game.isDealing = false;
+        if (game.gameId !== currentGameId) {
+            console.log(`Game ${currentGameId} was replaced, stopping dealing`);
             return;
         }
 
-        await new Promise(resolve => setTimeout(resolve, delay));
-    }
+        // Phase 5 is the dealer peeking for blackjack. It changes nothing the
+        // player can see unless the dealer actually has one, so it only earns a
+        // frame in that case — and then only after payouts are recorded, so the
+        // result is drawn once instead of appearing and then changing.
+        if (game.dealingPhase === 4) {
+            game.dealNextCard();
 
-    // Check if game was replaced during dealing
-    if (game.gameId !== currentGameId) {
-        console.log(`Game ${currentGameId} was replaced, stopping dealing`);
+            if (game.gameOver) {
+                await wait(delay);
+                if (game.gameId !== currentGameId) return;
+
+                try {
+                    await settleBlackjackGame(game);
+                } catch (error) {
+                    console.error('Error settling blackjack game after deal:', error);
+                }
+
+                await renderBlackjack(target, game, userId, client);
+            }
+        }
+    } finally {
         game.isDealing = false;
-        return;
     }
+}
 
-    if (game.dealingPhase === 5) {
-        game.dealNextCard();
-
-        if (game.gameOver) {
-            if (game.isDuel) {
-                // PvP Duel payout logic
-                const players = Array.from(game.players.keys());
-                if (players.length === 2) {
-                    const playerAId = players[0];
-                    const playerBId = players[1];
-
-                    // Calculate PvP winner using the new method
-                    const pvpResult = game.calculatePvPWinner(playerAId, playerBId);
-
-                    if (pvpResult.isPush) {
-                        // Push - refund both players
-                        const currentMoneyA = await getUserMoney(playerAId);
-                        await setUserMoney(playerAId, currentMoneyA + game.getTotalBet(playerAId));
-
-                        const currentMoneyB = await getUserMoney(playerBId);
-                        await setUserMoney(playerBId, currentMoneyB + game.getTotalBet(playerBId));
-
-                        // Record results for both
-                        await recordGameResult(playerAId, 'blackjack', game.getTotalBet(playerAId), 0, 'push', { pvpDuel: true });
-                        await recordGameResult(playerBId, 'blackjack', game.getTotalBet(playerBId), 0, 'push', { pvpDuel: true });
-                        game.pvpResult = { isPush: true };
-                    } else {
-                        // Winner takes the pot
-                        const winnerId = pvpResult.winnerId;
-                        const loserId = winnerId === playerAId ? playerBId : playerAId;
-
-                        // Give winner the pot amount
-                        const currentMoneyWinner = await getUserMoney(winnerId);
-                        const potAmount = pvpResult.amount;
-                        await setUserMoney(winnerId, currentMoneyWinner + potAmount);
-
-                        // Record results
-                        const winnerBet = game.getTotalBet(winnerId);
-                        const loserBet = game.getTotalBet(loserId);
-                        const winnerWinnings = potAmount - winnerBet;
-
-                        await recordGameResult(winnerId, 'blackjack', winnerBet, winnerWinnings, 'win', { pvpDuel: true, potWon: potAmount });
-                        await recordGameResult(loserId, 'blackjack', loserBet, -loserBet, 'lose', { pvpDuel: true });
-
-                        game.pvpResult = { winnerId, amount: potAmount };
-                    }
-                }
-            } else if (game.isMultiPlayer) {
-                let jackpotAwarded = false; // Track if jackpot was already awarded
-                game.loanDeductions = game.loanDeductions || new Map(); // Store loan deductions per player
-
-                for (const [playerId] of game.players) {
-                    const winnings = game.getWinnings(playerId);
-                    const currentMoney = await getUserMoney(playerId);
-                    const totalBet = game.getTotalBet(playerId);
-                    const newMoney = currentMoney + totalBet + winnings;
-
-                    const loanInfo = await setUserMoney(playerId, newMoney);
-
-                    const results = game.getResult(playerId);
-                    const result = Array.isArray(results) ?
-                        (results.includes('blackjack') ? 'blackjack' :
-                         (results.includes('win') ? 'win' :
-                          (results.includes('lose') ? 'lose' : 'push'))) : results;
-
-                    // Award progressive jackpot on natural blackjack (only once per game)
-                    // Check if player has natural blackjack regardless of result (even if push)
-                    let jackpotWon = 0;
-                    const player = game.players.get(playerId);
-                    const hasNaturalBJ = player.hands.some(hand => isNaturalBlackjack(hand));
-
-                    if (hasNaturalBJ && game.serverId && !jackpotAwarded) {
-                        try {
-                            const jackpotData = await getServerJackpot(game.serverId);
-                            if (jackpotData && jackpotData.currentAmount > 0) {
-                                jackpotWon = jackpotData.currentAmount;
-                                const jackpotLoanInfo = await setUserMoney(playerId, newMoney + jackpotWon);
-                                // Update loan info to include jackpot
-                                if (jackpotLoanInfo) {
-                                    game.loanDeductions.set(playerId, jackpotLoanInfo);
-                                }
-                                await resetJackpot(game.serverId, playerId, jackpotWon);
-                                jackpotAwarded = true;
-                                // Store jackpot info for embed display
-                                game.jackpotWinner = playerId;
-                                game.jackpotAmount = jackpotWon;
-                            }
-                        } catch (error) {
-                            console.error('Error awarding blackjack jackpot on initial deal:', error);
-                        }
-                    } else if (loanInfo) {
-                        // Store loan info for non-jackpot winners
-                        game.loanDeductions.set(playerId, loanInfo);
-                    }
-
-                    const bet = game.getTotalBet(playerId);
-                    await recordGameResult(playerId, 'blackjack', bet, winnings, result, {
-                        handsPlayed: game.players.get(playerId).hands.length,
-                        jackpotWon: jackpotWon
-                    });
-                }
-            } else {
-                let winnings = game.getWinnings(userId);
-                const currentMoney = await getUserMoney(userId);
-                const totalBet = game.getTotalBet(userId);
-
-                const results = game.getResult(userId);
-                const result = Array.isArray(results) ?
-                    (results.includes('blackjack') ? 'blackjack' :
-                     (results.includes('win') ? 'win' :
-                      (results.includes('lose') ? 'lose' : 'push'))) : results;
-
-                // Award progressive jackpot on natural blackjack
-                // Check if player has natural blackjack regardless of result (even if push)
-                let jackpotWon = 0;
-                const player = game.players.get(userId);
-                const hasNaturalBJ = player.hands.some(hand => isNaturalBlackjack(hand));
-
-                let loanInfo = null;
-                if (hasNaturalBJ && game.serverId) {
-                    try {
-                        const jackpotData = await getServerJackpot(game.serverId);
-                        if (jackpotData && jackpotData.currentAmount > 0) {
-                            jackpotWon = jackpotData.currentAmount;
-                            const newMoney = currentMoney + totalBet + winnings + jackpotWon;
-                            loanInfo = await setUserMoney(userId, newMoney);
-                            await resetJackpot(game.serverId, userId, jackpotWon);
-                            // Store jackpot info for embed display
-                            game.jackpotWinner = userId;
-                            game.jackpotAmount = jackpotWon;
-                        }
-                    } catch (error) {
-                        console.error('Error awarding blackjack jackpot on initial deal:', error);
-                    }
-                }
-
-                // Only set money if jackpot wasn't awarded (to avoid double setting)
-                if (jackpotWon === 0) {
-                    const newMoney = currentMoney + totalBet + winnings;
-                    loanInfo = await setUserMoney(userId, newMoney);
-                }
-
-                // Store loan deduction info for display
-                if (loanInfo) {
-                    game.loanDeduction = loanInfo;
-                }
-
-                const bet = game.getTotalBet(userId);
-                await recordGameResult(userId, 'blackjack', bet, winnings, result, {
-                    handsPlayed: game.players.get(userId).hands.length,
-                    jackpotWon: jackpotWon
-                });
-            }
-        }
-
-        const embed = await createGameEmbed(game, userId, client);
-        const buttons = await createButtons(game, userId, client);
-        
-        let components = [];
-        if (buttons) {
-            if (Array.isArray(buttons)) {
-                components = buttons;
-            } else {
-                components = [buttons];
-            }
-        }
-        
-        try {
-            if (message) {
-                await message.edit({ embeds: [embed], components: components });
-            } else {
-                await interaction.editReply({ embeds: [embed], components: components });
-            }
-        } catch (error) {
-            console.error('Error updating game message:', error);
-            game.isDealing = false;
+/** Remove a game from the active map, whichever key it is filed under. */
+function dropGame(game) {
+    for (const [key, value] of activeGames) {
+        if (value === game) {
+            activeGames.delete(key);
             return;
         }
     }
+}
 
-    game.isDealing = false;
+/**
+ * Return every player's stake when the table cannot be rendered, so a hand that
+ * never became playable does not cost anyone anything.
+ */
+async function refundFailedDeal(interaction, game, userId) {
+    const { getUserMoney, setUserMoney } = require('./database/queries');
+
+    // Everyone at the table staked before the deal, so everyone gets it back —
+    // this used to refund only the player the interaction belonged to, leaving
+    // the rest of a multiplayer table out of pocket for a hand nobody played.
+    for (const playerId of game.players.keys()) {
+        try {
+            const totalBet = game.getTotalBet(playerId);
+            if (totalBet <= 0) continue;
+
+            const currentMoney = await getUserMoney(playerId);
+            await setUserMoney(playerId, currentMoney + totalBet);
+            console.log(`Refunded ${totalBet} to user ${playerId} due to dealing error`);
+        } catch (refundError) {
+            console.error(`Error refunding bet for ${playerId}:`, refundError);
+        }
+    }
+
+    try {
+        await interaction.followUp({
+            content: `❌ Game failed to load properly. Your bet of ${game.getTotalBet(userId).toLocaleString()} has been refunded.`,
+            ephemeral: true
+        });
+    } catch (error) {
+        console.error('Error notifying player of refund:', error);
+    }
 }
 
 function cleanupStaleGames() {

@@ -81,34 +81,17 @@ module.exports = {
                     
                     // Start the game if still active
                     if (activeGames.get(interaction.channelId) === game && game.dealingPhase === 0) {
-                        await dealCardsWithDelay(interaction, message, game, interaction.user.id, 1000);
-                        
-                        const embed = await createGameEmbed(game, interaction.user.id, interaction.client);
-                        const { createButtons } = require('../utils/buttons');
-                        const buttons = await createButtons(game, interaction.user.id, interaction.client);
-                        
-                        let components = [];
-                        if (buttons) {
-                            if (Array.isArray(buttons)) {
-                                components = buttons;
-                            } else {
-                                components = [buttons];
-                            }
-                        }
-                        
-                        try {
-                            await message.edit({
-                                embeds: [embed],
-                                components: components
-                            });
-                            
-                            // Start turn timer if game is active
-                            if (!game.gameOver && game.dealingPhase >= 5) {
-                                const { startTurnTimer } = require('../handlers/buttonHandler');
-                                startTurnTimer(game, interaction, activeGames, interaction.client, dealCardsWithDelay);
-                            }
-                        } catch (error) {
-                            console.error('Error updating game message after countdown:', error);
+                        // dealCardsWithDelay leaves the table rendered in its
+                        // current state, so there is nothing to redraw here.
+                        await dealCardsWithDelay(interaction, message, game, interaction.user.id);
+
+                        // Start turn timer if game is active.
+                        // buttonHandler only exports handleButtonInteraction, so
+                        // the old require here yielded undefined and threw the
+                        // moment the first table finished dealing.
+                        if (!game.gameOver && game.dealingPhase >= 5) {
+                            const { startTurnTimer } = require('../handlers/buttons/blackjackButtons');
+                            startTurnTimer(game, interaction, activeGames, interaction.client, dealCardsWithDelay);
                         }
                     }
                     return;

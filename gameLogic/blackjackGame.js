@@ -1,5 +1,6 @@
 const Deck = require('./deck');
 const { randomUUID } = require('crypto');
+const { isNaturalBlackjack } = require('../utils/cardHelpers');
 
 class BlackjackGame {
     constructor(channelId, creatorId, bet, isMultiPlayer, isDuel = false) {
@@ -28,6 +29,8 @@ class BlackjackGame {
         this.readyPlayers = new Map();
         this.dealerHoleCard = null;
         this.isDealing = false; // Flag to prevent concurrent dealing
+        this.isDealerAnimating = false; // Flag to prevent concurrent dealer animations
+        this.settled = false; // True once payouts have been applied, so they only run once
         this.gameId = randomUUID(); // Unique game ID
     }
 
@@ -75,6 +78,10 @@ class BlackjackGame {
 
     // Card dealing
     dealNextCard() {
+        // Phase 5 is the last one. Guard here so a caller that over-runs the
+        // loop cannot push dealingPhase past the value the UI checks against.
+        if (this.dealingPhase >= 5) return;
+
         this.dealingPhase++;
 
         if (this.dealingPhase === 1 || this.dealingPhase === 2) {
@@ -150,6 +157,29 @@ class BlackjackGame {
             this.dealer.cards;
     }
 
+    // True while the dealer is still holding a face-down card. Display code must
+    // key off this rather than dealingPhase: once dealerPlay() reveals the hole
+    // card it moves into dealer.cards, and a phase-based check keeps drawing a
+    // card back that is no longer there.
+    hasHiddenDealerCard() {
+        return this.dealerHoleCard !== null && this.dealerHoleCard !== undefined;
+    }
+
+    // A natural is the original two-card 21 only. Hands created by splitting
+    // pay even money, so they must not be treated as naturals for the 3:2
+    // payout or the progressive jackpot.
+    isNaturalHand(userId, handIndex) {
+        const player = this.players.get(userId);
+        if (!player || player.hasSplit) return false;
+        return isNaturalBlackjack(player.hands[handIndex]);
+    }
+
+    hasNaturalBlackjack(userId) {
+        const player = this.players.get(userId);
+        if (!player || player.hasSplit) return false;
+        return player.hands.some(hand => isNaturalBlackjack(hand));
+    }
+
     // Player actions
     canSplit(userId) {
         const player = this.players.get(userId);
@@ -205,22 +235,29 @@ class BlackjackGame {
     }
 
     stand(userId) {
+        if (this.gameOver) return false;
+
         const player = this.players.get(userId);
-        if (!player) return;
-        
+        if (!player || player.stood) return false;
+
         const currentHand = player.hands[player.currentHandIndex];
-        if (!currentHand) return;
-        
+        if (!currentHand || currentHand.stood) return false;
+
         currentHand.stood = true;
         this.moveToNextHand(userId);
+        return true;
     }
 
     double(userId) {
-        const player = this.players.get(userId);
-        if (!player || player.hands[player.currentHandIndex].cards.length !== 2 ||
-            player.hands[player.currentHandIndex].doubled) return false;
+        if (this.gameOver) return false;
 
-        const currentHand = player.hands[player.currentHandIndex];
+        const player = this.players.get(userId);
+        if (!player || player.stood) return false;
+
+        const doubledHandIndex = player.currentHandIndex;
+        const currentHand = player.hands[doubledHandIndex];
+        if (!currentHand || currentHand.stood ||
+            currentHand.cards.length !== 2 || currentHand.doubled) return false;
 
         // Ensure bet is valid before doubling
         if (typeof currentHand.bet !== 'number' || isNaN(currentHand.bet)) {
@@ -231,7 +268,10 @@ class BlackjackGame {
         currentHand.doubled = true;
 
         this.hit(userId);
-        if (!this.gameOver) {
+
+        // A busting hit already advanced past this hand. Standing again here
+        // would stand the NEXT split hand before its owner ever played it.
+        if (!this.gameOver && player.currentHandIndex === doubledHandIndex) {
             this.stand(userId);
         }
 
@@ -302,52 +342,61 @@ class BlackjackGame {
         }
     }
 
-    dealerPlay() {
-        // First call: only reveal the hole card and let the animation handle drawing
-        if (this.dealerHoleCard) {
-            this.dealer.cards.push(this.dealerHoleCard);
-            this.dealerHoleCard = null;
-            this.dealer.isDrawing = true;
-            return; // Let animateDealerDrawing show the reveal, then draw with delays
-        }
-
-        const allHandsBusted = Array.from(this.players.values()).every(player =>
+    allHandsBusted() {
+        return Array.from(this.players.values()).every(player =>
             player.hands.every(hand => this.calculateScore(hand.cards) > 21));
+    }
 
-        // Mark that dealer is now playing but game is not over yet
+    // Move the hole card face up. Returns true only on the flip itself so the
+    // caller can render that single frame on its own.
+    revealDealerHoleCard() {
+        if (!this.hasHiddenDealerCard()) return false;
+        this.dealer.cards.push(this.dealerHoleCard);
+        this.dealerHoleCard = null;
+        return true;
+    }
+
+    // The dealer's turn is split into discrete steps so the UI can pace it:
+    //   dealerPlay()           -> the dealer's turn has begun
+    //   revealDealerHoleCard() -> flip the down card
+    //   shouldDealerContinue() -> does the dealer need another card?
+    //   drawDealerCard()       -> take exactly one card
+    // Nothing here reveals or draws implicitly, so a caller that renders
+    // between steps shows the table in the same order a real dealer plays it.
+    dealerPlay() {
+        if (this.gameOver) return;
         this.dealer.isDrawing = true;
+    }
 
-        if (!allHandsBusted) {
-            // Only draw one card at a time - the caller will handle the animation
-            if (this.calculateScore(this.dealer.cards) < 17) {
-                this.dealer.cards.push(this.deck.drawCard());
-                return; // Exit after drawing one card
-            }
-        }
-
-        // If we reach here, dealer is done drawing
-        this.dealer.isDrawing = false;
-        this.gameOver = true;
+    // Draw exactly one card, if the dealer is entitled to one.
+    drawDealerCard() {
+        if (!this.shouldDealerContinue()) return false;
+        this.dealer.cards.push(this.deck.drawCard());
+        // Re-evaluate straight away so a caller rendering right after this sees
+        // a hand already marked finished, rather than one still labelled as
+        // drawing for a card that is never coming.
+        this.shouldDealerContinue();
+        return true;
     }
 
     shouldDealerContinue() {
         if (!this.dealer.isDrawing) return false;
 
-        const allHandsBusted = Array.from(this.players.values()).every(player =>
-            player.hands.every(hand => this.calculateScore(hand.cards) > 21));
+        // Safety net for callers that do not animate: the dealer must never
+        // act on a hand it has not turned face up.
+        this.revealDealerHoleCard();
 
-        if (allHandsBusted) {
-            this.dealer.isDrawing = false;
-            this.gameOver = true;
+        if (this.allHandsBusted() || this.calculateScore(this.dealer.cards) >= 17) {
+            this.finishDealerTurn();
             return false;
         }
 
-        const shouldContinue = this.calculateScore(this.dealer.cards) < 17;
-        if (!shouldContinue) {
-            this.dealer.isDrawing = false;
-            this.gameOver = true;
-        }
-        return shouldContinue;
+        return true;
+    }
+
+    finishDealerTurn() {
+        this.dealer.isDrawing = false;
+        this.gameOver = true;
     }
 
     // Results calculation
@@ -370,15 +419,11 @@ class BlackjackGame {
 
         if (playerScore > 21) return 'lose';
 
-        // Check blackjack before dealer bust so natural BJ always pays 3:2
-        if (playerScore === 21 && hand.cards.length === 2) {
-            const hasAce = hand.cards.some(card => card.value === 14);
-            const hasTen = hand.cards.some(card => card.getBlackjackValue() === 10);
-
-            if (hasAce && hasTen) {
-                if (dealerScore === 21 && this.getDealerCards(true).length === 2) return 'push';
-                return 'blackjack';
-            }
+        // Check blackjack before dealer bust so natural BJ always pays 3:2.
+        // isNaturalHand() excludes split hands, which pay even money.
+        if (this.isNaturalHand(userId, handIndex)) {
+            if (dealerScore === 21 && this.getDealerCards(true).length === 2) return 'push';
+            return 'blackjack';
         }
 
         if (dealerScore > 21) return 'win';

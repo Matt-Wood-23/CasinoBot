@@ -1,6 +1,65 @@
 const { EmbedBuilder } = require('discord.js');
-const { getUserData } = require('../data');
+const { getUserMoney, getServerJackpot } = require('../data');
 const { applyHolidayTheme, getCurrentHoliday, applyHolidayWinningsBonus } = require('../holidayEvents');
+
+// Every embed below wants one number: the player's balance. It used to call
+// getUserData(), whose query json_aggs the player's entire game history, loan
+// history and statistics — on every frame of every dealing animation. These
+// embeds never read any of that.
+async function fetchBalance(userId) {
+    try {
+        return await getUserMoney(userId);
+    } catch (error) {
+        console.error(`Error fetching balance for ${userId}:`, error);
+        return 0;
+    }
+}
+
+// The jackpot field is redrawn on every animation frame, and getServerJackpot()
+// does an INSERT ... ON CONFLICT plus a SELECT each time. A few seconds of
+// staleness on a display-only figure is a fair trade for one write per hand.
+const JACKPOT_CACHE_MS = 5000;
+const jackpotCache = new Map();
+
+async function fetchJackpot(serverId) {
+    const cached = jackpotCache.get(serverId);
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+    try {
+        const value = await getServerJackpot(serverId);
+        jackpotCache.set(serverId, { value, expiresAt: Date.now() + JACKPOT_CACHE_MS });
+        return value;
+    } catch (error) {
+        console.error('Error fetching server jackpot:', error);
+        return null;
+    }
+}
+
+/**
+ * The dealer's hand as the table is allowed to see it right now.
+ *
+ * The card back is keyed off whether the dealer actually still holds a hidden
+ * card. The old checks used `dealingPhase >= 4 && !gameOver`, which stayed true
+ * all through the dealer's draw: once the hole card is turned over it moves
+ * into dealer.cards, so the table showed the real cards *plus* a phantom 🂠,
+ * with a score that already counted the card it claimed was face down.
+ */
+function formatDealerHand(game) {
+    if (game.dealingPhase < 3) return 'Waiting for cards...';
+
+    const faceUp = (game.dealer.cards || []).filter(Boolean);
+    const cardText = faceUp.length > 0
+        ? faceUp.map(card => card.getName()).join(' ')
+        : 'No dealer cards yet';
+
+    // Score always describes exactly the cards printed next to it.
+    if (game.hasHiddenDealerCard()) {
+        return `${cardText} 🂠 (${game.calculateScore(faceUp)} + ?)`;
+    }
+
+    const value = `${cardText} (${game.calculateScore(faceUp)})`;
+    return game.dealer.isDrawing ? `${value}\n*Dealer is drawing...*` : value;
+}
 
 // Main game embed router
 async function createGameEmbed(game, userId, client, options = {}) {
@@ -40,8 +99,7 @@ async function createGameEmbed(game, userId, client, options = {}) {
 
 // Poker Embeds
 async function createPokerEmbed(game, userId) {
-    const userData = await getUserData(userId);
-    const userMoney = userData ? userData.money : 500;
+    const userMoney = await fetchBalance(userId);
 
     const embed = new EmbedBuilder()
         .setTitle('🃏 3 Card Poker')
@@ -146,8 +204,7 @@ async function createPokerEmbed(game, userId) {
 
 // Slots Embeds
 async function createSlotsEmbed(game, userId) {
-    const userData = await getUserData(userId);
-    const userMoney = userData ? userData.money : 500;
+    const userMoney = await fetchBalance(userId);
 
     // Apply holiday bonus to winnings display
     const adjustedWinnings = applyHolidayWinningsBonus(game.winnings);
@@ -188,27 +245,20 @@ async function createSlotsEmbed(game, userId) {
 
 // Blackjack Embeds
 async function createBlackjackEmbed(game, userId, client) {
-    const userData = await getUserData(userId);
-    const userMoney = userData ? userData.money : 500;
-
-    let embed;
-
+    // Pure routing: no balance lookup and no embed built here, because every
+    // branch below builds and returns its own.
     if (game.isDuel) {
         // PvP Duel - use multi-player embed but with PvP styling
         return await createPvPBlackjackEmbed(game, userId, client);
-    } else if (game.isMultiPlayer) {
-        embed = new EmbedBuilder()
-            .setTitle('🃏 Blackjack Table')
-            .setColor(game.gameOver ? '#FFD700' : '#0099FF');
-
-        if (game.bettingPhase) {
-            return await createBettingPhaseEmbed(game, userId, client);
-        } else {
-            return await createMultiPlayerGameEmbed(game, userId, client);
-        }
-    } else {
-        return await createSinglePlayerGameEmbed(game, userId);
     }
+
+    if (game.isMultiPlayer) {
+        return game.bettingPhase
+            ? await createBettingPhaseEmbed(game, userId, client)
+            : await createMultiPlayerGameEmbed(game, userId, client);
+    }
+
+    return await createSinglePlayerGameEmbed(game, userId);
 }
 
 async function createBettingPhaseEmbed(game, userId, client) {
@@ -246,23 +296,9 @@ async function createMultiPlayerGameEmbed(game, userId, client) {
         .setTitle('🃏 Blackjack Table')
         .setColor(game.gameOver ? '#FFD700' : '#0099FF');
 
-    let dealerText = 'Waiting for cards...';
-    if (game.dealingPhase >= 3) {
-        dealerText = (game.dealer.cards && Array.isArray(game.dealer.cards))
-            ? game.dealer.cards.map(card => card.getName()).join(' ')
-            : 'No dealer cards yet';
-
-        if (game.dealingPhase >= 4 && !game.gameOver) {
-            dealerText += ' 🂠 (??)';
-        } else if (game.gameOver) {
-            dealerText = game.getDealerCards(true).map(card => card.getName()).join(' ');
-        }
-    }
-
     embed.addFields({
         name: '🏠 Dealer Cards',
-        value: dealerText + (game.gameOver ? ` (${game.getDealerScore(true)})` :
-            game.dealingPhase >= 3 ? ` (${game.getDealerScore(false)})` : ''),
+        value: formatDealerHand(game),
         inline: false
     });
 
@@ -518,8 +554,7 @@ async function createPvPBlackjackEmbed(game, userId, client) {
 }
 
 async function createSinglePlayerGameEmbed(game, userId) {
-    const userData = await getUserData(userId);
-    const userMoney = userData ? userData.money : 500;
+    const userMoney = await fetchBalance(userId);
     const player = game.players.get(userId);
 
     const embed = new EmbedBuilder()
@@ -561,23 +596,9 @@ async function createSinglePlayerGameEmbed(game, userId) {
     }
 
     // Dealer cards
-    let dealerText = 'Waiting for cards...';
-    if (game.dealingPhase >= 3) {
-        dealerText = (game.dealer.cards && Array.isArray(game.dealer.cards))
-            ? game.dealer.cards.map(card => card.getName()).join(' ')
-            : 'No dealer cards yet';
-
-        if (game.dealingPhase >= 4 && !game.gameOver) {
-            dealerText += ' 🂠 (??)';
-        } else if (game.gameOver) {
-            dealerText = game.getDealerCards(true).map(card => card.getName()).join(' ');
-        }
-    }
-
     embed.addFields({
         name: '🏠 Dealer Cards',
-        value: dealerText + (game.gameOver ? ` (${game.getDealerScore(true)})` :
-            game.dealingPhase >= 3 ? ` (${game.getDealerScore(false)})` : ''),
+        value: formatDealerHand(game),
         inline: true
     });
 
@@ -705,18 +726,13 @@ async function createSinglePlayerGameEmbed(game, userId) {
         }
     } else if (game.serverId) {
         // Show jackpot info during game
-        const { getServerJackpot } = require('../../database/queries');
-        try {
-            const jackpotData = await getServerJackpot(game.serverId);
-            if (jackpotData && jackpotData.currentAmount > 0) {
-                embed.addFields({
-                    name: '💎 Progressive Jackpot',
-                    value: `Current: $${jackpotData.currentAmount.toLocaleString()}\nWin on natural blackjack!`,
-                    inline: false
-                });
-            }
-        } catch (error) {
-            // Silent fail - jackpot display is not critical
+        const jackpotData = await fetchJackpot(game.serverId);
+        if (jackpotData && jackpotData.currentAmount > 0) {
+            embed.addFields({
+                name: '💎 Progressive Jackpot',
+                value: `Current: $${jackpotData.currentAmount.toLocaleString()}\nWin on natural blackjack!`,
+                inline: false
+            });
         }
     }
 
@@ -731,8 +747,7 @@ async function createSinglePlayerGameEmbed(game, userId) {
 
 // Roulette Embeds
 async function createRouletteEmbed(game, userId) {
-    const userData = await getUserData(userId);
-    const userMoney = userData ? userData.money : 500;
+    const userMoney = await fetchBalance(userId);
 
     const embed = new EmbedBuilder()
         .setTitle('🎰 American Roulette')
@@ -928,8 +943,7 @@ function getBetTypeDisplayName(betType) {
 
 // Craps Embeds
 async function createCrapsEmbed(game, userId) {
-    const userData = await getUserData(userId);
-    const userMoney = userData ? userData.money : 500;
+    const userMoney = await fetchBalance(userId);
 
     const embed = new EmbedBuilder()
         .setTitle('🎲 Craps')
@@ -1004,8 +1018,7 @@ async function createCrapsEmbed(game, userId) {
 
 // War Embeds
 async function createWarEmbed(game, userId) {
-    const userData = await getUserData(userId);
-    const userMoney = userData ? userData.money : 500;
+    const userMoney = await fetchBalance(userId);
 
     const embed = new EmbedBuilder()
         .setTitle('⚔️ Casino War')
@@ -1062,8 +1075,7 @@ async function createWarEmbed(game, userId) {
 
 // Coin Flip Embeds
 async function createCoinFlipEmbed(game, userId) {
-    const userData = await getUserData(userId);
-    const userMoney = userData ? userData.money : 500;
+    const userMoney = await fetchBalance(userId);
 
     const embed = new EmbedBuilder()
         .setTitle('🪙 Coin Flip')
@@ -1092,8 +1104,7 @@ async function createCoinFlipEmbed(game, userId) {
 
 // Horse Race Embeds
 async function createHorseRaceEmbed(game, userId, options = {}) {
-    const userData = await getUserData(userId);
-    const userMoney = userData ? userData.money : 500;
+    const userMoney = await fetchBalance(userId);
 
     const { frame } = options;
     const betHorse = game.getBetHorse();
@@ -1134,8 +1145,7 @@ async function createHorseRaceEmbed(game, userId, options = {}) {
 
 // Crash Embeds
 async function createCrashEmbed(game, userId) {
-    const userData = await getUserData(userId);
-    const userMoney = userData ? userData.money : 500;
+    const userMoney = await fetchBalance(userId);
 
     const color = game.gameComplete ? (game.result === 'win' ? '#00FF00' : '#FF0000') : '#FFD700';
     const embed = new EmbedBuilder()
@@ -1358,8 +1368,7 @@ async function createTournamentEmbed(tournament, userId, client) {
 
 // Hi-Lo Embeds
 async function createHiLoEmbed(game, userId) {
-    const userData = await getUserData(userId);
-    const userMoney = userData ? userData.money : 500;
+    const userMoney = await fetchBalance(userId);
 
     const color = game.gameComplete ? (game.result === 'win' ? '#00FF00' : '#FF0000') : '#FFD700';
     const embed = new EmbedBuilder()

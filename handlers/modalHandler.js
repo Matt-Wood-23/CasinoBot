@@ -352,7 +352,7 @@ async function startNewRoundFromBetting(game, interaction, activeGames, client, 
 
     // Deal cards immediately
     try {
-        await dealCardsWithDelay(interaction, interaction.message, newGame, interaction.user.id, 1000);
+        await dealCardsWithDelay(interaction, interaction.message, newGame, interaction.user.id);
     } catch (error) {
         console.error('Error starting new round:', error);
         await interaction.followUp({

@@ -1,5 +1,5 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { getUserData } = require('./data');
+const { getUserMoney } = require('./data');
 
 async function createButtons(game, userId, client, options = {}) {
     // Three Card Poker buttons
@@ -300,8 +300,14 @@ async function createMainGameButtons(game, userId, client) {
     }
 
     const currentHand = player.hands[player.currentHandIndex];
-    const userData = await getUserData(targetPlayerId);
-    const userMoney = userData ? userData.money : 500;
+    // getUserMoney() is a single indexed SELECT; getUserData() aggregates the
+    // player's whole game and loan history, and this runs on every redraw.
+    let userMoney = 0;
+    try {
+        userMoney = await getUserMoney(targetPlayerId);
+    } catch (error) {
+        console.error(`Error fetching balance for ${targetPlayerId}:`, error);
+    }
     const currentScore = game.getHandScore(targetPlayerId, player.currentHandIndex);
 
     // Disable hit if score is 21 or busted

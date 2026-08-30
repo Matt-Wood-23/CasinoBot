@@ -220,3 +220,193 @@ describe('getWinnings', () => {
         expect(game.getWinnings('p1')).toBe(0);
     });
 });
+
+// ─── Regressions ─────────────────────────────────────────────────────────────
+//
+// Each test below pins down a bug that was live in the shipped bot.
+
+/**
+ * Build a game whose deck hands out a fixed sequence of cards, with the
+ * opening deal already done. Anything drawn beyond `sequence` is a 2.
+ */
+function stackedGame(sequence, { bet = 100, multiPlayer = false } = {}) {
+    const game = new BlackjackGame('ch', 'player1', bet, multiPlayer);
+    let i = 0;
+    jest.spyOn(game.deck, 'drawCard').mockImplementation(
+        () => sequence[i++] ?? new Card(2, 'hearts')
+    );
+    return game;
+}
+
+describe('dealer hole card', () => {
+    test('stays hidden until the dealer turn reveals it', () => {
+        const game = stackedGame([
+            new Card(10, 'hearts'), new Card(9, 'spades'),   // player 19
+            new Card(6, 'clubs'), new Card(10, 'diamonds')   // dealer 6 up, 10 down
+        ]);
+        for (let i = 0; i < 5; i++) game.dealNextCard();
+
+        expect(game.hasHiddenDealerCard()).toBe(true);
+        // Only the up card is public, so only the up card is scored.
+        expect(game.dealer.cards).toHaveLength(1);
+        expect(game.getDealerScore(false)).toBe(6);
+
+        game.stand('player1');
+        expect(game.hasHiddenDealerCard()).toBe(true); // dealerPlay no longer flips it
+
+        game.revealDealerHoleCard();
+        expect(game.hasHiddenDealerCard()).toBe(false);
+        expect(game.dealer.cards).toHaveLength(2);
+        expect(game.getDealerScore(false)).toBe(16);
+    });
+
+    test('dealerPlay only opens the dealer turn; drawing is a separate step', () => {
+        const game = stackedGame([
+            new Card(10, 'hearts'), new Card(9, 'spades'),
+            new Card(6, 'clubs'), new Card(5, 'diamonds'),   // dealer 11
+            new Card(4, 'hearts'), new Card(7, 'spades')     // then 15, then 22
+        ]);
+        for (let i = 0; i < 5; i++) game.dealNextCard();
+
+        game.stand('player1');
+        expect(game.dealer.isDrawing).toBe(true);
+        expect(game.gameOver).toBe(false);
+
+        game.revealDealerHoleCard();
+        expect(game.drawDealerCard()).toBe(true);  // 11 → 15
+        expect(game.gameOver).toBe(false);
+        expect(game.drawDealerCard()).toBe(true);  // 15 → 22, dealer done
+        expect(game.gameOver).toBe(true);
+        expect(game.dealer.isDrawing).toBe(false);
+        expect(game.drawDealerCard()).toBe(false); // no cards after the turn ends
+    });
+
+    test('shouldDealerContinue reveals the hole card if nothing animated it', () => {
+        const game = stackedGame([
+            new Card(10, 'hearts'), new Card(9, 'spades'),
+            new Card(10, 'clubs'), new Card(8, 'diamonds')   // dealer 18: stands
+        ]);
+        for (let i = 0; i < 5; i++) game.dealNextCard();
+
+        game.stand('player1');
+        expect(game.shouldDealerContinue()).toBe(false);
+        expect(game.hasHiddenDealerCard()).toBe(false);
+        expect(game.gameOver).toBe(true);
+    });
+});
+
+describe('double after split', () => {
+    test('busting a doubled hand does not stand the next split hand', () => {
+        const game = stackedGame([
+            new Card(8, 'hearts'), new Card(8, 'spades'),    // player: pair of 8s
+            new Card(6, 'clubs'), new Card(10, 'diamonds'),  // dealer
+            new Card(3, 'hearts'),   // split → hand 0 gets 3  (8+3 = 11)
+            new Card(9, 'clubs'),    // split → hand 1 gets 9  (8+9 = 17)
+            new Card(10, 'spades')   // double on hand 0 → 21
+        ]);
+        for (let i = 0; i < 5; i++) game.dealNextCard();
+
+        expect(game.split('player1')).toBe(true);
+        expect(game.double('player1')).toBe(true);
+
+        const player = game.players.get('player1');
+        // Hand 0 doubled to 21 and stood; play must now pass to hand 1.
+        expect(player.currentHandIndex).toBe(1);
+        expect(player.hands[1].stood).toBeFalsy();
+        expect(player.stood).toBe(false);
+    });
+
+    test('the second split hand is still playable after the first busts', () => {
+        const game = stackedGame([
+            new Card(8, 'hearts'), new Card(8, 'spades'),
+            new Card(6, 'clubs'), new Card(10, 'diamonds'),
+            new Card(9, 'hearts'),   // hand 0: 8+9 = 17
+            new Card(9, 'clubs'),    // hand 1: 8+9 = 17
+            new Card(10, 'spades')   // double on hand 0 → 27, bust
+        ]);
+        for (let i = 0; i < 5; i++) game.dealNextCard();
+
+        game.split('player1');
+        game.double('player1');
+
+        const player = game.players.get('player1');
+        expect(game.calculateScore(player.hands[0].cards)).toBeGreaterThan(21);
+        expect(player.currentHandIndex).toBe(1);
+        // The player never acted on hand 1, so it must not be stood.
+        expect(player.hands[1].stood).toBeFalsy();
+        expect(player.stood).toBe(false);
+        expect(game.hit('player1')).toBe(true); // still their hand to play
+    });
+});
+
+describe('split hands are not naturals', () => {
+    test('A+10 made by splitting aces pays even money, not 3:2', () => {
+        const game = stackedGame([
+            new Card(14, 'hearts'), new Card(14, 'spades'),  // pair of aces
+            new Card(6, 'clubs'), new Card(10, 'diamonds'),  // dealer 16
+            new Card(13, 'hearts'),  // hand 0: A+K = 21
+            new Card(9, 'clubs')     // hand 1: A+9 = 20
+        ]);
+        for (let i = 0; i < 5; i++) game.dealNextCard();
+
+        game.split('player1');
+        game.gameOver = true;
+
+        expect(game.hasNaturalBlackjack('player1')).toBe(false);
+        expect(game.getHandResult('player1', 0)).toBe('win'); // not 'blackjack'
+        // 100 per hand, both beat the dealer's 16: even money on each.
+        expect(game.getWinnings('player1')).toBe(200);
+    });
+
+    test('an unsplit A+10 is still a natural', () => {
+        const game = stackedGame([
+            new Card(14, 'hearts'), new Card(13, 'spades'),
+            new Card(6, 'clubs'), new Card(10, 'diamonds')
+        ]);
+        for (let i = 0; i < 5; i++) game.dealNextCard();
+        game.gameOver = true;
+
+        expect(game.hasNaturalBlackjack('player1')).toBe(true);
+        expect(game.getHandResult('player1', 0)).toBe('blackjack');
+        expect(game.getWinnings('player1')).toBe(150); // 3:2
+    });
+});
+
+describe('action guards', () => {
+    test('stand reports whether it did anything', () => {
+        const game = stackedGame([
+            new Card(10, 'hearts'), new Card(9, 'spades'),
+            new Card(10, 'clubs'), new Card(8, 'diamonds')
+        ]);
+        for (let i = 0; i < 5; i++) game.dealNextCard();
+
+        expect(game.stand('player1')).toBe(true);
+        // A repeat click on a hand that is already done must be a no-op.
+        expect(game.stand('player1')).toBe(false);
+        expect(game.stand('nobody')).toBe(false);
+    });
+
+    test('double is rejected on a hand of more than two cards', () => {
+        const game = stackedGame([
+            new Card(5, 'hearts'), new Card(4, 'spades'),
+            new Card(10, 'clubs'), new Card(8, 'diamonds'),
+            new Card(3, 'hearts')
+        ]);
+        for (let i = 0; i < 5; i++) game.dealNextCard();
+
+        game.hit('player1');
+        expect(game.double('player1')).toBe(false);
+    });
+
+    test('dealNextCard cannot run past the final phase', () => {
+        const game = stackedGame([
+            new Card(10, 'hearts'), new Card(9, 'spades'),
+            new Card(10, 'clubs'), new Card(8, 'diamonds')
+        ]);
+        for (let i = 0; i < 10; i++) game.dealNextCard();
+
+        expect(game.dealingPhase).toBe(5);
+        expect(game.players.get('player1').hands[0].cards).toHaveLength(2);
+        expect(game.dealer.cards).toHaveLength(1);
+    });
+});

@@ -1,12 +1,13 @@
-const { getUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
-const { createGameEmbed } = require('../../utils/embeds');
-const { createButtons } = require('../../utils/buttons');
-const { applyHolidayWinningsBonus } = require('../../utils/holidayEvents');
-const { getServerJackpot, resetJackpot } = require('../../database/queries');
-const { isNaturalBlackjack } = require('../../utils/cardHelpers');
-const { awardGameXP, awardWagerXP } = require('../../utils/guildXP');
-const { recordGameToEvents } = require('../../utils/eventIntegration');
+const { getUserMoney, setUserMoney } = require('../../utils/data');
 const BlackjackGame = require('../../gameLogic/blackjackGame');
+const { settleBlackjackGame } = require('../../utils/blackjackSettlement');
+const { renderBlackjack, wait } = require('../../utils/blackjackRender');
+const {
+    DEALER_REVEAL_DELAY,
+    DEALER_DRAW_DELAY,
+    DEALER_RESULT_DELAY,
+    INITIAL_DEAL_DELAY
+} = require('../../utils/blackjackTiming');
 
 async function handleBlackjackButtons(interaction, activeGames, client, dealCardsWithDelay) {
     const { customId, user } = interaction;
@@ -39,8 +40,14 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
             return interaction.reply({ content: '❌ No active single-player game found!', ephemeral: true });
         }
 
+        // Guard against replaying a hand that is still in progress — the button
+        // can survive on an older message while a new hand is being dealt.
+        if (!game.gameOver || game.isDealing || game.isDealerAnimating) {
+            return interaction.reply({ content: '❌ Your current hand is still in play!', ephemeral: true });
+        }
+
         const player = game.players.get(user.id);
-        const lastBet = player.bet / (player.hasSplit ? 2 : 1);
+        const lastBet = Math.floor(player.bet / (player.hasSplit ? 2 : 1));
         const userMoney = await getUserMoney(user.id);
 
         if (userMoney < lastBet) {
@@ -52,14 +59,15 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
 
         await setUserMoney(user.id, userMoney - lastBet);
         const newGame = new BlackjackGame(interaction.channelId, user.id, lastBet, false);
+        // Without this the replayed hand silently drops out of the progressive
+        // jackpot: every jackpot check is gated on game.serverId.
+        newGame.serverId = game.serverId;
         newGame.interactionStartTime = Date.now();
-        activeGames.delete(user.id);
         activeGames.set(user.id, newGame);
 
         await interaction.deferUpdate();
-        const message = interaction.message;
 
-        await dealCardsWithDelay(interaction, message, newGame, user.id, 1000);
+        await dealCardsWithDelay(interaction, interaction.message, newGame, user.id, INITIAL_DEAL_DELAY);
 
         return;
     }
@@ -93,14 +101,24 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
 
     // Handle game actions
     if (['hit', 'stand', 'double', 'split'].includes(customId)) {
+        // A hand that is mid-animation is not accepting input. Without this a
+        // second click while the dealer is drawing starts a second animation
+        // loop, so the cards flick past at double speed, the table flips
+        // between two renders, and both loops run the payout.
+        if (game.gameOver) {
+            return interaction.reply({ content: '❌ This hand is already finished!', ephemeral: true });
+        }
+        if (game.isDealing || game.isDealerAnimating) {
+            return interaction.reply({ content: '⏳ Hold on — the cards are still being dealt.', ephemeral: true });
+        }
+
         await interaction.deferUpdate();
         let actionSuccess = false;
 
         if (customId === 'hit') {
             actionSuccess = game.hit(user.id);
         } else if (customId === 'stand') {
-            game.stand(user.id);
-            actionSuccess = true;
+            actionSuccess = game.stand(user.id);
         } else if (customId === 'double') {
             const currentHand = game.getCurrentHand(user.id);
             if (!currentHand) {
@@ -131,427 +149,154 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
             actionSuccess = game.split(user.id);
         }
 
-        // If dealer needs to draw cards, animate them
-        if (actionSuccess && game.dealer.isDrawing) {
-            await animateDealerDrawing(game, interaction, user.id, client);
+        if (!actionSuccess) {
+            // Nothing changed, so nothing to redraw.
+            return;
         }
 
-        // Handle game completion
-        if (actionSuccess && game.gameOver) {
-            if (game.isDuel) {
-                const players = Array.from(game.players.keys());
-                if (players.length === 2) {
-                    const [playerAId, playerBId] = players;
-                    const pvpResult = game.calculatePvPWinner(playerAId, playerBId);
-
-                    if (pvpResult.isPush) {
-                        const currentMoneyA = await getUserMoney(playerAId);
-                        await setUserMoney(playerAId, currentMoneyA + game.getTotalBet(playerAId));
-                        const currentMoneyB = await getUserMoney(playerBId);
-                        await setUserMoney(playerBId, currentMoneyB + game.getTotalBet(playerBId));
-                        await recordGameResult(playerAId, 'blackjack', game.getTotalBet(playerAId), 0, 'push', { pvpDuel: true });
-                        await recordGameResult(playerBId, 'blackjack', game.getTotalBet(playerBId), 0, 'push', { pvpDuel: true });
-                        game.pvpResult = { isPush: true };
-                    } else {
-                        const { winnerId, amount } = pvpResult;
-                        const loserId = winnerId === playerAId ? playerBId : playerAId;
-                        const currentMoneyWinner = await getUserMoney(winnerId);
-                        await setUserMoney(winnerId, currentMoneyWinner + amount);
-                        const winnerBet = game.getTotalBet(winnerId);
-                        const loserBet = game.getTotalBet(loserId);
-                        await recordGameResult(winnerId, 'blackjack', winnerBet, amount - winnerBet, 'win', { pvpDuel: true });
-                        await recordGameResult(loserId, 'blackjack', loserBet, -loserBet, 'lose', { pvpDuel: true });
-                        game.pvpResult = { winnerId, amount };
-                    }
-                }
-            } else if (!isMultiPlayer) {
-                const baseWinnings = game.getWinnings(user.id);
-                const winnings = applyHolidayWinningsBonus(baseWinnings);
-                const currentMoney = await getUserMoney(user.id);
-                const totalBet = game.getTotalBet(user.id);
-                const newMoney = currentMoney + totalBet + winnings;
-
-                let loanInfo = await setUserMoney(user.id, newMoney);
-                const results = game.getResult(user.id);
-                const result = Array.isArray(results) ?
-                    (results.includes('blackjack') ? 'blackjack' :
-                        (results.includes('win') ? 'win' :
-                            (results.includes('lose') ? 'lose' : 'push'))) : results;
-
-                // Award progressive jackpot on natural blackjack
-                // Check if player has natural blackjack regardless of result (even if push)
-                let jackpotWon = 0;
-                const player = game.players.get(user.id);
-                const hasNaturalBJ = player.hands.some(hand => isNaturalBlackjack(hand));
-
-                if (hasNaturalBJ && game.serverId) {
-                    try {
-                        const jackpotData = await getServerJackpot(game.serverId);
-                        if (jackpotData && jackpotData.currentAmount > 0) {
-                            jackpotWon = jackpotData.currentAmount;
-                            const jackpotLoanInfo = await setUserMoney(user.id, newMoney + jackpotWon);
-                            // Update loan info if jackpot was awarded
-                            if (jackpotLoanInfo) {
-                                loanInfo = jackpotLoanInfo;
-                            }
-                            await resetJackpot(game.serverId, user.id, jackpotWon);
-                            // Store jackpot info for embed display
-                            game.jackpotWinner = user.id;
-                            game.jackpotAmount = jackpotWon;
-                        }
-                    } catch (error) {
-                        console.error('Error awarding blackjack jackpot:', error);
-                    }
-                }
-
-                // Store loan deduction info for display
-                if (loanInfo) {
-                    game.loanDeduction = loanInfo;
-                }
-
-                const bet = game.getTotalBet(user.id);
-                await recordGameResult(user.id, 'blackjack', bet, winnings, result, {
-                    handsPlayed: game.players.get(user.id).hands.length,
-                    jackpotWon: jackpotWon
-                });
-
-                // Award guild XP (async, don't wait)
-                awardWagerXP(user.id, bet, 'Blackjack').catch(err =>
-                    console.error('Error awarding wager XP:', err)
-                );
-                const won = result === 'win' || result === 'blackjack';
-                awardGameXP(user.id, 'Blackjack', won).catch(err =>
-                    console.error('Error awarding game XP:', err)
-                );
-
-                // Record to active guild events (async, don't wait)
-                recordGameToEvents(user.id, 'Blackjack', bet, winnings > 0 ? winnings : 0).catch(err =>
-                    console.error('Error recording game to events:', err)
-                );
-            } else {
-                let jackpotAwarded = false; // Track if jackpot was already awarded in this game
-                game.loanDeductions = game.loanDeductions || new Map(); // Store loan deductions per player
-
-                for (const [playerId] of game.players) {
-                    const baseWinnings = game.getWinnings(playerId);
-                    const winnings = applyHolidayWinningsBonus(baseWinnings);
-                    const currentMoney = await getUserMoney(playerId);
-                    const totalBet = game.getTotalBet(playerId);
-                    const newMoney = currentMoney + totalBet + winnings;
-
-                    const loanInfo = await setUserMoney(playerId, newMoney);
-                    const results = game.getResult(playerId);
-                    const result = Array.isArray(results) ?
-                        (results.includes('blackjack') ? 'blackjack' :
-                            (results.includes('win') ? 'win' :
-                                (results.includes('lose') ? 'lose' : 'push'))) : results;
-
-                    // Award progressive jackpot on natural blackjack (only once per game)
-                    // Check if player has natural blackjack regardless of result (even if push)
-                    let jackpotWon = 0;
-                    const player = game.players.get(playerId);
-                    const hasNaturalBJ = player.hands.some(hand => isNaturalBlackjack(hand));
-
-                    if (hasNaturalBJ && game.serverId && !jackpotAwarded) {
-                        try {
-                            const jackpotData = await getServerJackpot(game.serverId);
-                            if (jackpotData && jackpotData.currentAmount > 0) {
-                                jackpotWon = jackpotData.currentAmount;
-                                const jackpotLoanInfo = await setUserMoney(playerId, newMoney + jackpotWon);
-                                // Update loan info to include jackpot
-                                if (jackpotLoanInfo) {
-                                    game.loanDeductions.set(playerId, jackpotLoanInfo);
-                                }
-                                await resetJackpot(game.serverId, playerId, jackpotWon);
-                                jackpotAwarded = true;
-                                // Store jackpot info for embed display
-                                game.jackpotWinner = playerId;
-                                game.jackpotAmount = jackpotWon;
-                            }
-                        } catch (error) {
-                            console.error('Error awarding blackjack jackpot:', error);
-                        }
-                    } else if (loanInfo) {
-                        // Store loan info for non-jackpot winners
-                        game.loanDeductions.set(playerId, loanInfo);
-                    }
-
-                    const bet = game.getTotalBet(playerId);
-                    await recordGameResult(playerId, 'blackjack', bet, winnings, result, {
-                        handsPlayed: game.players.get(playerId).hands.length,
-                        jackpotWon: jackpotWon
-                    });
-
-                    // Award guild XP (async, don't wait)
-                    awardWagerXP(playerId, bet, 'Blackjack').catch(err =>
-                        console.error('Error awarding wager XP:', err)
-                    );
-                    const won = result === 'win' || result === 'blackjack';
-                    awardGameXP(playerId, 'Blackjack', won).catch(err =>
-                        console.error('Error awarding game XP:', err)
-                    );
-
-                    // Record to active guild events (async, don't wait)
-                    recordGameToEvents(playerId, 'Blackjack', bet, winnings > 0 ? winnings : 0).catch(err =>
-                        console.error('Error recording game to events:', err)
-                    );
-                }
-            }
-        }
-
-        // Update the game display
-        const embed = await createGameEmbed(game, user.id, client);
-        const buttons = await createButtons(game, user.id, client);
-        let components = [];
-        if (buttons) {
-            if (Array.isArray(buttons)) {
-                components = buttons;
-            } else {
-                components = [buttons];
-            }
-        }
-
-        try {
-            await interaction.message.edit({
-                embeds: [embed],
-                components: components
-            });
-        } catch (error) {
-            console.error('Error updating game message:', error);
+        // Show the result of the player's own action before the dealer moves,
+        // so the two are never collapsed into one edit.
+        if (!await renderBlackjack(interaction.message, game, user.id, client)) {
             await interaction.followUp({
                 content: '⚠️ Failed to update the game message.',
                 ephemeral: true
-            });
+            }).catch(() => {});
+        }
+
+        // If the dealer's turn has begun, play it out one card at a time.
+        if (game.dealer.isDrawing) {
+            await animateDealerDrawing(game, interaction, user.id, client);
+        }
+
+        if (game.gameOver) {
+            if (game.turnTimer) {
+                clearTimeout(game.turnTimer);
+                game.turnTimer = null;
+            }
+
+            // Idempotent: whichever path gets here first pays the hand out.
+            try {
+                await settleBlackjackGame(game);
+            } catch (error) {
+                await interaction.followUp({
+                    content: '⚠️ Something went wrong settling this hand. Please contact the bot owner before playing again.',
+                    ephemeral: true
+                });
+            }
+
+            // One final redraw, now that payouts, loan deductions and any
+            // jackpot are recorded on the game.
+            await renderBlackjack(interaction.message, game, user.id, client);
         }
 
         // Start turn timer for multiplayer
-        if (isMultiPlayer && actionSuccess && !game.gameOver) {
+        if (isMultiPlayer && !game.gameOver) {
             startTurnTimer(game, interaction, activeGames, client, dealCardsWithDelay);
         }
     }
 }
 
 async function updateBettingDisplay(game, interaction, client, options = {}) {
-    try {
-        const embed = await createGameEmbed(game, interaction.user.id, client);
-        const buttons = await createButtons(game, interaction.user.id, client, options);
-        let components = [];
-        if (buttons) {
-            if (Array.isArray(buttons)) {
-                components = buttons;
-            } else {
-                components = [buttons];
-            }
-        }
-        await interaction.message.edit({
-            embeds: [embed],
-            components: components
-        });
-    } catch (error) {
-        console.error('Error updating betting display:', error);
+    const ok = await renderBlackjack(interaction.message, game, interaction.user.id, client, options);
+    if (!ok) {
         await interaction.followUp({
             content: '⚠️ Failed to update the game message. Your bet was adjusted, but the table may not reflect it.',
             ephemeral: true
-        });
+        }).catch(() => {});
     }
 }
 
 function startTurnTimer(game, interaction, activeGames, client, dealCardsWithDelay) {
     if (!game.isMultiPlayer || game.gameOver) return;
 
+    // Each action used to schedule another timeout without cancelling the
+    // previous one, so a player who acted twice was force-stood 30s after their
+    // FIRST action rather than their most recent one.
+    if (game.turnTimer) clearTimeout(game.turnTimer);
+
     const currentPlayerId = Array.from(game.players.keys())[game.currentPlayerIndex];
 
-    setTimeout(async () => {
-        if (!activeGames.get(interaction.channelId) || activeGames.get(interaction.channelId) !== game) return;
+    game.turnTimer = setTimeout(async () => {
+        game.turnTimer = null;
+
+        if (activeGames.get(interaction.channelId) !== game) return;
+        if (game.gameOver || game.isDealing || game.isDealerAnimating) return;
 
         const player = game.players.get(currentPlayerId);
         if (!player || player.stood) return;
 
-        game.stand(currentPlayerId);
-
-        if (game.gameOver) {
-            let jackpotAwarded = false; // Track if jackpot was already awarded in this game
-            game.loanDeductions = game.loanDeductions || new Map(); // Store loan deductions per player
-
-            for (const [playerId] of game.players) {
-                const baseWinnings = game.getWinnings(playerId);
-                const winnings = applyHolidayWinningsBonus(baseWinnings);
-                const currentMoney = await getUserMoney(playerId);
-                const totalBet = game.getTotalBet(playerId);
-                const newMoney = currentMoney + totalBet + winnings;
-                const loanInfo = await setUserMoney(playerId, newMoney);
-                const results = game.getResult(playerId);
-                const result = Array.isArray(results) ?
-                    (results.includes('blackjack') ? 'blackjack' :
-                        (results.includes('win') ? 'win' :
-                            (results.includes('lose') ? 'lose' : 'push'))) : results;
-
-                // Award progressive jackpot on natural blackjack (only once per game)
-                // Check if player has natural blackjack regardless of result (even if push)
-                let jackpotWon = 0;
-                const player = game.players.get(playerId);
-                const hasNaturalBJ = player.hands.some(hand => isNaturalBlackjack(hand));
-
-                if (hasNaturalBJ && game.serverId && !jackpotAwarded) {
-                    try {
-                        const jackpotData = await getServerJackpot(game.serverId);
-                        if (jackpotData && jackpotData.currentAmount > 0) {
-                            jackpotWon = jackpotData.currentAmount;
-                            const jackpotLoanInfo = await setUserMoney(playerId, newMoney + jackpotWon);
-                            // Update loan info to include jackpot
-                            if (jackpotLoanInfo) {
-                                game.loanDeductions.set(playerId, jackpotLoanInfo);
-                            }
-                            await resetJackpot(game.serverId, playerId, jackpotWon);
-                            jackpotAwarded = true;
-                            // Store jackpot info for embed display
-                            game.jackpotWinner = playerId;
-                            game.jackpotAmount = jackpotWon;
-                        }
-                    } catch (error) {
-                        console.error('Error awarding blackjack jackpot:', error);
-                    }
-                } else if (loanInfo) {
-                    // Store loan info for non-jackpot winners
-                    game.loanDeductions.set(playerId, loanInfo);
-                }
-
-                const bet = game.getTotalBet(playerId);
-                await recordGameResult(playerId, 'blackjack', bet, winnings, result, {
-                    handsPlayed: game.players.get(playerId).hands.length,
-                    jackpotWon: jackpotWon
-                });
-
-                // Award guild XP (async, don't wait)
-                awardWagerXP(playerId, bet, 'Blackjack').catch(err =>
-                    console.error('Error awarding wager XP:', err)
-                );
-                const won = result === 'win' || result === 'blackjack';
-                awardGameXP(playerId, 'Blackjack', won).catch(err =>
-                    console.error('Error awarding game XP:', err)
-                );
-
-                // Record to active guild events (async, don't wait)
-                recordGameToEvents(playerId, 'Blackjack', bet, winnings > 0 ? winnings : 0).catch(err =>
-                    console.error('Error recording game to events:', err)
-                );
-            }
-        } else {
-            game.checkAllPlayersDone();
-        }
+        if (!game.stand(currentPlayerId)) return;
 
         try {
-            const embed = await createGameEmbed(game, currentPlayerId, client);
-            const buttons = await createButtons(game, currentPlayerId, client);
-            let components = [];
-            if (buttons) {
-                if (Array.isArray(buttons)) {
-                    components = buttons;
-                } else {
-                    components = [buttons];
-                }
+            await renderBlackjack(interaction.message, game, currentPlayerId, client);
+
+            // Standing may have handed the table to the dealer. Play that out
+            // here too — the old timeout path never did, which left the hand
+            // stuck with the dealer mid-draw and no way to finish it.
+            if (game.dealer.isDrawing) {
+                await animateDealerDrawing(game, interaction, currentPlayerId, client);
             }
 
-            await interaction.message.edit({
-                embeds: [embed],
-                components: components
-            });
-
-            if (!game.gameOver) {
+            if (game.gameOver) {
+                await settleBlackjackGame(game);
+                await renderBlackjack(interaction.message, game, currentPlayerId, client);
+            } else {
                 startTurnTimer(game, interaction, activeGames, client, dealCardsWithDelay);
             }
         } catch (error) {
-            console.error('Error updating game message after timeout:', error);
+            console.error('Error resolving turn timeout:', error);
         }
     }, 30000); // 30 seconds
 }
 
-// Animate dealer drawing cards one at a time
+/**
+ * Play the dealer's turn out at a readable pace: a beat, the hole card, then
+ * one card at a time.
+ *
+ * Only one of these may run per game. Two concurrent loops (which a double
+ * click on Stand used to produce) both draw and both redraw, which is what made
+ * the dealer's cards appear to flip past almost instantly.
+ */
 async function animateDealerDrawing(game, interaction, userId, client) {
-    const delay = 1000; // 1 second between each dealer card
-    const currentGameId = game.gameId; // Store gameId to detect if game is replaced
+    if (game.isDealerAnimating) return;
+    game.isDealerAnimating = true;
 
-    // Show hole card reveal immediately before any drawing begins
-    const revealEmbed = await createGameEmbed(game, userId, client);
-    const revealButtons = await createButtons(game, userId, client);
-    const revealComponents = revealButtons
-        ? (Array.isArray(revealButtons) ? revealButtons : [revealButtons])
-        : [];
+    const currentGameId = game.gameId; // Detect the game being replaced mid-animation
+    const stillCurrent = () => {
+        if (game.gameId !== currentGameId) {
+            console.log(`Game ${currentGameId} was replaced during dealer animation, stopping`);
+            return false;
+        }
+        return true;
+    };
+
     try {
-        await interaction.message.edit({ embeds: [revealEmbed], components: revealComponents });
-    } catch (error) {
-        console.error('Error updating game message on hole card reveal:', error);
-    }
+        // Beat before the flip, so the reveal reads as its own moment rather
+        // than arriving in the same edit as the player's last action.
+        if (game.hasHiddenDealerCard()) {
+            await wait(DEALER_REVEAL_DELAY);
+            if (!stillCurrent()) return;
 
-    while (game.shouldDealerContinue()) {
-        // Check if game was replaced during animation
-        if (game.gameId !== currentGameId) {
-            console.log(`Game ${currentGameId} was replaced during dealer animation, stopping`);
-            return;
+            game.revealDealerHoleCard();
+            if (!await renderBlackjack(interaction.message, game, userId, client)) return;
         }
 
-        // Wait before drawing next card
-        await new Promise(resolve => setTimeout(resolve, delay));
+        while (game.shouldDealerContinue()) {
+            if (!stillCurrent()) return;
 
-        // Check again after delay in case game was replaced while waiting
-        if (game.gameId !== currentGameId) {
-            console.log(`Game ${currentGameId} was replaced during dealer animation, stopping`);
-            return;
+            await wait(DEALER_DRAW_DELAY);
+            if (!stillCurrent()) return;
+
+            game.drawDealerCard();
+
+            if (!await renderBlackjack(interaction.message, game, userId, client)) return;
         }
 
-        // Draw one card
-        game.dealerPlay();
-
-        // Update display
-        const embed = await createGameEmbed(game, userId, client);
-        const buttons = await createButtons(game, userId, client);
-        let components = [];
-        if (buttons) {
-            if (Array.isArray(buttons)) {
-                components = buttons;
-            } else {
-                components = [buttons];
-            }
-        }
-
-        try {
-            await interaction.message.edit({
-                embeds: [embed],
-                components: components
-            });
-        } catch (error) {
-            console.error('Error updating game message during dealer draw:', error);
-            break;
-        }
-    }
-
-    // Check if game was replaced before final update
-    if (game.gameId !== currentGameId) {
-        console.log(`Game ${currentGameId} was replaced during dealer animation, stopping`);
-        return;
-    }
-
-    // Final update after dealer is done to show game over buttons
-    if (game.gameOver) {
-        const embed = await createGameEmbed(game, userId, client);
-        const buttons = await createButtons(game, userId, client);
-        let components = [];
-        if (buttons) {
-            if (Array.isArray(buttons)) {
-                components = buttons;
-            } else {
-                components = [buttons];
-            }
-        }
-
-        try {
-            await interaction.message.edit({
-                embeds: [embed],
-                components: components
-            });
-        } catch (error) {
-            console.error('Error updating game message after dealer finishes:', error);
-        }
+        // Let the dealer's final hand sit for a moment before the result
+        // replaces it.
+        if (game.gameOver) await wait(DEALER_RESULT_DELAY);
+    } finally {
+        game.isDealerAnimating = false;
     }
 }
 
