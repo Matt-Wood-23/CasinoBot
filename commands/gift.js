@@ -62,10 +62,10 @@ module.exports = {
 
             // Process the gift transfer
             const senderNewBalance = userMoney - amount;
-            await setUserMoney(interaction.user.id, senderNewBalance);
+            await addUserMoney(interaction.user.id, -amount);
             const targetMoney = await getUserMoney(targetUser.id);
             const recipientNewBalance = targetMoney + amount;
-            await setUserMoney(targetUser.id, recipientNewBalance);
+            await addUserMoney(targetUser.id, amount);
 
             // Record transactions for both sender and receiver
             await recordTransaction({

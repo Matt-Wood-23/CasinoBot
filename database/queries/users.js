@@ -97,78 +97,144 @@ async function getUserMoney(userId) {
     }
 }
 
-// Set user money - returns loan deduction info if applicable.
-// Uses SELECT FOR UPDATE inside a transaction to prevent concurrent balance corruption.
+// ---------------------------------------------------------------------------
+// Balance updates
+//
+// Every game used to move money like this:
+//
+//     const money = await getUserMoney(id);       // read, on one connection
+//     await setUserMoney(id, money + winnings);   // write, on another
+//
+// setUserMoney locks the row for its own read, but the caller's read happened
+// outside that lock, so two hands finishing at once both saw the same starting
+// balance and the second write silently threw away the first result. Money was
+// created or destroyed with nothing visibly wrong.
+//
+// addUserMoney() does the arithmetic in SQL instead, so the database
+// serialises concurrent changes and no read-modify-write window exists.
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply a delta to a balance in a single statement. Balances never go negative.
+ * Returns the new balance, or null if the user does not exist.
+ */
+async function adjustBalance(userId, delta) {
+    const result = await query(
+        `UPDATE users
+         SET money = GREATEST(0, money + $1)
+         WHERE discord_id = $2
+         RETURNING money`,
+        [Math.floor(delta), userId]
+    );
+
+    if (result.rows.length === 0) return null;
+    return parseInt(result.rows[0].money);
+}
+
+/**
+ * Take the loan's cut of a credit.
+ *
+ * This runs with no transaction open. It used to be called from inside
+ * setUserMoney's `BEGIN; SELECT ... FOR UPDATE`, and the loan payoff path
+ * writes to that same users row (updateCreditScore) on a different pool
+ * connection — so the inner write blocked on a lock its own caller held, and
+ * the caller could not commit until the inner write returned. Any win that
+ * cleared a loan hung a connection until it timed out.
+ */
+async function applyLoanDeduction(userId, credited) {
+    if (credited <= 0) return { loanDeducted: 0, actualReceived: credited };
+
+    try {
+        const { deductFromWinnings } = require('../../utils/loanSystem');
+        const { deducted, remaining } = await deductFromWinnings(userId, credited);
+
+        if (deducted > 0) {
+            await adjustBalance(userId, -deducted);
+            console.log(`Auto-deducted ${deducted} from ${userId}'s winnings for loan payment`);
+            return { loanDeducted: deducted, actualReceived: remaining };
+        }
+    } catch (error) {
+        // The credit is already applied; a loan bookkeeping failure must not
+        // undo it or fail the caller's payout.
+        console.error('Error applying loan deduction:', error);
+    }
+
+    return { loanDeducted: 0, actualReceived: credited };
+}
+
+/**
+ * Change a user's balance by `delta`, atomically.
+ *
+ * Positive deltas are treated as winnings and are subject to the active loan's
+ * 25% cut, matching what setUserMoney did for any increase.
+ *
+ * @returns {Promise<{loanDeducted: number, actualReceived: number}>}
+ */
+async function addUserMoney(userId, delta) {
+    const change = Math.floor(Number(delta) || 0);
+
+    // Ensures the user row and their statistics row exist.
+    await getUserMoney(userId);
+
+    if (change === 0) return { loanDeducted: 0, actualReceived: 0 };
+
+    const money = await adjustBalance(userId, change);
+    if (money === null) return { loanDeducted: 0, actualReceived: 0 };
+
+    return await applyLoanDeduction(userId, change);
+}
+
+/**
+ * Set a balance to an absolute value.
+ *
+ * Prefer addUserMoney() for anything derived from a balance you just read —
+ * this cannot be made safe against a concurrent change, because the value was
+ * decided before the write. It remains for the cases that genuinely are
+ * absolute: admin adjustments, resets, and bankruptcy.
+ *
+ * @returns {Promise<{loanDeducted: number, actualReceived: number}>}
+ */
 async function setUserMoney(userId, amount) {
+    const target = Math.max(0, Math.floor(amount));
+
+    // Ensures the user row and their statistics row exist.
+    await getUserMoney(userId);
+
     const dbClient = await getClient();
+    let credited = 0;
+
     try {
         await dbClient.query('BEGIN');
 
-        // Lock the user row to prevent concurrent modifications
-        let userRow = await dbClient.query(
-            'SELECT id, money FROM users WHERE discord_id = $1 FOR UPDATE',
+        const userRow = await dbClient.query(
+            'SELECT money FROM users WHERE discord_id = $1 FOR UPDATE',
             [userId]
         );
 
         if (userRow.rows.length === 0) {
-            // Create user inside this transaction
-            const newUser = await dbClient.query(
-                `INSERT INTO users (discord_id, money, last_daily, last_work, credit_score)
-                 VALUES ($1, 500, 0, 0, 500)
-                 RETURNING id, money`,
-                [userId]
-            );
-            await dbClient.query('INSERT INTO user_statistics (user_id) VALUES ($1)', [newUser.rows[0].id]);
             await dbClient.query('COMMIT');
             return { loanDeducted: 0, actualReceived: 0 };
         }
 
         const oldMoney = parseInt(userRow.rows[0].money);
-        const newMoney = Math.max(0, Math.floor(amount));
+        credited = target - oldMoney;
 
-        // If money increased (winnings), check for active loan deduction
-        if (newMoney > oldMoney) {
-            const loanResult = await dbClient.query(
-                `SELECT l.id, l.amount_owed, l.repaid_amount FROM loans l
-                 JOIN users u ON u.id = l.user_id
-                 WHERE u.discord_id = $1 AND l.is_active = TRUE
-                 ORDER BY l.id DESC LIMIT 1`,
-                [userId]
-            );
-
-            if (loanResult.rows.length > 0) {
-                const { deductFromWinnings } = require('../../utils/loanSystem');
-                const winnings = newMoney - oldMoney;
-                const { deducted, remaining } = await deductFromWinnings(userId, winnings);
-
-                if (deducted > 0) {
-                    const finalMoney = Math.max(0, Math.floor(oldMoney + remaining));
-                    await dbClient.query(
-                        'UPDATE users SET money = $1 WHERE discord_id = $2',
-                        [finalMoney, userId]
-                    );
-                    await dbClient.query('COMMIT');
-                    console.log(`Auto-deducted ${deducted} from ${userId}'s winnings for loan payment`);
-                    return { loanDeducted: deducted, actualReceived: remaining };
-                }
-            }
-        }
-
-        // Normal money update
         await dbClient.query(
             'UPDATE users SET money = $1 WHERE discord_id = $2',
-            [newMoney, userId]
+            [target, userId]
         );
         await dbClient.query('COMMIT');
-
-        return { loanDeducted: 0, actualReceived: newMoney - oldMoney };
     } catch (error) {
         await dbClient.query('ROLLBACK');
         console.error('Error setting user money:', error);
         throw error;
     } finally {
+        // Released before the loan work runs, so nothing below can block on a
+        // lock this connection is holding.
         dbClient.release();
     }
+
+    return await applyLoanDeduction(userId, credited);
 }
 
 // Check if user can claim daily
@@ -381,6 +447,8 @@ module.exports = {
     saveUserData,
     getUserMoney,
     setUserMoney,
+    addUserMoney,
+    adjustBalance,
     getUserData,
     getAllUserData,
     canClaimDaily,

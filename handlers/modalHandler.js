@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney, recordGameResult } = require('../utils/data');
+const { getUserMoney, addUserMoney, setUserMoney, recordGameResult } = require('../utils/data');
 const { isGamblingBanned, getGamblingBanTime } = require('../database/queries');
 const { createGameEmbed } = require('../utils/embeds');
 const { createButtons, createJoinTableButton } = require('../utils/buttons');
@@ -112,7 +112,7 @@ async function handleRouletteModal(interaction, activeGames, client) {
         }
 
         // Deduct money
-        await setUserMoney(userId, userMoney - totalBetAmount);
+        await addUserMoney(userId, -totalBetAmount);
 
         // Create and play the game
         const rouletteGame = new RouletteGame(userId, bets);
@@ -122,7 +122,7 @@ async function handleRouletteModal(interaction, activeGames, client) {
         const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
         const adjustedTotalWinnings = totalBetAmount + adjustedProfit;
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + adjustedTotalWinnings);
+        await addUserMoney(userId, adjustedTotalWinnings);
 
         // Record game result
         const gameResult = adjustedTotalWinnings > totalBetAmount ? 'win' :
@@ -195,7 +195,7 @@ async function handleJoinTableSubmission(interaction, activeGames, client) {
         return interaction.reply({ content: `❌ You don't have enough money! You have ${userMoney.toLocaleString()}.`, ephemeral: true });
     }
 
-    await setUserMoney(interaction.user.id, userMoney - bet);
+    await addUserMoney(interaction.user.id, -bet);
     if (!game.addPlayer(interaction.user.id, bet)) {
         return interaction.reply({ content: '❌ Table is full or game has started!', ephemeral: true });
     }
@@ -263,7 +263,7 @@ async function handleAdjustedBetSubmission(interaction, activeGames, client, dea
     }
 
     // Refund the old bet and confirm the new one
-    await setUserMoney(interaction.user.id, userMoney + oldBet);
+    await addUserMoney(interaction.user.id, oldBet);
     game.confirmBet(interaction.user.id, bet);
 
     await interaction.reply({
@@ -329,7 +329,7 @@ async function startNewRoundFromBetting(game, interaction, activeGames, client, 
     // Deduct bets from all players
     for (const [playerId, bet] of playerBets) {
         const userMoney = await getUserMoney(playerId);
-        await setUserMoney(playerId, userMoney - bet);
+        await addUserMoney(playerId, -bet);
     }
 
     // Start new game with confirmed bets
@@ -585,7 +585,7 @@ async function handleCrapsModal(interaction, activeGames, client) {
         }
 
         // Deduct money
-        await setUserMoney(userId, userMoney - totalBet);
+        await addUserMoney(userId, -totalBet);
 
         // Create game
         const crapsGame = new CrapsGame(userId, passLineBet, dontPassBet, fieldBet, 0);
@@ -621,7 +621,7 @@ async function drawLottery(client) {
     // Award prizes to winners
     for (const winner of lottery.winners) {
         const currentMoney = await getUserMoney(winner.userId);
-        await setUserMoney(winner.userId, currentMoney + winner.prize);
+        await addUserMoney(winner.userId, winner.prize);
 
         // Record game result
         await recordGameResult(winner.userId, 'lottery', 100, winner.prize - 100, 'win', {
@@ -748,7 +748,7 @@ async function handleHiLoModal(interaction, activeGames, client) {
         }
 
         // Deduct bet
-        await setUserMoney(userId, userMoney - betAmount);
+        await addUserMoney(userId, -betAmount);
 
         // Create game
         const hiLoGame = new HiLoGame(userId, betAmount);

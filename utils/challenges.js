@@ -355,10 +355,9 @@ async function updateChallengeProgress(userId, updateData = {}) {
 
 // Award challenge rewards
 async function awardChallengeReward(userId, challenge) {
-    const { getUserMoney, setUserMoney } = require('./data');
+    const { getUserMoney, addUserMoney } = require('./data');
 
-    const currentMoney = await getUserMoney(userId);
-    await setUserMoney(userId, currentMoney + challenge.reward);
+    await addUserMoney(userId, challenge.reward);
 
     return challenge.reward;
 }

@@ -1,5 +1,5 @@
 const {
-    getUserMoney,
+    getUserMoney, addUserMoney,
     setUserMoney,
     addToInventory,
     removeFromInventory,
@@ -117,7 +117,7 @@ async function purchaseItem(userId, itemId) {
 
     try {
         // Deduct money
-        await setUserMoney(userId, currentMoney - item.price);
+        await addUserMoney(userId, -item.price);
 
         // Add to inventory using database
         await addToInventory(userId, itemId);
@@ -130,7 +130,7 @@ async function purchaseItem(userId, itemId) {
     } catch (error) {
         console.error('Error purchasing item:', error);
         // Refund money if inventory addition failed
-        await setUserMoney(userId, currentMoney);
+        await addUserMoney(userId, item.price);
         return {
             success: false,
             message: 'Purchase failed! Your money has been refunded.'

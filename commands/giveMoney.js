@@ -42,7 +42,7 @@ module.exports = {
             // Give money to target user
             const targetCurrentMoney = await getUserMoney(targetUser.id);
             const newBalance = targetCurrentMoney + amount;
-            await setUserMoney(targetUser.id, newBalance);
+            await addUserMoney(targetUser.id, amount);
 
             // Record transaction
             await recordTransaction({

@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney } = require('./data');
+const { getUserMoney, addUserMoney, setUserMoney } = require('./data');
 const {
     getUserHeistStats,
     updateHeistCooldown,
@@ -57,7 +57,7 @@ async function attemptHeist(userId) {
         }
 
         // Deduct heist cost
-        await setUserMoney(userId, currentMoney - HEIST_COST);
+        await addUserMoney(userId, -HEIST_COST);
 
         // Determine success/failure (30% chance)
         const roll = Math.random();
@@ -72,7 +72,7 @@ async function attemptHeist(userId) {
             const winnings = Math.floor(HEIST_COST * multiplier);
 
             // Update user's money
-            await setUserMoney(userId, currentMoney - HEIST_COST + winnings);
+            await addUserMoney(userId, -HEIST_COST + winnings);
 
             // Record successful heist in database
             await recordHeistAttempt(userId, true, winnings);
@@ -156,7 +156,7 @@ async function payHeistDebt(userId, amount) {
         const payment = Math.min(amount, currentDebt);
 
         // Deduct money from user
-        await setUserMoney(userId, currentMoney - payment);
+        await addUserMoney(userId, -payment);
 
         // Pay debt in database
         const result = await payHeistDebtDB(userId, payment);
@@ -342,7 +342,7 @@ async function executeGuildHeist(guildId) {
         // Deduct entry fees from all participants
         for (const userId of heist.participants) {
             const currentMoney = await getUserMoney(userId);
-            await setUserMoney(userId, currentMoney - adjustedCost);
+            await addUserMoney(userId, -adjustedCost);
         }
 
         // Calculate success rate: 30% base + 4% per member + guild bonus
@@ -372,7 +372,7 @@ async function executeGuildHeist(guildId) {
             // Distribute winnings and award XP
             for (const userId of heist.participants) {
                 const currentMoney = await getUserMoney(userId);
-                await setUserMoney(userId, currentMoney + winningsPerPerson);
+                await addUserMoney(userId, winningsPerPerson);
 
                 // Award guild XP for successful heist (async, don't wait)
                 awardHeistXP(userId, true).catch(err =>

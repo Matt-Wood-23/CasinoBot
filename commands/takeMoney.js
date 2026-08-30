@@ -42,7 +42,7 @@ module.exports = {
             // Take money from target user
             const targetCurrentMoney = await getUserMoney(targetUser.id);
             const newBalance = Math.max(0, targetCurrentMoney - amount); // Don't go below 0
-            await setUserMoney(targetUser.id, newBalance);
+            await addUserMoney(targetUser.id, -amount);
 
             const actualAmountTaken = targetCurrentMoney - newBalance;
 

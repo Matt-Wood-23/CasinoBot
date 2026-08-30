@@ -91,7 +91,7 @@ module.exports = {
             const totalWinnings = adjustedSlotWinnings + jackpotAmount;
 
             // Single atomic write: deduct bet and credit winnings together
-            await setUserMoney(interaction.user.id, userMoney - bet + totalWinnings);
+            await addUserMoney(interaction.user.id, -bet + totalWinnings);
 
             // Record the game result
             await recordGameResult(

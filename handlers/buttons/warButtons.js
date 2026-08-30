@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
+const { getUserMoney, addUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
 const { createGameEmbed } = require('../../utils/embeds');
 const { createButtons } = require('../../utils/buttons');
 const { applyHolidayWinningsBonus } = require('../../utils/holidayEvents');
@@ -27,7 +27,7 @@ async function handleWarButtons(interaction, activeGames, userId, client) {
         const adjustedWinnings = game.bet + adjustedProfit;
 
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + adjustedWinnings);
+        await addUserMoney(userId, adjustedWinnings);
 
         await recordGameResult(userId, 'war', game.bet, adjustedProfit, 'surrender');
 
@@ -63,7 +63,7 @@ async function handleWarButtons(interaction, activeGames, userId, client) {
         }
 
         // Deduct war bet
-        await setUserMoney(userId, currentMoney - game.bet);
+        await addUserMoney(userId, -game.bet);
 
         // Go to war
         game.goToWar();
@@ -75,8 +75,7 @@ async function handleWarButtons(interaction, activeGames, userId, client) {
 
         // Award winnings if any
         if (adjustedWinnings > 0) {
-            const newMoney = await getUserMoney(userId);
-            await setUserMoney(userId, newMoney + adjustedWinnings);
+            await addUserMoney(userId, adjustedWinnings);
         }
 
         const gameResult = game.result.includes('win') ? 'win' : 'lose';
@@ -116,7 +115,7 @@ async function handleWarButtons(interaction, activeGames, userId, client) {
         }
 
         // Deduct bet and create new game
-        await setUserMoney(userId, userMoney - bet);
+        await addUserMoney(userId, -bet);
         const newGame = new WarGame(userId, bet);
         activeGames.set(`war_${userId}`, newGame);
 

@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney } = require('../../database/queries');
+const { getUserMoney, addUserMoney, setUserMoney } = require('../../database/queries');
 const { createGameEmbed } = require('../../utils/embeds');
 const BlackjackGame = require('../../gameLogic/blackjackGame');
 const { EmbedBuilder } = require('discord.js');
@@ -39,7 +39,7 @@ async function handleDuelAccept(interaction, activeGames, client, dealCardsWithD
         }
 
         // Deduct bet from challenged player
-        await setUserMoney(challengedId, challengedMoney - bet);
+        await addUserMoney(challengedId, -bet);
 
         // Remove challenge from activeGames
         activeGames.delete(challengeKey);
@@ -130,8 +130,7 @@ async function handleDuelCancel(interaction, activeGames) {
         activeGames.delete(challengeKey);
 
         // Refund challenger
-        const challengerMoney = await getUserMoney(challengerId);
-        await setUserMoney(challengerId, challengerMoney + bet);
+        await addUserMoney(challengerId, bet);
 
         const reason = userId === challengerId ? 'cancelled by challenger' : 'declined by challenged player';
 
@@ -222,8 +221,8 @@ async function handleDuelRematch(interaction, activeGames, client, dealCardsWith
             return await interaction.update({ content: `❌ ${name} doesn't have enough to rematch (needs ${bet.toLocaleString()}).`, embeds: [], components: [] });
         }
 
-        await setUserMoney(playerAId, moneyA - bet);
-        await setUserMoney(playerBId, moneyB - bet);
+        await addUserMoney(playerAId, -bet);
+        await addUserMoney(playerBId, -bet);
 
         // Create new game
         const newGame = new BlackjackGame(interaction.channelId, playerAId, bet, true, true);

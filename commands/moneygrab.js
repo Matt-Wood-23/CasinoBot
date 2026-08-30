@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { getUserMoney, setUserMoney, getAllUserData } = require('../utils/data');
+const { getUserMoney, addUserMoney, setUserMoney, getAllUserData } = require('../utils/data');
 const { ADMIN_USER_ID } = require('../config');
 
 module.exports = {
@@ -108,7 +108,7 @@ module.exports = {
                 // Give money to user
                 try {
                     const currentMoney = await getUserMoney(user.id);
-                    await setUserMoney(user.id, currentMoney + amount);
+                    await addUserMoney(user.id, amount);
 
                     console.log(`Money grab: ${user.username} claimed ${amount}`);
                 } catch (error) {
@@ -153,7 +153,7 @@ module.exports = {
                                 claimedUsers.add(userId);
                                 try {
                                     const currentMoney = await getUserMoney(userId);
-                                    await setUserMoney(userId, currentMoney + amount);
+                                    await addUserMoney(userId, amount);
                                     console.log(`Money grab (end): ${user.username} claimed ${amount}`);
                                 } catch (error) {
                                     console.error(`Error giving money to ${user.username}:`, error);

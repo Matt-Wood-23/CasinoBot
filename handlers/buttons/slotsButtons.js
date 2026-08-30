@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
+const { getUserMoney, addUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
 const { createGameEmbed } = require('../../utils/embeds');
 const { createButtons } = require('../../utils/buttons');
 const { applyHolidayWinningsBonus } = require('../../utils/holidayEvents');
@@ -40,10 +40,14 @@ async function handleSlotsSpinAgain(interaction, userId, client) {
         });
     }
 
-    await setUserMoney(userId, userMoney - bet);
+    // Two writes off one balance read used to be safe here because each one
+    // SET an absolute total, so the second superseded the first. Relative
+    // moves compound, so the stake is taken once and the winnings credited on
+    // their own.
+    await addUserMoney(userId, -bet);
     const slotsGame = new SlotsGame(userId, bet);
     const adjustedWinnings = applyHolidayWinningsBonus(slotsGame.winnings);
-    await setUserMoney(userId, userMoney - bet + adjustedWinnings);
+    await addUserMoney(userId, adjustedWinnings);
     await recordGameResult(userId, 'slots', bet, adjustedWinnings, adjustedWinnings > 0 ? 'win' : 'lose');
 
     // Award guild XP (async, don't wait)

@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
+const { getUserMoney, addUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
 const { createGameEmbed } = require('../../utils/embeds');
 const { createButtons } = require('../../utils/buttons');
 const { applyHolidayWinningsBonus } = require('../../utils/holidayEvents');
@@ -51,7 +51,7 @@ async function handleCrashButtons(interaction, activeGames, userId, client) {
             const adjustedTotalWinnings = game.betAmount + adjustedProfit;
 
             const currentMoney = await getUserMoney(userId);
-            await setUserMoney(userId, currentMoney + adjustedTotalWinnings);
+            await addUserMoney(userId, adjustedTotalWinnings);
 
             const gameResult = game.result === 'win' ? 'win' : 'lose';
             await recordGameResult(userId, 'crash', game.betAmount, adjustedProfit, gameResult, {
@@ -88,7 +88,7 @@ async function handleCrashButtons(interaction, activeGames, userId, client) {
 
         // Award winnings
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + adjustedTotalWinnings);
+        await addUserMoney(userId, adjustedTotalWinnings);
 
         // Record result
         await recordGameResult(userId, 'crash', game.betAmount, adjustedProfit, 'win', {
@@ -130,7 +130,7 @@ async function handleCrashButtons(interaction, activeGames, userId, client) {
         }
 
         // Deduct bet and create new game
-        await setUserMoney(userId, userMoney - bet);
+        await addUserMoney(userId, -bet);
         const newGame = new CrashGame(userId, bet);
         activeGames.set(`crash_${userId}`, newGame);
 

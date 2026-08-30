@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
+const { getUserMoney, addUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
 const { createGameEmbed } = require('../../utils/embeds');
 const { createButtons } = require('../../utils/buttons');
 const { applyHolidayWinningsBonus } = require('../../utils/holidayEvents');
@@ -133,7 +133,7 @@ async function handleRouletteButtons(interaction, activeGames, userId, client, r
         }
 
         // Deduct money
-        await setUserMoney(userId, userMoney - session.totalBet);
+        await addUserMoney(userId, -session.totalBet);
 
         // Create and play the game
         const rouletteGame = new RouletteGame(userId, session.bets);
@@ -143,7 +143,7 @@ async function handleRouletteButtons(interaction, activeGames, userId, client, r
         const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
         const adjustedTotalWinnings = session.totalBet + adjustedProfit;
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + adjustedTotalWinnings);
+        await addUserMoney(userId, adjustedTotalWinnings);
 
         // Record game result
         const gameResult = adjustedTotalWinnings > session.totalBet ? 'win' :
@@ -204,7 +204,7 @@ async function handleRouletteButtons(interaction, activeGames, userId, client, r
         }
 
         // Deduct money
-        await setUserMoney(userId, userMoney - totalBet);
+        await addUserMoney(userId, -totalBet);
 
         // Create new game with same bets
         const newGame = new RouletteGame(userId, game.bets);
@@ -214,7 +214,7 @@ async function handleRouletteButtons(interaction, activeGames, userId, client, r
         const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
         const adjustedTotalWinnings = totalBet + adjustedProfit;
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + adjustedTotalWinnings);
+        await addUserMoney(userId, adjustedTotalWinnings);
 
         // Record game result
         const gameResult = adjustedTotalWinnings > totalBet ? 'win' :

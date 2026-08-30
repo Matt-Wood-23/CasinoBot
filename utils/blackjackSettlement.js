@@ -15,8 +15,7 @@
  */
 
 const {
-    getUserMoney,
-    setUserMoney,
+    addUserMoney,
     recordGameResult,
     getServerJackpot,
     resetJackpot
@@ -59,7 +58,7 @@ function recordProgression(playerId, bet, winnings, result) {
  * Pay the progressive jackpot to a player holding a natural blackjack.
  * Returns { jackpotWon, loanInfo } — loanInfo is null when nothing was paid.
  */
-async function awardJackpot(game, playerId, moneyBeforeJackpot) {
+async function awardJackpot(game, playerId) {
     try {
         const jackpotData = await getServerJackpot(game.serverId);
         if (!jackpotData || jackpotData.currentAmount <= 0) {
@@ -67,7 +66,7 @@ async function awardJackpot(game, playerId, moneyBeforeJackpot) {
         }
 
         const jackpotWon = jackpotData.currentAmount;
-        const loanInfo = await setUserMoney(playerId, moneyBeforeJackpot + jackpotWon);
+        const loanInfo = await addUserMoney(playerId, jackpotWon);
         await resetJackpot(game.serverId, playerId, jackpotWon);
 
         // Surfaced by the game embed.
@@ -90,18 +89,16 @@ async function settlePlayerVsDealer(game, playerId, jackpotAlreadyAwarded) {
     const winnings = applyHolidayWinningsBonus(baseWinnings);
     const totalBet = game.getTotalBet(playerId);
 
-    const currentMoney = await getUserMoney(playerId);
     // The bet was taken up front, so the stake is returned and the (possibly
-    // negative) winnings applied on top.
-    const newMoney = currentMoney + totalBet + winnings;
-
-    let loanInfo = await setUserMoney(playerId, newMoney);
+    // negative) winnings applied on top. One atomic move, so a hand settling at
+    // the same moment as another game cannot overwrite this result.
+    let loanInfo = await addUserMoney(playerId, totalBet + winnings);
     const result = summariseResults(game.getResult(playerId));
 
     let jackpotWon = 0;
     // A split hand that makes 21 is not a natural, so it does not qualify.
     if (!jackpotAlreadyAwarded && game.serverId && game.hasNaturalBlackjack(playerId)) {
-        const jackpot = await awardJackpot(game, playerId, newMoney);
+        const jackpot = await awardJackpot(game, playerId);
         jackpotWon = jackpot.jackpotWon;
         if (jackpot.loanInfo) loanInfo = jackpot.loanInfo;
     }
@@ -134,8 +131,7 @@ async function settleDuel(game) {
     if (pvpResult.isPush) {
         for (const playerId of players) {
             const stake = game.getTotalBet(playerId);
-            const currentMoney = await getUserMoney(playerId);
-            await setUserMoney(playerId, currentMoney + stake);
+            await addUserMoney(playerId, stake);
             await recordGameResult(playerId, 'blackjack', stake, 0, 'push', { pvpDuel: true });
             recordProgression(playerId, stake, 0, 'push');
         }
@@ -148,8 +144,7 @@ async function settleDuel(game) {
     const winnerBet = game.getTotalBet(winnerId);
     const loserBet = game.getTotalBet(loserId);
 
-    const winnerMoney = await getUserMoney(winnerId);
-    await setUserMoney(winnerId, winnerMoney + potAmount);
+    await addUserMoney(winnerId, potAmount);
 
     await recordGameResult(winnerId, 'blackjack', winnerBet, potAmount - winnerBet, 'win', {
         pvpDuel: true,

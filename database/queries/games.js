@@ -1,5 +1,5 @@
 const { query, getClient } = require('../connection');
-const { getUserMoney, setUserMoney, pendingNotifications } = require('./users');
+const { getUserMoney, addUserMoney, setUserMoney, pendingNotifications } = require('./users');
 
 // Record game result
 async function recordGameResult(userId, gameType, bet, winnings, result, details = {}, additionalData = {}) {
@@ -33,7 +33,7 @@ async function recordGameResult(userId, gameType, bet, winnings, result, details
 
             // Add money for the bonus
             const currentMoney = await getUserMoney(userId);
-            await setUserMoney(userId, currentMoney + bonusAmount);
+            await addUserMoney(userId, bonusAmount);
 
             await consumeBoost(userId, 'win_multiplier');
             boostsApplied.push({ type: 'win_multiplier', bonus: bonusAmount });
@@ -46,7 +46,7 @@ async function recordGameResult(userId, gameType, bet, winnings, result, details
 
             // Refund money
             const currentMoney = await getUserMoney(userId);
-            await setUserMoney(userId, currentMoney + refundAmount);
+            await addUserMoney(userId, refundAmount);
 
             modifiedWinnings += refundAmount;
             await consumeBoost(userId, 'insurance');

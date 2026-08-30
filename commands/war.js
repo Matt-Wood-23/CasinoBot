@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney } = require('../utils/data');
+const { getUserMoney, addUserMoney, setUserMoney } = require('../utils/data');
 const { validateBet } = require('../utils/vip');
 const { checkGamblingBan, checkCooldown, setCooldown } = require('../utils/guardChecks');
 const WarGame = require('../gameLogic/warGame');
@@ -54,7 +54,7 @@ module.exports = {
             setCooldown(interaction, 'war', 3000);
 
             // Deduct bet
-            await setUserMoney(userId, userMoney - bet);
+            await addUserMoney(userId, -bet);
 
             // Create game
             const warGame = new WarGame(userId, bet);

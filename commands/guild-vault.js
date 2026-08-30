@@ -1,6 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const { getUserGuild } = require('../utils/guilds');
-const { getUserMoney, setUserMoney } = require('../utils/data');
+const { getUserMoney, addUserMoney, setUserMoney } = require('../utils/data');
 const { hasPermission, getMemberRank } = require('../utils/guildRanks');
 const {
     getGuildVaultBalance,
@@ -105,14 +105,14 @@ async function depositToVaultCommand(interaction, userId) {
     }
 
     // Deduct money from user
-    await setUserMoney(userId, userMoney - amount);
+    await addUserMoney(userId, -amount);
 
     // Deposit to vault
     const result = await depositToVault(userGuild.guildId, userId, amount, 'Member deposit');
 
     if (!result.success) {
         // Refund if deposit failed
-        await setUserMoney(userId, userMoney);
+        await addUserMoney(userId, amount);
         return interaction.reply({
             content: `❌ Failed to deposit to vault: ${result.error}`,
             ephemeral: true
@@ -214,7 +214,7 @@ async function withdrawFromVaultCommand(interaction, userId) {
 
     // Add money to user
     const userMoney = await getUserMoney(userId);
-    await setUserMoney(userId, userMoney + amount);
+    await addUserMoney(userId, amount);
 
     const guild = await getGuildWithLevel(userGuild.guildId);
     const rank = await getMemberRank(userGuild.guildId, userId);

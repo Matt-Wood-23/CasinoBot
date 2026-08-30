@@ -98,7 +98,7 @@ module.exports = {
             }
 
             // Deduct bet from user's money
-            await setUserMoney(interaction.user.id, userMoney - bet);
+            await addUserMoney(interaction.user.id, -bet);
             moneyDeducted = true;
 
             // Deal cards - dealCardsWithDelay handles its own errors and refunds
@@ -110,7 +110,7 @@ module.exports = {
             // Refund money if it was deducted
             if (moneyDeducted && userMoney !== null) {
                 try {
-                    await setUserMoney(interaction.user.id, userMoney);
+                    await addUserMoney(interaction.user.id, bet);
                     console.log(`Refunded bet to user ${interaction.user.id} due to blackjack startup error`);
                 } catch (refundError) {
                     console.error('Error refunding bet after failure:', refundError);

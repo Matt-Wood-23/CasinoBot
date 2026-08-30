@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { getUserMoney, setUserMoney, recordGameResult } = require('../utils/data');
+const { getUserMoney, addUserMoney, setUserMoney, recordGameResult } = require('../utils/data');
 const { validateBet } = require('../utils/vip');
 const { checkGamblingBan, checkCooldown, setCooldown } = require('../utils/guardChecks');
 const PlinkoGame = require('../gameLogic/plinkoGame');
@@ -68,7 +68,7 @@ module.exports = {
             setCooldown(interaction, 'plinko', 3000);
 
             // Deduct bet
-            await setUserMoney(userId, userMoney - bet);
+            await addUserMoney(userId, -bet);
 
             // Create game
             const game = new PlinkoGame(userId, bet, risk);
@@ -95,7 +95,7 @@ module.exports = {
 
             // Calculate final winnings
             const finalMoney = userMoney - bet + game.winnings;
-            await setUserMoney(userId, finalMoney);
+            await addUserMoney(userId, -bet + game.winnings);
 
             // Record game result
             await recordGameResult(

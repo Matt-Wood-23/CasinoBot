@@ -7,7 +7,7 @@ const {
     donateToGuildTreasury,
     getGuildMembers,
     getGuildLeaderboardsDB,
-    getUserMoney,
+    getUserMoney, addUserMoney,
     setUserMoney
 } = require('./data');
 
@@ -33,7 +33,7 @@ async function createGuild(userId, guildName) {
     }
 
     // Deduct money
-    await setUserMoney(userId, currentMoney - creationCost);
+    await addUserMoney(userId, -creationCost);
 
     // Create guild in database
     return await createGuildDB(userId, guildName);
@@ -62,7 +62,7 @@ async function donateToGuild(userId, amount) {
     }
 
     // Deduct money from user
-    await setUserMoney(userId, currentMoney - amount);
+    await addUserMoney(userId, -amount);
 
     // Add to guild treasury
     const result = await donateToGuildTreasury(userId, amount);

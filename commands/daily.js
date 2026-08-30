@@ -109,7 +109,7 @@ module.exports = {
 
             // Update user money
             const newBalance = userMoney + dailyAmount;
-            await setUserMoney(interaction.user.id, newBalance);
+            await addUserMoney(interaction.user.id, dailyAmount);
             await setLastDaily(interaction.user.id);
 
             // Record transaction

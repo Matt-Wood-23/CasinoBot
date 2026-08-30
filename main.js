@@ -139,7 +139,7 @@ function dropGame(game) {
  * never became playable does not cost anyone anything.
  */
 async function refundFailedDeal(interaction, game, userId) {
-    const { getUserMoney, setUserMoney } = require('./database/queries');
+    const { getUserMoney, addUserMoney } = require('./database/queries');
 
     // Everyone at the table staked before the deal, so everyone gets it back —
     // this used to refund only the player the interaction belonged to, leaving
@@ -149,8 +149,7 @@ async function refundFailedDeal(interaction, game, userId) {
             const totalBet = game.getTotalBet(playerId);
             if (totalBet <= 0) continue;
 
-            const currentMoney = await getUserMoney(playerId);
-            await setUserMoney(playerId, currentMoney + totalBet);
+            await addUserMoney(playerId, totalBet);
             console.log(`Refunded ${totalBet} to user ${playerId} due to dealing error`);
         } catch (refundError) {
             console.error(`Error refunding bet for ${playerId}:`, refundError);

@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
+const { getUserMoney, addUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
 const { createGameEmbed } = require('../../utils/embeds');
 const { createButtons } = require('../../utils/buttons');
 const { awardGameXP, awardWagerXP } = require('../../utils/guildXP');
@@ -31,7 +31,7 @@ async function handleBingoButtons(interaction, activeGames, userId, client) {
         }
 
         // Deduct entry fee
-        await setUserMoney(userId, userMoney - game.entryFee);
+        await addUserMoney(userId, -game.entryFee);
 
         // Send player their card via DM
         try {
@@ -69,7 +69,7 @@ async function handleBingoButtons(interaction, activeGames, userId, client) {
 
         // Refund entry fee
         const userMoney = await getUserMoney(userId);
-        await setUserMoney(userId, userMoney + game.entryFee);
+        await addUserMoney(userId, game.entryFee);
 
         await interaction.reply({
             content: `✅ You left the game. ${game.entryFee.toLocaleString()} has been refunded.`,
@@ -162,8 +162,7 @@ async function handleBingoButtons(interaction, activeGames, userId, client) {
         if (game.gameComplete) {
             const prizes = game.calculatePrizes();
             for (const prize of prizes) {
-                const currentMoney = await getUserMoney(prize.userId);
-                await setUserMoney(prize.userId, currentMoney + prize.prize);
+                await addUserMoney(prize.userId, prize.prize);
 
                 // Record game result
                 await recordGameResult(prize.userId, 'bingo', game.entryFee, prize.prize - game.entryFee, 'win', {

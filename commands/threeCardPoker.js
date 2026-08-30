@@ -81,7 +81,7 @@ module.exports = {
             setCooldown(interaction, 'poker', 3000);
 
             // Deduct bet and create game
-            await setUserMoney(interaction.user.id, userMoney - totalBet);
+            await addUserMoney(interaction.user.id, -totalBet);
             const pokerGame = new ThreeCardPokerGame(interaction.user.id, anteBet, pairPlusBet);
             activeGames.set(`poker_${interaction.user.id}`, pokerGame);
 

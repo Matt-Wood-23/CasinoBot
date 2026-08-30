@@ -71,7 +71,7 @@ module.exports = {
 
             // Grant welfare
             const newBalance = currentMoney + WELFARE_AMOUNT;
-            await setUserMoney(userId, newBalance);
+            await addUserMoney(userId, WELFARE_AMOUNT);
             welfareClaimTimes.set(userId, now);
 
             // Record transaction

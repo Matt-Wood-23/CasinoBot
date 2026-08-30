@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
+const { getUserMoney, addUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
 const { createGameEmbed, sendPlayerCardsDM } = require('../../utils/embeds');
 const { createButtons } = require('../../utils/buttons');
 const { awardGameXP, awardWagerXP } = require('../../utils/guildXP');
@@ -30,7 +30,7 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
         }
 
         // Deduct buy-in
-        await setUserMoney(userId, userMoney - tournament.buyIn);
+        await addUserMoney(userId, -tournament.buyIn);
 
         await interaction.reply({
             content: `✅ You registered for the tournament! Starting chips: 1,000`,
@@ -48,7 +48,7 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
 
         // Refund buy-in
         const userMoney = await getUserMoney(userId);
-        await setUserMoney(userId, userMoney + tournament.buyIn);
+        await addUserMoney(userId, tournament.buyIn);
 
         await interaction.reply({
             content: `✅ You unregistered. ${tournament.buyIn.toLocaleString()} has been refunded.`,
@@ -116,7 +116,7 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
             const prizes = tournament.winners;
             for (const prize of prizes) {
                 const currentMoney = await getUserMoney(prize.userId);
-                await setUserMoney(prize.userId, currentMoney + prize.prize);
+                await addUserMoney(prize.userId, prize.prize);
 
                 await recordGameResult(prize.userId, 'poker_tournament', tournament.buyIn, prize.prize - tournament.buyIn, 'win', {
                     place: prize.place,
@@ -213,7 +213,7 @@ async function handleTournamentButtons(interaction, activeGames, userId, client)
             const prizes = tournament.winners;
             for (const prize of prizes) {
                 const currentMoney = await getUserMoney(prize.userId);
-                await setUserMoney(prize.userId, currentMoney + prize.prize);
+                await addUserMoney(prize.userId, prize.prize);
 
                 await recordGameResult(prize.userId, 'poker_tournament', tournament.buyIn, prize.prize - tournament.buyIn, 'win', {
                     place: prize.place,

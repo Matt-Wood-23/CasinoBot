@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
+const { getUserMoney, addUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
 const { createGameEmbed } = require('../../utils/embeds');
 const { createButtons } = require('../../utils/buttons');
 const { applyHolidayWinningsBonus } = require('../../utils/holidayEvents');
@@ -31,7 +31,7 @@ async function handlePokerButtons(interaction, activeGames, customId, userId, cl
             });
         }
 
-        await setUserMoney(userId, userMoney - game.anteBet);
+        await addUserMoney(userId, -game.anteBet);
         game.makeDecision('play');
 
         const baseWinnings = game.calculateWinnings();
@@ -40,7 +40,7 @@ async function handlePokerButtons(interaction, activeGames, customId, userId, cl
         console.log('Winnings breakdown:', baseWinnings.breakdown);
         console.log('Game phase:', game.gamePhase);
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + game.anteBet + game.playBet + adjustedWinnings);
+        await addUserMoney(userId, game.anteBet + game.playBet + adjustedWinnings);
 
         const totalBet = game.anteBet + game.playBet + game.pairPlusBet;
         await recordGameResult(userId, 'three_card_poker', totalBet, adjustedWinnings, adjustedWinnings >= 0 ? 'win' : 'lose');
@@ -78,7 +78,7 @@ async function handlePokerButtons(interaction, activeGames, customId, userId, cl
         const baseWinnings = game.calculateWinnings();
         const adjustedWinnings = applyHolidayWinningsBonus(baseWinnings.total);
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + adjustedWinnings);
+        await addUserMoney(userId, adjustedWinnings);
 
         const totalBet = game.anteBet + game.pairPlusBet;
         await recordGameResult(userId, 'three_card_poker', totalBet, adjustedWinnings, 'lose');
@@ -121,7 +121,7 @@ async function handlePokerButtons(interaction, activeGames, customId, userId, cl
             });
         }
 
-        await setUserMoney(userId, userMoney - totalBet);
+        await addUserMoney(userId, -totalBet);
         const newGame = new ThreeCardPokerGame(userId, anteBet, pairPlusBet);
         activeGames.delete(`poker_${userId}`);
         activeGames.set(`poker_${userId}`, newGame);

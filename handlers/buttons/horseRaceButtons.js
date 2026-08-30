@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
+const { getUserMoney, addUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
 const { createGameEmbed } = require('../../utils/embeds');
 const { createButtons } = require('../../utils/buttons');
 const { applyHolidayWinningsBonus } = require('../../utils/holidayEvents');
@@ -34,7 +34,7 @@ async function handleHorseRaceButtons(interaction, activeGames, userId, client) 
         }
 
         // Deduct bet and create new game
-        await setUserMoney(userId, userMoney - bet);
+        await addUserMoney(userId, -bet);
         const newGame = new HorseRacingGame(userId, bet, horseNumber);
         newGame.race();
 
@@ -46,7 +46,7 @@ async function handleHorseRaceButtons(interaction, activeGames, userId, client) 
         // Award winnings
         if (adjustedWinnings > 0) {
             const currentMoney = await getUserMoney(userId);
-            await setUserMoney(userId, currentMoney + adjustedWinnings);
+            await addUserMoney(userId, adjustedWinnings);
         }
 
         // Record result
@@ -113,7 +113,7 @@ async function handleHorseRaceButtons(interaction, activeGames, userId, client) 
     }
 
     // Deduct bet
-    await setUserMoney(userId, userMoney - bet);
+    await addUserMoney(userId, -bet);
 
     // Create and run race
     const game = new HorseRacingGame(userId, bet, horseNumber);
@@ -127,7 +127,7 @@ async function handleHorseRaceButtons(interaction, activeGames, userId, client) 
     // Award winnings
     if (adjustedWinnings > 0) {
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + adjustedWinnings);
+        await addUserMoney(userId, adjustedWinnings);
     }
 
     // Record result

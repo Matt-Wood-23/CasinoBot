@@ -55,7 +55,7 @@ module.exports = {
 
             // All checks passed — set cooldown and deduct bet
             setCooldown(interaction, 'crash', 5000);
-            await setUserMoney(userId, userMoney - betAmount);
+            await addUserMoney(userId, -betAmount);
             moneyDeducted = true;
 
             // Create game
@@ -77,7 +77,7 @@ module.exports = {
             // Refund the bet if money was already deducted before the error
             if (moneyDeducted && userMoney !== null) {
                 try {
-                    await setUserMoney(userId, userMoney);
+                    await addUserMoney(userId, betAmount);
                     console.log(`Refunded crash bet to user ${userId} due to startup error`);
                 } catch (refundError) {
                     console.error('Error refunding crash bet:', refundError);

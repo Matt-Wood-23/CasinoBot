@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
+const { getUserMoney, addUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
 const { createGameEmbed } = require('../../utils/embeds');
 const { createButtons } = require('../../utils/buttons');
 const { applyHolidayWinningsBonus } = require('../../utils/holidayEvents');
@@ -25,8 +25,7 @@ async function handleCrapsButtons(interaction, activeGames, userId, client) {
         const baseProfit = game.totalWinnings - totalBet;
         const adjustedProfit = applyHolidayWinningsBonus(baseProfit);
         const adjustedWinnings = totalBet + adjustedProfit;
-        const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + adjustedWinnings);
+        await addUserMoney(userId, adjustedWinnings);
 
         const gameResult = adjustedWinnings > totalBet ? 'win' : (adjustedWinnings === totalBet ? 'push' : 'lose');
 
@@ -71,7 +70,7 @@ async function handleCrapsButtons(interaction, activeGames, userId, client) {
         }
 
         // Deduct money and create new game
-        await setUserMoney(userId, userMoney - totalBet);
+        await addUserMoney(userId, -totalBet);
         const newGame = new CrapsGame(userId, game.passLineBet, game.dontPassBet, game.fieldBet, game.comeBet);
         activeGames.set(`craps_${userId}`, newGame);
 

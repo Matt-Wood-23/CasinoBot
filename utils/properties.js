@@ -1,5 +1,5 @@
 const {
-    getUserMoney,
+    getUserMoney, addUserMoney,
     setUserMoney,
     purchasePropertyDB,
     getUserPropertiesDB,
@@ -191,14 +191,14 @@ async function purchaseProperty(userId, propertyId) {
 
     try {
         // Deduct money
-        await setUserMoney(userId, currentMoney - property.purchasePrice);
+        await addUserMoney(userId, -property.purchasePrice);
 
         // Add property to database
         const success = await purchasePropertyDB(userId, propertyId);
 
         if (!success) {
             // Refund if database operation failed
-            await setUserMoney(userId, currentMoney);
+            await addUserMoney(userId, property.purchasePrice);
             return { success: false, message: 'Failed to purchase property!' };
         }
 
@@ -209,7 +209,7 @@ async function purchaseProperty(userId, propertyId) {
     } catch (error) {
         console.error('Error in purchaseProperty:', error);
         // Refund on error
-        await setUserMoney(userId, currentMoney);
+        await addUserMoney(userId, property.purchasePrice);
         return { success: false, message: 'Purchase failed!' };
     }
 }
@@ -246,14 +246,14 @@ async function upgradeProperty(userId, propertyId) {
 
     try {
         // Deduct money
-        await setUserMoney(userId, currentMoney - upgrade.cost);
+        await addUserMoney(userId, -upgrade.cost);
 
         // Upgrade in database
         const newLevel = await upgradePropertyDB(userId, propertyId);
 
         if (newLevel === false) {
             // Refund if database operation failed
-            await setUserMoney(userId, currentMoney);
+            await addUserMoney(userId, upgrade.cost);
             return { success: false, message: 'Failed to upgrade property!' };
         }
 
@@ -266,7 +266,7 @@ async function upgradeProperty(userId, propertyId) {
     } catch (error) {
         console.error('Error in upgradeProperty:', error);
         // Refund on error
-        await setUserMoney(userId, currentMoney);
+        await addUserMoney(userId, upgrade.cost);
         return { success: false, message: 'Upgrade failed!' };
     }
 }
@@ -350,7 +350,7 @@ async function collectPropertyIncome(userId) {
     try {
         // Add money
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + netIncome);
+        await addUserMoney(userId, netIncome);
 
         // Update last collection time in database
         await updatePropertyCollectionTime(userId);

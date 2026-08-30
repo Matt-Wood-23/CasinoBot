@@ -54,7 +54,7 @@ module.exports = {
             }
 
             // Deduct bet and create multiplayer game
-            await setUserMoney(interaction.user.id, userMoney - bet);
+            await addUserMoney(interaction.user.id, -bet);
             const game = new BlackjackGame(interaction.channelId, interaction.user.id, bet, true);
             activeGames.set(interaction.channelId, game);
             game.interactionId = interaction.id;

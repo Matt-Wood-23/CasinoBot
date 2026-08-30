@@ -7,8 +7,7 @@
  */
 
 jest.mock('../database/queries', () => ({
-    getUserMoney: jest.fn(),
-    setUserMoney: jest.fn(),
+    addUserMoney: jest.fn(),
     recordGameResult: jest.fn(),
     getServerJackpot: jest.fn(),
     resetJackpot: jest.fn()
@@ -32,8 +31,6 @@ const { settleBlackjackGame } = require('../utils/blackjackSettlement');
 const BlackjackGame = require('../gameLogic/blackjackGame');
 const Card = require('../gameLogic/card');
 
-const STARTING_BALANCE = 1000;
-
 /** A finished single-player hand with the given cards already on the table. */
 function finishedGame(playerCards, dealerCards, bet = 100) {
     const game = new BlackjackGame('ch', 'player1', bet, false);
@@ -47,8 +44,7 @@ function finishedGame(playerCards, dealerCards, bet = 100) {
 
 beforeEach(() => {
     jest.clearAllMocks();
-    queries.getUserMoney.mockResolvedValue(STARTING_BALANCE);
-    queries.setUserMoney.mockResolvedValue(null);
+    queries.addUserMoney.mockResolvedValue({ loanDeducted: 0, actualReceived: 0 });
     queries.recordGameResult.mockResolvedValue(undefined);
     queries.getServerJackpot.mockResolvedValue(null);
     queries.resetJackpot.mockResolvedValue(true);
@@ -63,7 +59,7 @@ describe('settleBlackjackGame', () => {
 
         expect(await settleBlackjackGame(game)).toBe(true);
         // Stake (100) came back plus 100 in winnings.
-        expect(queries.setUserMoney).toHaveBeenCalledWith('player1', STARTING_BALANCE + 200);
+        expect(queries.addUserMoney).toHaveBeenCalledWith('player1', 200);
     });
 
     test('a losing hand leaves the balance where the stake left it', async () => {
@@ -73,7 +69,8 @@ describe('settleBlackjackGame', () => {
         );
 
         await settleBlackjackGame(game);
-        expect(queries.setUserMoney).toHaveBeenCalledWith('player1', STARTING_BALANCE);
+        // Stake back, winnings -100: no net change, and nothing read first.
+        expect(queries.addUserMoney).toHaveBeenCalledWith('player1', 0);
     });
 
     test('a natural blackjack pays 3:2', async () => {
@@ -83,7 +80,7 @@ describe('settleBlackjackGame', () => {
         );
 
         await settleBlackjackGame(game);
-        expect(queries.setUserMoney).toHaveBeenCalledWith('player1', STARTING_BALANCE + 250);
+        expect(queries.addUserMoney).toHaveBeenCalledWith('player1', 250);
     });
 
     test('settles only once, however many callers race into it', async () => {
@@ -100,7 +97,7 @@ describe('settleBlackjackGame', () => {
 
         expect(first).toBe(true);
         expect(rest).toEqual([false, false]);
-        expect(queries.setUserMoney).toHaveBeenCalledTimes(1);
+        expect(queries.addUserMoney).toHaveBeenCalledTimes(1);
         expect(queries.recordGameResult).toHaveBeenCalledTimes(1);
     });
 
@@ -112,7 +109,7 @@ describe('settleBlackjackGame', () => {
 
         expect(await settleBlackjackGame(game)).toBe(true);
         expect(await settleBlackjackGame(game)).toBe(false);
-        expect(queries.setUserMoney).toHaveBeenCalledTimes(1);
+        expect(queries.addUserMoney).toHaveBeenCalledTimes(1);
     });
 
     test('refuses to settle a hand that is still in play', async () => {
@@ -123,7 +120,7 @@ describe('settleBlackjackGame', () => {
         game.gameOver = false;
 
         expect(await settleBlackjackGame(game)).toBe(false);
-        expect(queries.setUserMoney).not.toHaveBeenCalled();
+        expect(queries.addUserMoney).not.toHaveBeenCalled();
     });
 
     test('awards the progressive jackpot on a natural blackjack', async () => {
@@ -137,7 +134,8 @@ describe('settleBlackjackGame', () => {
 
         await settleBlackjackGame(game);
 
-        expect(queries.setUserMoney).toHaveBeenLastCalledWith('player1', STARTING_BALANCE + 250 + 5000);
+        expect(queries.addUserMoney).toHaveBeenNthCalledWith(1, 'player1', 250);
+        expect(queries.addUserMoney).toHaveBeenNthCalledWith(2, 'player1', 5000);
         expect(queries.resetJackpot).toHaveBeenCalledWith('guild1', 'player1', 5000);
         expect(game.jackpotAmount).toBe(5000);
     });
@@ -157,8 +155,8 @@ describe('settleBlackjackGame', () => {
         await settleBlackjackGame(game);
 
         expect(queries.resetJackpot).not.toHaveBeenCalled();
-        // Two winning hands at even money: 2 × (100 stake + 100 winnings).
-        expect(queries.setUserMoney).toHaveBeenCalledWith('player1', STARTING_BALANCE + 400);
+        // Two winning hands at even money: 2 x (100 stake + 100 winnings).
+        expect(queries.addUserMoney).toHaveBeenCalledWith('player1', 400);
     });
 
     test('the jackpot is only paid to one player per game', async () => {
@@ -188,8 +186,8 @@ describe('settleBlackjackGame', () => {
 
         await settleBlackjackGame(game);
 
-        expect(queries.setUserMoney).toHaveBeenCalledTimes(1);
-        expect(queries.setUserMoney).toHaveBeenCalledWith('player1', STARTING_BALANCE + 200);
+        expect(queries.addUserMoney).toHaveBeenCalledTimes(1);
+        expect(queries.addUserMoney).toHaveBeenCalledWith('player1', 200);
         expect(game.pvpResult).toEqual({ winnerId: 'player1', amount: 200 });
     });
 
@@ -203,9 +201,9 @@ describe('settleBlackjackGame', () => {
 
         await settleBlackjackGame(game);
 
-        expect(queries.setUserMoney).toHaveBeenCalledTimes(2);
-        expect(queries.setUserMoney).toHaveBeenCalledWith('player1', STARTING_BALANCE + 100);
-        expect(queries.setUserMoney).toHaveBeenCalledWith('player2', STARTING_BALANCE + 100);
+        expect(queries.addUserMoney).toHaveBeenCalledTimes(2);
+        expect(queries.addUserMoney).toHaveBeenCalledWith('player1', 100);
+        expect(queries.addUserMoney).toHaveBeenCalledWith('player2', 100);
         expect(game.pvpResult).toEqual({ isPush: true });
     });
 
@@ -220,6 +218,6 @@ describe('settleBlackjackGame', () => {
 
         await settleBlackjackGame(game);
         // 100 stake back, 100 winnings doubled to 200.
-        expect(queries.setUserMoney).toHaveBeenCalledWith('player1', STARTING_BALANCE + 300);
+        expect(queries.addUserMoney).toHaveBeenCalledWith('player1', 300);
     });
 });

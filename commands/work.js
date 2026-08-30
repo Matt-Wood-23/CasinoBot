@@ -132,7 +132,7 @@ module.exports = {
         // Give money
         const currentMoney = await getUserMoney(userId);
         const newBalance = currentMoney + afterLoan;
-        await setUserMoney(userId, newBalance);
+        await addUserMoney(userId, afterLoan);
 
         // Record transaction
         await recordTransaction({

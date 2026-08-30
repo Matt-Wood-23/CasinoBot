@@ -1,5 +1,5 @@
 const {
-    getUserMoney,
+    getUserMoney, addUserMoney,
     setUserMoney,
     purchaseVIPDB,
     getUserVIPDB,
@@ -139,14 +139,14 @@ async function purchaseVIP(userId, tierId) {
         }
 
         // Deduct money
-        await setUserMoney(userId, currentMoney - tier.price);
+        await addUserMoney(userId, -tier.price);
 
         // Update VIP in database
         const success = await purchaseVIPDB(userId, tierId, expiresAt, isRenewal);
 
         if (!success) {
             // Refund if database operation failed
-            await setUserMoney(userId, currentMoney);
+            await addUserMoney(userId, tier.price);
             return { success: false, message: 'Failed to purchase VIP!' };
         }
 
@@ -160,7 +160,7 @@ async function purchaseVIP(userId, tierId) {
     } catch (error) {
         console.error('Error in purchaseVIP:', error);
         // Refund on error
-        await setUserMoney(userId, currentMoney);
+        await addUserMoney(userId, tier.price);
         return { success: false, message: 'Purchase failed!' };
     }
 }
@@ -306,7 +306,7 @@ async function claimWeeklyBonus(userId) {
     try {
         // Give weekly bonus
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + tier.perks.weeklyBonus);
+        await addUserMoney(userId, tier.perks.weeklyBonus);
 
         // Update claim time in database
         await claimVIPWeeklyBonusDB(userId);

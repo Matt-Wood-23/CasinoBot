@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney } = require('../../utils/data');
+const { getUserMoney, addUserMoney, setUserMoney } = require('../../utils/data');
 const { updateBettingDisplay, startTurnTimer } = require('./blackjackButtons');
 const BlackjackGame = require('../../gameLogic/blackjackGame');
 
@@ -131,8 +131,7 @@ async function handleTableButtons(interaction, activeGames, client, dealCardsWit
 
         const player = game.players.get(targetPlayerId);
         const refund = player.bet / (player.hasSplit ? 2 : 1);
-        const userMoney = await getUserMoney(targetPlayerId);
-        await setUserMoney(targetPlayerId, userMoney + refund);
+        await addUserMoney(targetPlayerId, refund);
         game.removePlayer(targetPlayerId);
 
         console.log(`Player ${targetPlayerId} left table, refunded: ${refund}`);

@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney } = require('./data');
+const { getUserMoney, addUserMoney, setUserMoney } = require('./data');
 const { SHOP_ITEMS } = require('./shop');
 
 // Mystery Box Tiers
@@ -126,7 +126,7 @@ async function openMysteryBox(userId, tierId) {
     }
 
     // Deduct cost
-    await setUserMoney(userId, currentMoney - tier.price);
+    await addUserMoney(userId, -tier.price);
 
     // Determine if reward is money or item
     const rewardTypes = [
@@ -141,7 +141,7 @@ async function openMysteryBox(userId, tierId) {
     if (rewardType === 'money') {
         // Select money amount
         const moneyReward = weightedRandom(tier.rewards.money.amounts);
-        await setUserMoney(userId, currentMoney - tier.price + moneyReward.amount);
+        await addUserMoney(userId, -tier.price + moneyReward.amount);
 
         reward = {
             type: 'money',

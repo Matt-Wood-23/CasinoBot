@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
+const { getUserMoney, addUserMoney, setUserMoney, recordGameResult } = require('../../utils/data');
 const { createGameEmbed } = require('../../utils/embeds');
 const { createButtons } = require('../../utils/buttons');
 const { awardGameXP, awardWagerXP } = require('../../utils/guildXP');
@@ -31,7 +31,7 @@ async function handleHiLoButtons(interaction, activeGames, userId, client) {
         // If game just completed, award winnings and record result
         if (game.gameComplete) {
             const currentMoney = await getUserMoney(userId);
-            await setUserMoney(userId, currentMoney + game.currentWinnings);
+            await addUserMoney(userId, game.currentWinnings);
 
             const gameResult = game.result === 'win' ? 'win' : 'lose';
             await recordGameResult(userId, 'hilo', game.initialBet, game.currentWinnings - game.initialBet, gameResult, {
@@ -70,7 +70,7 @@ async function handleHiLoButtons(interaction, activeGames, userId, client) {
         // If game just completed, award winnings and record result
         if (game.gameComplete) {
             const currentMoney = await getUserMoney(userId);
-            await setUserMoney(userId, currentMoney + game.currentWinnings);
+            await addUserMoney(userId, game.currentWinnings);
 
             const gameResult = game.result === 'win' ? 'win' : 'lose';
             await recordGameResult(userId, 'hilo', game.initialBet, game.currentWinnings - game.initialBet, gameResult, {
@@ -102,7 +102,7 @@ async function handleHiLoButtons(interaction, activeGames, userId, client) {
 
         // Award winnings
         const currentMoney = await getUserMoney(userId);
-        await setUserMoney(userId, currentMoney + game.currentWinnings);
+        await addUserMoney(userId, game.currentWinnings);
 
         // Record game result
         await recordGameResult(userId, 'hilo', game.initialBet, game.currentWinnings - game.initialBet, 'win', {
@@ -145,7 +145,7 @@ async function handleHiLoButtons(interaction, activeGames, userId, client) {
         }
 
         // Deduct bet and create new game
-        await setUserMoney(userId, userMoney - bet);
+        await addUserMoney(userId, -bet);
         const newGame = new HiLoGame(userId, bet);
         activeGames.set(`hilo_${userId}`, newGame);
 

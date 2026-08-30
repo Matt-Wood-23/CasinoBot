@@ -124,7 +124,7 @@ async function handleLoanRequest(interaction, userId) {
     // Give money to user
     const currentMoney = await getUserMoney(userId);
     const newBalance = currentMoney + amount;
-    await setUserMoney(userId, newBalance);
+    await addUserMoney(userId, amount);
 
     await recordTransaction({
         userId,
@@ -183,7 +183,7 @@ async function handleLoanRepayment(interaction, userId) {
 
     // Deduct payment
     const balanceAfterRepay = userMoney - paymentAmount;
-    await setUserMoney(userId, balanceAfterRepay);
+    await addUserMoney(userId, -paymentAmount);
 
     // Make payment
     const result = await makePayment(userId, paymentAmount);

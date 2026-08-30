@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { getUserMoney } = require('../utils/data');
+const { getUserMoney, addUserMoney } = require('../utils/data');
 const { query } = require('../database/connection');
 const { checkGamblingBan, checkCooldown, setCooldown } = require('../utils/guardChecks');
 
@@ -182,7 +182,7 @@ async function handleBuyTicket(interaction) {
         }
 
         // Deduct money
-        await setUserMoney(interaction.user.id, userMoney - totalCost);
+        await addUserMoney(interaction.user.id, -totalCost);
 
         // Schedule draw if not already scheduled
         if (!lottery.drawScheduled && lottery.getTotalTickets() >= 1) {
@@ -257,8 +257,7 @@ async function conductDraw(client, lottery) {
 
     // Pay out winners
     for (const winner of lottery.winners) {
-        const currentMoney = await getUserMoney(winner.userId);
-        await setUserMoney(winner.userId, currentMoney + winner.prize);
+        await addUserMoney(winner.userId, winner.prize);
     }
 
     // Notify all ticket holders

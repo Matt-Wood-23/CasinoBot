@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney } = require('../utils/data');
+const { getUserMoney, addUserMoney, setUserMoney } = require('../utils/data');
 const { createGameEmbed } = require('../utils/embeds');
 const { validateBet } = require('../utils/vip');
 const { checkGamblingBan, checkCooldown, setCooldown } = require('../utils/guardChecks');
@@ -100,7 +100,7 @@ module.exports = {
             setCooldown(interaction, 'blackjack-duel', 10000);
 
             // Deduct bet from challenger (held until accepted or cancelled)
-            await setUserMoney(challengerId, userMoney - bet);
+            await addUserMoney(challengerId, -bet);
             moneyDeducted = true;
 
             // Store challenge state
@@ -154,8 +154,7 @@ module.exports = {
                     activeGames.delete(challengeKey);
 
                     // Refund challenger
-                    const currentMoney = await getUserMoney(challengerId);
-                    await setUserMoney(challengerId, currentMoney + bet);
+                    await addUserMoney(challengerId, bet);
 
                     try {
                         const message = await interaction.channel.messages.fetch(reply.id);
@@ -176,7 +175,7 @@ module.exports = {
             // Refund money if it was deducted
             if (moneyDeducted && userMoney !== null) {
                 try {
-                    await setUserMoney(challengerId, userMoney);
+                    await addUserMoney(challengerId, bet);
                     console.log(`Refunded bet to user ${challengerId} due to duel startup error`);
                 } catch (refundError) {
                     console.error('Error refunding bet after failure:', refundError);

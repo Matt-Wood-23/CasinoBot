@@ -1,4 +1,4 @@
-const { getUserMoney, setUserMoney, addToJackpot } = require('../../utils/data');
+const { getUserMoney, addUserMoney, setUserMoney, addToJackpot } = require('../../utils/data');
 const { checkGamblingBan } = require('../../utils/guardChecks');
 const BlackjackGame = require('../../gameLogic/blackjackGame');
 const { settleBlackjackGame } = require('../../utils/blackjackSettlement');
@@ -111,7 +111,7 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
             });
         }
 
-        await setUserMoney(user.id, userMoney - lastBet);
+        await addUserMoney(user.id, -lastBet);
         const newGame = new BlackjackGame(interaction.channelId, user.id, lastBet, false);
         // Without this the replayed hand silently drops out of the progressive
         // jackpot: every jackpot check is gated on game.serverId.
@@ -195,7 +195,7 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
             actionSuccess = game.double(user.id); // This doubles the bet internally
             if (actionSuccess) {
                 // Only deduct the ADDITIONAL bet amount, not the full doubled amount
-                await setUserMoney(user.id, userMoney - originalBet);
+                await addUserMoney(user.id, -originalBet);
             } else {
                 return interaction.followUp({ content: '❌ Cannot double this hand!', ephemeral: true });
             }
@@ -208,7 +208,7 @@ async function handleBlackjackButtons(interaction, activeGames, client, dealCard
             if (!game.canSplit(user.id)) {
                 return interaction.followUp({ content: '❌ Cannot split these cards!', ephemeral: true });
             }
-            await setUserMoney(user.id, userMoney - player.bet);
+            await addUserMoney(user.id, -player.bet);
             actionSuccess = game.split(user.id);
         }
 
